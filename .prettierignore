@@ -1,0 +1,10 @@
+.agents/
+.git/
+.npm-cache/
+.nuxt/
+.output/
+coverage/
+dist/
+node_modules/
+*.md
+pnpm-lock.yaml

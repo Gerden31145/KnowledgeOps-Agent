@@ -1,0 +1,157 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskState {
+  BLOCKED
+  READY
+  IN_PROGRESS
+  VERIFYING
+  NEEDS_REVISION
+  NEEDS_EVIDENCE
+  PASSED
+}
+
+enum AgentRunKind {
+  NOTE_VERIFICATION
+  ANSWER_VERIFICATION
+}
+
+enum AgentRunState {
+  QUEUED
+  RUNNING
+  CANCEL_REQUESTED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  githubUserId String?        @unique @map("github_user_id")
+  githubLogin  String?        @map("github_login")
+  timezone     String         @default("Asia/Shanghai")
+  goals        LearningGoal[]
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("users")
+}
+
+model LearningGoal {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  title         String   @db.VarChar(160)
+  currentLevel  String   @map("current_level") @db.VarChar(500)
+  deadline      DateTime @db.Date
+  weeklyMinutes Int      @map("weekly_minutes")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plans         Plan[]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@map("learning_goals")
+}
+
+model Plan {
+  id          String       @id @default(uuid()) @db.Uuid
+  goalId      String       @map("goal_id") @db.Uuid
+  version     Int          @default(1)
+  status      PlanStatus   @default(DRAFT)
+  confirmedAt DateTime?    @map("confirmed_at") @db.Timestamptz(3)
+  goal        LearningGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  stages      Stage[]
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([goalId, version])
+  @@index([status])
+  @@map("plans")
+}
+
+model Stage {
+  id        String   @id @default(uuid()) @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  title     String   @db.VarChar(160)
+  position  Int
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([planId, position])
+  @@map("stages")
+}
+
+model Task {
+  id               String           @id @default(uuid()) @db.Uuid
+  stageId          String           @map("stage_id") @db.Uuid
+  title            String           @db.VarChar(160)
+  description      String           @db.Text
+  position         Int
+  estimatedMinutes Int              @map("estimated_minutes")
+  targetPath       String?          @map("target_path") @db.VarChar(1024)
+  state            TaskState        @default(BLOCKED)
+  version          Int              @default(0)
+  stage            Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  prerequisites    TaskDependency[] @relation("TaskPrerequisites")
+  dependents       TaskDependency[] @relation("TaskDependents")
+  runs             AgentRun[]
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([stageId, position])
+  @@index([state, updatedAt])
+  @@map("tasks")
+}
+
+model TaskDependency {
+  taskId             String @map("task_id") @db.Uuid
+  prerequisiteTaskId String @map("prerequisite_task_id") @db.Uuid
+  task               Task   @relation("TaskPrerequisites", fields: [taskId], references: [id], onDelete: Cascade)
+  prerequisiteTask   Task   @relation("TaskDependents", fields: [prerequisiteTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, prerequisiteTaskId])
+  @@index([prerequisiteTaskId])
+  @@map("task_dependencies")
+}
+
+model AgentRun {
+  id                 String        @id @default(uuid()) @db.Uuid
+  taskId             String        @map("task_id") @db.Uuid
+  kind               AgentRunKind
+  status             AgentRunState @default(QUEUED)
+  taskStateBeforeRun TaskState     @map("task_state_before_run")
+  retryOfRunId       String?       @map("retry_of_run_id") @db.Uuid
+  workflowVersion    String        @map("workflow_version") @db.VarChar(64)
+  errorCode          String?       @map("error_code") @db.VarChar(64)
+  version            Int           @default(0)
+  queuedAt           DateTime      @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt          DateTime?     @map("started_at") @db.Timestamptz(3)
+  finishedAt         DateTime?     @map("finished_at") @db.Timestamptz(3)
+  task               Task          @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  retryOfRun         AgentRun?     @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries            AgentRun[]    @relation("AgentRunRetries")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([taskId, queuedAt])
+  @@index([status, queuedAt])
+  @@map("agent_runs")
+}

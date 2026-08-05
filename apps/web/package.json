@@ -1,0 +1,25 @@
+{
+  "name": "@knowledgeops/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --host 127.0.0.1 --port 3000",
+    "prepare": "nuxt prepare",
+    "start": "node .output/server/index.mjs",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@knowledgeops/contracts": "workspace:*",
+    "nuxt": "4.5.1",
+    "vue": "3.5.40",
+    "vue-router": "5.2.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3",
+    "vue-tsc": "3.3.9"
+  }
+}
