@@ -11,19 +11,21 @@
 | 范围真相源 | `docs/KnowledgeOps-Agent-9月求职版PRD.md` 的 P0 |
 | 执行范式 | 根目录 `AGENTS.md` 与 `$run-interview-project-stage` |
 
-这是一份以阶段和每日双层关卡为约束的逐日倒排，不是无条件的日历承诺。每个计划日达到检查点后必须完成改动导读、用户理解确认、每日微观问答、写档和每日 Git 提交，才能开始下一计划日；每个阶段还必须经过需求确认、设计讲解、用户授权、用户手写 Review、阶段宏观问答、文档沉淀和阶段收尾提交。若用户响应或技术风险导致延期，后续日期顺延并按本文件的裁剪规则恢复排期，不能跳过学习关卡。
+这是一份以阶段和每日双层关卡为约束的逐日倒排，不是无条件的日历承诺。每个计划日达到检查点后必须完成约 30 分钟用户手写与 Review、改动导读、用户理解确认、每日微观问答、写档和每日 Git 提交，才能开始下一计划日；每个阶段还必须经过需求确认、设计讲解、用户授权、独立的 1 至 2 小时阶段核心手写与 Review、阶段宏观问答、文档沉淀和阶段收尾提交。若用户响应或技术风险导致延期，后续日期顺延并按本文件的裁剪规则恢复排期，不能跳过学习关卡。
 
 ## 2. 基线假设
 
 - 用户工作日平均可投入 1.5 至 2.5 小时，周末可投入 3 至 4 小时；AI 承担绝大部分编码。
 - 阶段启动日需要用户完成两次短确认：需求确认一次，架构讲解后授权一次。
 - 每个计划日默认 1 道微观题，知识密度高时最多 2 道；每个阶段另有 2 至 4 道宏观题，均一次只问一道。
-- 每日改动导读和首轮代码阅读预计增加 15 至 40 分钟，用户追问时间另计；每日微观问答预计增加 10 至 20 分钟；阶段宏观问答预计增加 30 至 60 分钟，阶段收尾日应预留相应时间。
-- 用户手写点每阶段 1 个，目标 20 至 30 分钟；Review、每日微观问答和阶段宏观问答另计。
+- 每个尚未完成的计划日固定一项 25 至 35 分钟基础手写，Review 预计 10 至 20 分钟；每日改动导读和首轮代码阅读预计增加 15 至 40 分钟，用户追问时间另计；每日微观问答预计增加 10 至 20 分钟。
+- 每个阶段在所有计划日 `DONE` 后另有一项 1 至 2 小时核心手写，Review 与代码复盘预计 20 至 40 分钟；阶段宏观问答预计增加 30 至 60 分钟。阶段核心手写、宏观问答和两个独立 commit 可以与最后计划日同一自然日完成，也可以顺延，但不能挤占或抵扣每日关卡。
+- 从 08-05 到 09-06 尚有 33 个计划日；按每天 30 分钟计算，每日手写约 16.5 小时，六个阶段核心手写再增加 6 至 12 小时，合计约 22.5 至 28.5 小时，Review 与提问时间另计。这是用户主动选择的学习投入；若影响 9 月上线，优先裁剪 P1、装饰和额外抽象，不削减这两层手写。
 - 一次只做一个活动计划、一个仓库、一个配置分支和 `MARKDOWN_NOTE` 一种任务类型。
 - P0 不加入 pgvector、用户代码执行、多 Agent、MCP、多仓库或复杂自动重规划。
 - 生产版本最迟在 9 月 2 日形成；9 月 3 日后的代码改动只修 P0 blocker。
 - 每日改动导读与问答关卡从阶段 1 的 2026-08-01 开始；07-31 的阶段 0 仅用于配置协作范式，不做无代码价值的补问。
+- 每日手写与阶段核心手写双层规则自 2026-08-06 起生效：08-05 及以后尚未完成的计划日执行；08-01 至 08-04 已完成且已提交，不追溯返工。08-04 已完成的 `isValidTaskTransition` 保留为历史手写记录，但不能抵扣阶段 1 新增的核心手写。
 
 ## 3. 求职交付物
 
@@ -34,24 +36,24 @@
 3. 可重放的 SSE 时间线、幂等 Webhook、Outbox、失败重试和核心自动化测试；
 4. README、架构图、至少 3 篇关键 ADR、2 至 4 分钟演示脚本或视频；
 5. 至少 3 项真实测量数据，以及不夸大的简历表述；
-6. 六个阶段的手写代码、每天的微观问答和阶段宏观问答记录。
+6. 每个未完成计划日的基础手写代码、六个阶段各一份核心手写代码，以及每天的微观问答和阶段宏观问答记录。
 
 ## 4. 阶段看板
 
 阶段状态只允许使用：
 
-`NOT_STARTED` → `REQUIREMENTS_CONFIRMING` → `EXPLAINING` → `AI_IMPLEMENTING` → `WAITING_USER_CODE` → `REVIEWING` → `STAGE_INTERVIEW_QA` → `STAGE_DOCUMENTING` → `DONE`
+`NOT_STARTED` → `REQUIREMENTS_CONFIRMING` → `EXPLAINING` → `AI_IMPLEMENTING` → `WAITING_STAGE_CODE` → `REVIEWING_STAGE_CODE` → `STAGE_INTERVIEW_QA` → `STAGE_DOCUMENTING` → `DONE`
 
 每日状态只允许使用：
 
-`NOT_STARTED` → `WORKING` → `DAILY_WALKTHROUGH` → `DAILY_INTERVIEW_QA` → `DAILY_DOCUMENTING` → `DONE`
+`NOT_STARTED` → `WORKING` → `DAILY_WAITING_USER_CODE` → `DAILY_REVIEWING` → `DAILY_WALKTHROUGH` → `DAILY_INTERVIEW_QA` → `DAILY_DOCUMENTING` → `DONE`
 
-遇到外部阻塞时可临时使用 `BLOCKED`，解除后回到阻塞前状态。一个计划日只有在检查点、验证、改动导读、用户理解确认、每日问答、写档和范围受控的每日 Git 提交全部完成后才能标记为 `DONE`；提交失败时保持或恢复为 `DAILY_DOCUMENTING`。
+遇到外部阻塞时可临时使用 `BLOCKED`，解除后回到阻塞前状态。一个计划日只有在检查点、验证、每日手写 Review、改动导读、用户理解确认、每日问答、写档和范围受控的每日 Git 提交全部完成后才能标记为 `DONE`；提交失败时保持或恢复为 `DAILY_DOCUMENTING`。所有计划日 `DONE` 后才交付阶段核心手写；其 Review 和独立 commit 完成前不能进入阶段宏观问答。
 
 | 阶段 | 计划日期 | 当前状态 | 下一关卡 | 实际完成 | 偏差或裁剪 |
 | --- | --- | --- | --- | --- | --- |
 | 0. 协作范式与倒排 | 07-31 | `DONE` | 阶段 1 需求确认 | 2026-07-31 | 无 |
-| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 开始 08-05 计划日 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成状态迁移手写点且 Review 已通过；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
+| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 开始 08-05 计划日 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成旧版状态迁移手写点且 Review 已通过；2026-08-06 起新增每日 30 分钟与阶段 1 至 2 小时双层手写关卡，已完成日期不返工，阶段 1 仍须新增核心手写；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
 | 2. 目标、计划与基础工作台 | 08-06 ～ 08-10 | `NOT_STARTED` | 等待阶段 1 | — | — |
 | 3. GitHub 与可靠异步链路 | 08-11 ～ 08-16 | `NOT_STARTED` | 等待阶段 2 | — | — |
 | 4. Markdown 与 Agent 验收闭环 | 08-17 ～ 08-22 | `NOT_STARTED` | 等待阶段 3 | — | — |
@@ -76,20 +78,22 @@
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-01 周六 | 共同 | 确认 Monorepo、运行环境、鉴权开发策略和部署前提；确认后讲解 Web/API/Worker 边界、服务端状态、领域状态机和测试金字塔 | 用户完成需求确认并在理解讲解后明确授权 | Web、API 与 Worker 为什么分进程 | `DONE` |
-| 08-02 周日 | AI | 初始化 pnpm workspace、Nuxt、NestJS API、Worker、共享包；使用 WSL 原生 PostgreSQL/Redis；保留显式 VPS Compose 命令；建立 lint、format、typecheck、Vitest 和环境变量校验 | 三个应用可启动，基础检查可一键执行，本机不依赖 Docker Desktop 或 Docker daemon | Monorepo 依赖边界与本地基础设施 | `DONE` |
-| 08-03 周一 | AI | 定义共享 DTO/Zod Schema、Task 与 AgentRun 状态、错误码和基础 Prisma Schema；建立 health/readiness 与结构化日志 | 契约不依赖具体 UI，状态迁移有单元测试 | 共享契约及 Task/AgentRun 状态分离 | `DONE` |
-| 08-04 周二 | AI | 建立最小应用壳、CI 和测试夹具；AI 完成范围后交付 `isValidTaskTransition` 手写缺口、契约和测试 | AI 范围验证完成，手写任务已交付 | CI、测试夹具与纯函数可测试性 | `DONE` |
-| 08-05 周三 | 用户 → 共同 | 用户在 30 分钟内完成状态迁移函数；AI Review 并修复 blocking 问题；每日问答后再完成 2 至 4 道阶段宏观题 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | 状态迁移的边界、复杂度与解释方式 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-01 周六 | 共同 | 确认 Monorepo、运行环境、鉴权开发策略和部署前提；确认后讲解 Web/API/Worker 边界、服务端状态、领域状态机和测试金字塔 | —（新规则生效前已完成） | 用户完成需求确认并在理解讲解后明确授权 | Web、API 与 Worker 为什么分进程 | `DONE` |
+| 08-02 周日 | AI | 初始化 pnpm workspace、Nuxt、NestJS API、Worker、共享包；使用 WSL 原生 PostgreSQL/Redis；保留显式 VPS Compose 命令；建立 lint、format、typecheck、Vitest 和环境变量校验 | —（新规则生效前已完成） | 三个应用可启动，基础检查可一键执行，本机不依赖 Docker Desktop 或 Docker daemon | Monorepo 依赖边界与本地基础设施 | `DONE` |
+| 08-03 周一 | AI | 定义共享 DTO/Zod Schema、Task 与 AgentRun 状态、错误码和基础 Prisma Schema；建立 health/readiness 与结构化日志 | —（新规则生效前已完成） | 契约不依赖具体 UI，状态迁移有单元测试 | 共享契约及 Task/AgentRun 状态分离 | `DONE` |
+| 08-04 周二 | AI | 建立最小应用壳、CI 和测试夹具；完成旧版 `isValidTaskTransition` 手写与 Review | `isValidTaskTransition`（历史手写，已完成；不抵扣阶段核心手写） | 最小应用壳、CI、测试、Tailwind UI 和旧版手写均已完成 | CI、测试夹具与纯函数可测试性 | `DONE` |
+| 08-05 周三 | 共同 | 补齐阶段 1 当日收尾验证；用户完成每日手写，AI Review、导读、每日问答、写档并创建每日 commit | 使用 Nest `TestingModule` 为 `HealthController` 手写一组 `live/ready` 控制器测试，理解 Controller、Provider 注入和 `503` 异常边界 | 每日手写 Review、相关回归、改动导读、每日问答和每日 commit 均完成；随后才交付阶段核心手写 | NestJS 测试模块、依赖注入与健康接口边界 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`packages/contracts/src/domain/task-state.ts`
-- 内容：根据允许迁移表实现纯函数 `isValidTaskTransition(from, to)`。
-- 面试价值：训练 TypeScript 联合类型、显式状态机、业务不变量和可测试设计。
-- 时间上限：20 至 30 分钟。
+- 目标关卡日：08-05 每日 commit 之后；若同一自然日时间不足，阶段保持 `WAITING_STAGE_CODE` 并顺延，不启动阶段 2。
+- 计划位置：`packages/contracts/src/domain/run-termination-recovery.ts` 及对应测试。
+- 内容：实现并测试 Task/AgentRun 终止恢复决策器。输入包含当前 Task 状态与版本、Run 保存的预期版本和 `taskStateBeforeRun`、Run 终态；输出使用可辨识联合表达“允许恢复”或因版本过期、Task 已推进、Run 不可恢复而跳过。
+- 必须解释：纯函数只决定是否应恢复，真正写库仍需使用 `id + expectedVersion + VERIFYING` 的原子条件更新；受影响行数为零时旧 Run 不能覆盖新状态。
+- 面试价值：把双状态机、乐观并发、失败恢复、终态不可逆和可测试设计串成一个完整架构题。
+- 历史说明：08-04 已完成的 `isValidTaskTransition` 仅作为每日级练习保留，不抵扣本任务。
 
 ### 阶段宏观题方向
 
@@ -110,20 +114,20 @@
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-06 周四 | 共同 | 确认目标表单、计划规模、生成失败降级和页面范围；讲解 Prisma 数据模型、事务、计划 DAG、TanStack Query 与 Pinia 职责 | 用户确认并授权 | 事务、DAG 与服务端状态的职责 | `NOT_STARTED` |
-| 08-07 周五 | AI | 完成 User、LearningGoal、Plan、Stage、Task、Criterion 和依赖关系的迁移、Repository 层与 API 契约 | 可创建并读取目标和计划 | 关系建模、外键与 Repository 边界 | `NOT_STARTED` |
-| 08-08 周六 | AI | 完成受 Schema 约束的计划生成适配器、草稿版本、数量/日期/依赖校验、确认事务和首任务解锁 | 非法计划不能激活，重复确认幂等 | LLM Schema 校验与幂等确认 | `NOT_STARTED` |
-| 08-09 周日 | AI | 完成目标表单、计划预览、今日任务、任务详情基础页，以及 loading/error/empty 状态；交付 DAG 环检测手写缺口 | 浏览器可完成 Mock/真实适配器下的计划闭环，手写任务已交付 | TanStack Query、Pinia 与页面状态 | `NOT_STARTED` |
-| 08-10 周一 | 用户 → 共同 | 用户实现 DAG 环检测；AI Review、回归测试；每日问答后再完成 2 至 4 道阶段宏观题并写档 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | DAG 环检测的正确性与复杂度 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-06 周四 | 共同 | 确认目标表单、计划规模、生成失败降级和页面范围；讲解 Prisma 数据模型、事务、计划 DAG、TanStack Query 与 Pinia 职责 | 用 Zod 手写目标创建输入 Schema，完成日期、每周时长和字符串边界校验 | 用户确认并授权；每日手写 Review、导读、问答与 commit 完成 | 事务、DAG 与服务端状态的职责 | `NOT_STARTED` |
+| 08-07 周五 | AI | 完成 User、LearningGoal、Plan、Stage、Task、Criterion 和依赖关系的迁移、Repository 层与 API 契约 | 手写一个 Prisma Repository 查询，使用 `include/select` 读取计划、阶段和任务并保持返回类型明确 | 可创建并读取目标和计划；每日手写关卡完成 | 关系建模、外键与 Repository 边界 | `NOT_STARTED` |
+| 08-08 周六 | AI | 完成受 Schema 约束的计划生成适配器、草稿版本、数量/日期/依赖校验、确认事务和首任务解锁 | 为计划生成结果手写一项 Zod `superRefine` 跨字段校验及失败用例 | 非法计划不能激活，重复确认幂等；每日手写关卡完成 | LLM Schema 校验与幂等确认 | `NOT_STARTED` |
+| 08-09 周日 | AI | 完成目标表单、计划预览、今日任务、任务详情基础页，以及 loading/error/empty 状态 | 实现基于 DFS 三色标记或拓扑排序的 DAG 环检测纯函数 | 浏览器可完成 Mock/真实适配器下的计划闭环；每日手写关卡完成 | TanStack Query、Pinia 与页面状态 | `NOT_STARTED` |
+| 08-10 周一 | 共同 | 完成阶段 2 当日回归、边界修正与收尾 | 在 Nuxt 中手写一个 TanStack Query mutation，处理确认计划、错误展示和相关 Query 失效 | 每日手写 Review、相关回归、导读、问答和每日 commit 完成；随后交付阶段核心手写 | DAG 环检测、Query 失效与页面一致性 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`packages/contracts/src/plan/assert-acyclic-task-graph.ts`
-- 内容：实现基于 DFS 三色标记或拓扑排序的任务依赖环检测。
-- 面试价值：把常见图算法落实到真实业务校验，同时理解为何数据库外键不能替代 DAG 校验。
-- 时间上限：30 分钟。
+- 目标关卡日：08-10 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 3。
+- 计划位置：`apps/api/src/modules/plans/confirm-plan.service.ts` 及对应集成测试（以阶段实现后的实际模块路径为准）。
+- 内容：在已有 Repository/事务边界上实现计划确认用例：校验草稿版本和 DAG、保证重复确认幂等、限制单一活动计划、把无前置依赖任务解锁为 `READY`，并让任一步失败时整体回滚。
+- 面试价值：同时训练 NestJS Service、Prisma 事务、数据库不变量、幂等 API、DAG 业务规则和可验证的应用服务设计。
 
 ### 阶段宏观题方向
 
@@ -144,21 +148,21 @@
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-11 周二 | 共同 | 确认 GitHub App 权限、单仓库/单分支限制和异常 Push 行为；讲解 HMAC、Delivery 幂等、数据库事务、Outbox、BullMQ 和至少一次投递 | 用户确认并授权 | 至少一次投递下的端到端可靠性 | `NOT_STARTED` |
-| 08-12 周三 | AI | 完成 GitHub 登录、App Installation 回调、选定仓库绑定/解绑、权限披露和设置页 | 可用测试账号绑定一个仓库 | GitHub App 权限与 Installation 生命周期 | `NOT_STARTED` |
-| 08-13 周四 | AI | 完成 raw body 接收、事件过滤、Delivery 唯一键、WebhookDelivery/Submission/AgentRun/Outbox 同事务写入与快速 `202` | 重放 Delivery 不重复创建有效运行 | HMAC 可信性与 Delivery 幂等的区别 | `NOT_STARTED` |
-| 08-14 周五 | AI | 完成 Outbox Dispatcher、稳定 Job ID、BullMQ 队列、Worker 骨架、重试分类和未分发事件补扫；在 Linux VPS 用 Compose 提前验证 PostgreSQL/Redis | 数据库提交后最终可以稳定入队；VPS 上镜像、healthcheck、命名卷和仅回环端口通过 smoke | Outbox、稳定 Job ID、重试语义与环境一致性 | `NOT_STARTED` |
-| 08-15 周六 | AI | 完成 Commit compare、Markdown 路径匹配、Diff/快照/哈希/行号 Evidence 持久化和链路集成测试；交付手写缺口 | 真实 Push 能产生可查看的证据，手写任务已交付 | Diff Evidence 的完整性与任务匹配 | `NOT_STARTED` |
-| 08-16 周日 | 用户 → 共同 | 用户实现 Webhook 签名校验；AI 做安全 Review 和回归；每日问答后再完成 2 至 4 道阶段宏观题并写档 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | 常量时间比较、raw body 与安全边界 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-11 周二 | 共同 | 确认 GitHub App 权限、单仓库/单分支限制和异常 Push 行为；讲解 HMAC、Delivery 幂等、数据库事务、Outbox、BullMQ 和至少一次投递 | 手写稳定 BullMQ Job ID 构造函数及边界测试，区分业务幂等键和随机队列 ID | 用户确认并授权；每日手写关卡完成 | 至少一次投递下的端到端可靠性 | `NOT_STARTED` |
+| 08-12 周三 | AI | 完成 GitHub 登录、App Installation 回调、选定仓库绑定/解绑、权限披露和设置页 | 使用 Nest `TestingModule` 手写 Installation 回调 Controller 的成功与拒绝用例 | 可用测试账号绑定一个仓库；每日手写关卡完成 | GitHub App 权限与 Installation 生命周期 | `NOT_STARTED` |
+| 08-13 周四 | AI | 完成 raw body 接收、事件过滤、Delivery 唯一键、WebhookDelivery/Submission/AgentRun/Outbox 同事务写入与快速 `202` | 实现 `sha256=` 前缀、HMAC SHA-256 和常量时间比较的 Webhook 签名校验 | 重放 Delivery 不重复创建有效运行；每日手写关卡完成 | HMAC 可信性与 Delivery 幂等的区别 | `NOT_STARTED` |
+| 08-14 周五 | AI | 完成 Outbox Dispatcher、稳定 Job ID、BullMQ 队列、Worker 骨架、重试分类和未分发事件补扫；在 Linux VPS 用 Compose 提前验证 PostgreSQL/Redis | 手写一次 `Queue.add`/Worker 注册与 `attempts/backoff/jobId` 配置，并为错误分类补测试 | 数据库提交后最终可以稳定入队；VPS 基础设施 smoke 通过；每日手写关卡完成 | Outbox、稳定 Job ID、重试语义与环境一致性 | `NOT_STARTED` |
+| 08-15 周六 | AI | 完成 Commit compare、Markdown 路径匹配、Diff/快照/哈希/行号 Evidence 持久化和链路集成测试 | 手写 GitHub compare 响应到 Markdown Evidence 的窄化/过滤函数及多文件边界用例 | 真实 Push 能产生可查看的证据；每日手写关卡完成 | Diff Evidence 的完整性与任务匹配 | `NOT_STARTED` |
+| 08-16 周日 | 共同 | 完成阶段 3 当日回归、异常 Push 修正与收尾 | 手写“相同 Delivery 三次重放只产生一份有效运行”的集成测试断言 | 每日手写 Review、相关回归、导读、问答和每日 commit 完成；随后交付阶段核心手写 | 重复投递、唯一约束与集成测试证据 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`apps/api/src/modules/github/verify-github-signature.ts`
-- 内容：实现 `sha256=` 签名前缀校验、HMAC SHA-256 计算和常量时间比较。
-- 面试价值：理解 Webhook 可信边界、raw body 必要性以及签名校验与幂等是两个不同问题。
-- 时间上限：20 至 30 分钟。
+- 目标关卡日：08-16 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 4。
+- 计划位置：`apps/api/src/modules/github/accept-push-delivery.service.ts` 及对应集成测试（以阶段实现后的实际模块路径为准）。
+- 内容：实现 Webhook 接收应用服务的核心事务：签名和事件过滤完成后，以 Delivery 唯一键保证幂等，在同一 PostgreSQL 事务内创建 Delivery、Submission、AgentRun 与 OutboxEvent；重复请求返回既有结果，事务失败不得留下半套数据，HTTP 层只在提交后返回 `202`。
+- 面试价值：把 NestJS 边界、PostgreSQL 事务与唯一约束、Outbox、BullMQ 至少一次投递、稳定 Job ID 和故障恢复串成真实可靠性闭环。
 
 ### 阶段宏观题方向
 
@@ -181,21 +185,21 @@ GitHub App 与 OAuth/PAT 的区别、签名校验、幂等键、Outbox 解决的
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-17 周一 | 共同 | 确认 Rubric、三态结论、引用要求、模型预算和 Prompt Injection 边界；讲解 Markdown AST、确定性/语义分层、结构化输出、两类独立 Run 和评测集 | 用户确认并授权 | 确定性/语义分层与 Prompt Injection | `NOT_STARTED` |
-| 08-18 周二 | AI | 完成 Markdown AST 分块、章节/字数/文件变更规则、Commit 行号映射和引用再定位 | 确定性标准不调用模型且结果可复现 | Markdown AST 与引用行号可定位性 | `NOT_STARTED` |
-| 08-19 周三 | AI | 完成 agent-core 模型适配、只读工具、步骤编排、Zod 输出校验、有限修复重试、超时/取消检查和 Prompt 版本 | 非法模型输出不能改变任务状态 | 结构化输出、工具边界与失败恢复 | `NOT_STARTED` |
-| 08-20 周四 | AI | 完成笔记语义验收、CriterionResult、报告、引用联动、1 至 3 个追问和 `NEEDS_REVISION/NEEDS_EVIDENCE` 推进 | 笔记运行生成可解释报告 | 三态验收、引用与追问生成 | `NOT_STARTED` |
-| 08-21 周五 | AI | 完成回答提交与独立验收、旧追问失效、任务通过/后续解锁、至少 15 个固定样本和核心集成测试；交付手写缺口 | 单任务完整闭环自动化通过，手写任务已交付 | Note/Answer Run 分离与固定评测集 | `NOT_STARTED` |
-| 08-22 周六 | 用户 → 共同 | 用户实现验收结果汇总；AI Review 与回归；每日问答后再完成 2 至 4 道阶段宏观题并写档 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | 验收规则优先级与任务状态推导 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-17 周一 | 共同 | 确认 Rubric、三态结论、引用要求、模型预算和 Prompt Injection 边界；讲解 Markdown AST、确定性/语义分层、结构化输出、两类独立 Run 和评测集 | 使用 Markdown AST API 手写标题收集 Visitor，并处理嵌套节点和空标题 | 用户确认并授权；每日手写关卡完成 | 确定性/语义分层与 Prompt Injection | `NOT_STARTED` |
+| 08-18 周二 | AI | 完成 Markdown AST 分块、章节/字数/文件变更规则、Commit 行号映射和引用再定位 | 手写一项确定性 `SECTION_PRESENT` 检查或引用行号定位函数及表驱动测试 | 确定性标准不调用模型且结果可复现；每日手写关卡完成 | Markdown AST 与引用行号可定位性 | `NOT_STARTED` |
+| 08-19 周三 | AI | 完成 agent-core 模型适配、只读工具、步骤编排、Zod 输出校验、有限修复重试、超时/取消检查和 Prompt 版本 | 手写 LLM 结构化输出的 Zod 解析函数，限制一次修复重试并区分 Schema 错误与上游错误 | 非法模型输出不能改变任务状态；每日手写关卡完成 | 结构化输出、工具边界与失败恢复 | `NOT_STARTED` |
+| 08-20 周四 | AI | 完成笔记语义验收、CriterionResult、报告、引用联动、1 至 3 个追问和 `NEEDS_REVISION/NEEDS_EVIDENCE` 推进 | 根据必要/可选标准及三态结果实现 `deriveTaskOutcome` 纯函数 | 笔记运行生成可解释报告；每日手写关卡完成 | 三态验收、引用与追问生成 | `NOT_STARTED` |
+| 08-21 周五 | AI | 完成回答提交与独立验收、旧追问失效、任务通过/后续解锁、至少 15 个固定样本和核心集成测试 | 为固定评测样本手写一组结果断言，覆盖错误通过、证据不足和引用不可定位 | 单任务完整闭环自动化通过；每日手写关卡完成 | Note/Answer Run 分离与固定评测集 | `NOT_STARTED` |
+| 08-22 周六 | 共同 | 完成阶段 4 当日回归、安全边界修正与收尾 | 手写“新笔记生效后旧追问不得完成任务”的领域或集成测试 | 每日手写 Review、相关回归、导读、问答和每日 commit 完成；随后交付阶段核心手写 | 旧证据失效、运行边界与业务状态推导 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`packages/agent-core/src/verification/derive-task-outcome.ts`
-- 内容：根据必要/可选标准及三态结果推导任务下一稳定状态。
-- 面试价值：理解领域规则优先级、纯函数设计，以及 `FAILED` 与 `INSUFFICIENT_EVIDENCE` 为何不能混淆。
-- 时间上限：20 至 30 分钟。
+- 目标关卡日：08-22 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 5。
+- 计划位置：`packages/agent-core/src/verification/finalize-verification-run.ts` 及对应测试（以阶段实现后的实际路径为准）。
+- 内容：实现一次验收运行的最终决策与持久化编排：校验结构化结果和引用、按必要标准优先级推导稳定 Task 状态、区分笔记/回答 Run、拒绝过期 Submission 或旧追问、成功时生成不可覆盖报告并解锁后续任务，失败时不得写入部分业务结果。
+- 面试价值：覆盖 Agent 受控工作流、确定性与语义分层、三态业务规则、证据引用、不可变记录、并发失效与事务边界，是本产品最核心的业务逻辑之一。
 
 ### 阶段宏观题方向
 
@@ -217,20 +221,20 @@ GitHub App 与 OAuth/PAT 的区别、签名校验、幂等键、Outbox 解决的
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-23 周日 | 共同 | 确认时间线事件、重连语义、取消/重试交互和 Monaco 范围；讲解持久化事件、Redis 通知、SSE replay/live 竞态、Reducer 与 Query 缓存边界 | 用户确认并授权 | SSE replay/live 与前端状态边界 | `NOT_STARTED` |
-| 08-24 周一 | AI | 完成 RunEvent 序列分配、先落库后通知、SSE 鉴权、历史重放、实时订阅、心跳和订阅清理 | API 可按最后事件 ID 补发 | 事件持久化、序列号、鉴权与心跳 | `NOT_STARTED` |
-| 08-25 周二 | AI | 完成运行详情、步骤时间线、状态与耗时、Markdown Diff、引用定位、报告和 Monaco 客户端懒加载 | 主流程可以完整演示 | 时间线渲染、引用联动与懒加载 | `NOT_STARTED` |
-| 08-26 周三 | AI | 完成断线/刷新、重复/乱序事件、replay/live 衔接、取消、关联重试、错误/加载/空状态和相关测试；交付手写缺口 | 重连后时间线无缺失无重复，手写任务已交付 | 重连竞态、重复乱序与取消重试 | `NOT_STARTED` |
-| 08-27 周四 | 用户 → 共同 | 用户实现 RunEvent Reducer；AI Review、性能检查与回归；每日问答后再完成 2 至 4 道阶段宏观题并写档 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | Reducer 幂等、排序与渲染性能 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-23 周日 | 共同 | 确认时间线事件、重连语义、取消/重试交互和 Monaco 范围；讲解持久化事件、Redis 通知、SSE replay/live 竞态、Reducer 与 Query 缓存边界 | 手写 `Last-Event-ID`/cursor 的 Zod 校验和下一序列号计算函数 | 用户确认并授权；每日手写关卡完成 | SSE replay/live 与前端状态边界 | `NOT_STARTED` |
+| 08-24 周一 | AI | 完成 RunEvent 序列分配、先落库后通知、SSE 鉴权、历史重放、实时订阅、心跳和订阅清理 | 使用 NestJS Observable/async stream API 手写 SSE 心跳与取消清理片段及测试 | API 可按最后事件 ID 补发；每日手写关卡完成 | 事件持久化、序列号、鉴权与心跳 | `NOT_STARTED` |
+| 08-25 周二 | AI | 完成运行详情、步骤时间线、状态与耗时、Markdown Diff、引用定位、报告和 Monaco 客户端懒加载 | 在 Nuxt 客户端组件中手写 Monaco 动态导入和引用行定位函数，验证不进入公共页首屏 | 主流程可以完整演示；每日手写关卡完成 | 时间线渲染、引用联动与懒加载 | `NOT_STARTED` |
+| 08-26 周三 | AI | 完成断线/刷新、重复/乱序事件、replay/live 衔接、取消、关联重试、错误/加载/空状态和相关测试 | 按 `(runId, sequence)` 实现 RunEvent Reducer 的去重、排序和幂等更新 | 重连后时间线无缺失无重复；每日手写关卡完成 | 重连竞态、重复乱序与取消重试 | `NOT_STARTED` |
+| 08-27 周四 | 共同 | 完成阶段 5 当日性能检查、回归与收尾 | 手写 Reducer/Composable 的乱序、重复和 replay/live 交界测试 | 每日手写 Review、相关回归、导读、问答和每日 commit 完成；随后交付阶段核心手写 | Reducer 幂等、排序与渲染性能 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`apps/web/app/utils/run-event-reducer.ts`
-- 内容：按 `(runId, sequence)` 对事件去重、排序，并保持 reducer 幂等。
-- 面试价值：高度贴近前端手写题，可延伸到流式 UI、乱序网络消息、不可变数据和渲染性能。
-- 时间上限：30 分钟。
+- 目标关卡日：08-27 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 6。
+- 计划位置：`apps/web/app/composables/use-run-event-stream.ts` 及对应 Vitest（以阶段实现后的实际路径为准）。
+- 内容：实现运行事件流协调器：先按 cursor 拉取 replay，再接 live SSE；对重复/乱序事件幂等归并，检测间隙并补拉，断线指数退避且刷新后恢复；终态后正确停止订阅，并明确与 TanStack Query 服务端实体缓存、局部流式状态的边界。
+- 面试价值：集中展示 Vue/Nuxt 主场能力、流式 UI、前端状态架构、竞态处理、网络恢复、不可变 Reducer 和渲染性能。
 
 ### 阶段宏观题方向
 
@@ -252,21 +256,21 @@ SSE 与 WebSocket 取舍、断线重放竞态、事件去重、TanStack Query �
 
 ### 逐日安排
 
-| 日期 | 负责人 | 当日工作 | 当日检查点 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- | --- |
-| 08-28 周五 | 共同 | 冻结 P0；确认部署平台、域名/密钥、固定 Demo 和公开材料边界；讲解测试金字塔、故障注入、可观测、Web 性能和简历指标真实性 | 用户确认并授权 | 测试分层、部署边界与指标真实性 | `NOT_STARTED` |
-| 08-29 周六 | AI | 补齐核心单元、Webhook→Worker 集成、完整 E2E、越权检查和三处 Worker 故障注入 | CI 稳定覆盖产品与工程闭环 | 测试层级、Mock 边界与故障注入 | `NOT_STARTED` |
-| 08-30 周日 | AI | 部署 Web/API/Worker/PostgreSQL/Redis，配置迁移、密钥、健康检查、结构化日志、Trace ID 和回滚说明 | 生产环境可完成 smoke test | 密钥、迁移、健康检查与可观测链路 | `NOT_STARTED` |
-| 08-31 周一 | AI | 优化公共页首屏、Monaco 懒加载、基础可访问性和移动端；测量性能、重放可靠性、Agent 效果/成本 | 得到至少 3 项可复现实测数据 | Web 性能、可访问性与指标测量 | `NOT_STARTED` |
-| 09-01 周二 | AI → 用户 | 完成固定 Demo、README、架构图、至少 3 篇 ADR、演示脚本和简历 bullet 初稿；交付 Playwright 手写段，用户完成后由 AI Review | 求职材料与代码一致，用户测试通过 | E2E 断言、flaky 控制与简历事实边界 | `NOT_STARTED` |
-| 09-02 周三 | 共同 | 生产 smoke、发布 v1.0、冻结简历表述；每日问答后再完成 2 至 4 道阶段宏观题并写档 | 每日问答和宏观问答均完成，阶段状态为 `DONE`，版本可投递 | 发布验证、回滚与三分钟项目叙述 | `NOT_STARTED` |
+| 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 08-28 周五 | 共同 | 冻结 P0；确认部署平台、域名/密钥、固定 Demo 和公开材料边界；讲解测试金字塔、故障注入、可观测、Web 性能和简历指标真实性 | 为同一业务不变量各手写一个单元/集成/E2E 测试草案，并明确每层 Mock 边界 | 用户确认并授权；每日手写关卡完成 | 测试分层、部署边界与指标真实性 | `NOT_STARTED` |
+| 08-29 周六 | AI | 补齐核心单元、Webhook→Worker 集成、完整 E2E、越权检查和三处 Worker 故障注入 | 手写一项 Worker 在结果持久化前崩溃的故障注入集成测试 | CI 稳定覆盖产品与工程闭环；每日手写关卡完成 | 测试层级、Mock 边界与故障注入 | `NOT_STARTED` |
+| 08-30 周日 | AI | 部署 Web/API/Worker/PostgreSQL/Redis，配置迁移、密钥、健康检查、结构化日志、Trace ID 和回滚说明 | 手写 GitHub Actions 部署 Job 中的迁移、readiness smoke、失败终止和并发保护步骤 | 生产环境可完成 smoke test；每日手写关卡完成 | 密钥、迁移、健康检查与可观测链路 | `NOT_STARTED` |
+| 08-31 周一 | AI | 优化公共页首屏、Monaco 懒加载、基础可访问性和移动端；测量性能、重放可靠性、Agent 效果/成本 | 手写 Playwright 的移动端、键盘焦点与 Monaco 首屏未加载断言 | 得到至少 3 项可复现实测数据；每日手写关卡完成 | Web 性能、可访问性与指标测量 | `NOT_STARTED` |
+| 09-01 周二 | AI | 完成固定 Demo、README、架构图、至少 3 篇 ADR、演示脚本和简历 bullet 初稿 | 在已有 fixture/page object 上补全“刷新或重连后时间线事件无缺失、无重复”的 Playwright 断言 | 求职材料与代码一致；每日手写关卡完成 | E2E 断言、flaky 控制与简历事实边界 | `NOT_STARTED` |
+| 09-02 周三 | 共同 | 生产 smoke、形成 v1.0 候选版本、冻结简历表述并完成当日收尾 | 手写可重复执行的发布后 smoke 脚本，校验公共页、API readiness、固定 Demo 和核心授权边界 | 每日手写 Review、相关回归、导读、问答和每日 commit 完成，候选版本通过 smoke；随后交付阶段核心手写 | 发布验证、回滚与三分钟项目叙述 | `NOT_STARTED` |
 
-### 用户手写点
+### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 计划位置：`tests/e2e/run-reconnect.spec.ts`
-- 内容：在已有 fixture/page object 上补全“刷新或重连后时间线事件无缺失、无重复”的断言段。
-- 面试价值：补齐测试薄弱项，能够解释 E2E 测什么、为何不能只靠单元测试以及怎样降低 flaky。
-- 时间上限：20 至 30 分钟。
+- 目标关卡日：09-02 每日 commit 之后；未通过 Review、独立 commit 和宏观问答前不宣布 v1.0 求职版阶段完成。
+- 计划位置：`tests/e2e/knowledge-verification-loop.spec.ts` 及必要的已有 fixture/page object 调用。
+- 内容：独立补全一条关键闭环 E2E：创建并确认计划、模拟合法 GitHub Push、观察运行与报告、提交追问答案、任务通过并解锁下一项；至少加入一次刷新/重连或 Worker 故障恢复断言，并使用稳定等待条件避免 sleep 型 flaky。
+- 面试价值：要求用户从浏览器行为反推 API、数据库、队列、Worker 和 SSE 的完整数据流，同时训练 Playwright、测试分层、故障设计和简历事实边界。
 
 ### 阶段宏观题方向
 
@@ -281,12 +285,12 @@ SSE 与 WebSocket 取舍、断线重放竞态、事件去重、TanStack Query �
 
 ## 11. 发布缓冲：2026-09-03 至 2026-09-06
 
-| 日期 | 工作 | 禁止事项 | 每日微观问答主题 | 状态 |
-| --- | --- | --- | --- | --- |
-| 09-03 周四 | 观察生产运行、复跑幂等/断线/失败用例，只修 P0 blocker | 不加新功能 | 生产故障定位与回归边界 | `NOT_STARTED` |
-| 09-04 周五 | 用户录制 2 至 4 分钟演示；校对 README、隐私说明、截图和线上链接 | 不改核心架构 | Demo 叙事、隐私与公开信息边界 | `NOT_STARTED` |
-| 09-05 周六 | 完成一次全项目模拟面试，依据 `问答.md` 复习薄弱点；定稿简历项目经历 | 不使用未经测量的数字 | 重复薄弱点与简历追问 | `NOT_STARTED` |
-| 09-06 周日 | 最终 smoke、备份 Demo 数据、整理投递链接和面试讲解提纲 | 不因包装需求扩大 P0 | 发布兜底、数据备份与故障恢复 | `NOT_STARTED` |
+| 日期 | 工作 | 每日手写（约 30 分钟） | 禁止事项 | 每日微观问答主题 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| 09-03 周四 | 观察生产运行、复跑幂等/断线/失败用例，只修 P0 blocker | 针对当天最高优先级真实故障或风险补一条最小回归测试；若无故障，则补重复 Delivery 生产配置回归 | 不加新功能 | 生产故障定位与回归边界 | `NOT_STARTED` |
+| 09-04 周五 | 用户录制 2 至 4 分钟演示；校对 README、隐私说明、截图和线上链接 | 手写公共 Demo/隐私页的 Playwright 检查，确保无私人数据、工作台 `noindex` 且关键链接有效 | 不改核心架构 | Demo 叙事、隐私与公开信息边界 | `NOT_STARTED` |
+| 09-05 周六 | 完成一次全项目模拟面试，依据 `问答.md` 复习薄弱点；定稿简历项目经历 | 从 `问答.md` 重复薄弱点中选择一个真实核心函数，在 30 分钟内脱离 AI 重写简化版及测试 | 不使用未经测量的数字 | 重复薄弱点与简历追问 | `NOT_STARTED` |
+| 09-06 周日 | 最终 smoke、备份 Demo 数据、整理投递链接和面试讲解提纲 | 手写 Demo 数据备份后的恢复校验脚本，至少验证记录数量、关键外键和固定 Demo 可读取 | 不因包装需求扩大 P0 | 发布兜底、数据备份与故障恢复 | `NOT_STARTED` |
 
 若 9 月 2 日前已稳定完成，缓冲日用于真实使用和投递；若仍有 blocker，只修复 blocker，并在阶段看板记录实际完成日期。
 
@@ -310,7 +314,7 @@ SSE 与 WebSocket 取舍、断线重放竞态、事件去重、TanStack Query �
 
 ## 13. 排期恢复与裁剪规则
 
-进度落后 1 天：使用下一阶段的首个 AI 编码日吸收，但保留需求/授权关卡、每日改动导读与理解确认、每日问答和阶段宏观问答。
+进度落后 1 天：使用下一阶段的首个 AI 编码日吸收，但保留需求/授权关卡、每日手写与 Review、每日改动导读与理解确认、每日问答、阶段核心手写和阶段宏观问答。
 
 进度落后 2 天：立即做 15 分钟范围复盘，删除 P1、视觉装饰、非关键筛选和额外抽象。
 
@@ -323,4 +327,4 @@ SSE 与 WebSocket 取舍、断线重放竞态、事件去重、TanStack Query �
 - SSE 重连重放；
 - 失败重试、线上部署和核心自动化测试。
 
-无论落后多少天，都不得通过增加用户手写量、跳过 Review、每日改动导读与理解确认、每日微观问答、每日 Git 提交、阶段宏观问答或伪造指标追赶。
+无论落后多少天，都不得跳过每日手写与 Review、阶段核心手写、每日改动导读与理解确认、每日微观问答、每日 Git 提交、阶段宏观问答或伪造指标追赶；也不得把多天手写堆到同一天，或临时增加超出每日 30 分钟与阶段 1 至 2 小时目标的手写量来追赶。

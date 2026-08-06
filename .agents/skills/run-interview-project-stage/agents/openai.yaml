@@ -1,4 +1,4 @@
 interface:
   display_name: "面试驱动项目开发"
-  short_description: "按日完成编码、导读、问答与提交，并进行阶段复盘"
+  short_description: "按日完成编码、手写、导读、问答与提交，并进行阶段核心复盘"
   default_prompt: "Use $run-interview-project-stage to continue the current KnowledgeOps Agent development stage."

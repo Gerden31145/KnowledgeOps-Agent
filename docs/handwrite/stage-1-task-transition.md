@@ -1,8 +1,9 @@
-# 阶段 1 手写任务：Task 状态迁移
+# 阶段 1 历史每日手写：Task 状态迁移
 
 ## 任务边界
 
-- 计划日：08-05（由 08-04 提前交付契约与测试）
+- 计划日：原定 08-05，由用户在 08-04 提前完成并通过 Review
+- 分类：2026-08-06 双层手写规则生效前的约 30 分钟练习；保留为历史每日手写，不抵扣阶段 1 新增的 1 至 2 小时核心手写
 - 实现文件：`packages/contracts/src/domain/task-state.ts`
 - 函数签名：`isValidTaskTransition(from: TaskState, to: TaskState): boolean`
 - 时间上限：20 至 30 分钟
