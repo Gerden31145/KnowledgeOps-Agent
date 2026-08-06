@@ -53,7 +53,7 @@
 | 阶段 | 计划日期 | 当前状态 | 下一关卡 | 实际完成 | 偏差或裁剪 |
 | --- | --- | --- | --- | --- | --- |
 | 0. 协作范式与倒排 | 07-31 | `DONE` | 阶段 1 需求确认 | 2026-07-31 | 无 |
-| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 开始 08-05 计划日 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成旧版状态迁移手写点且 Review 已通过；2026-08-06 起新增每日 30 分钟与阶段 1 至 2 小时双层手写关卡，已完成日期不返工，阶段 1 仍须新增核心手写；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
+| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 阶段 1 核心手写 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成旧版状态迁移手写点且 Review 已通过；2026-08-06 起新增每日 30 分钟与阶段 1 至 2 小时双层手写关卡，已完成日期不返工，阶段 1 仍须新增核心手写；08-05 计划日于 08-06 完成 TestingModule 手写、Review、改动导读和 1 道微观题，完整 CI 回归为 12 个测试文件、44 个测试通过；本机 PostgreSQL/Redis 当前未监听，阶段关闭前仍需恢复 WSL 并复验 `infra:check`；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
 | 2. 目标、计划与基础工作台 | 08-06 ～ 08-10 | `NOT_STARTED` | 等待阶段 1 | — | — |
 | 3. GitHub 与可靠异步链路 | 08-11 ～ 08-16 | `NOT_STARTED` | 等待阶段 2 | — | — |
 | 4. Markdown 与 Agent 验收闭环 | 08-17 ～ 08-22 | `NOT_STARTED` | 等待阶段 3 | — | — |
@@ -84,7 +84,7 @@
 | 08-02 周日 | AI | 初始化 pnpm workspace、Nuxt、NestJS API、Worker、共享包；使用 WSL 原生 PostgreSQL/Redis；保留显式 VPS Compose 命令；建立 lint、format、typecheck、Vitest 和环境变量校验 | —（新规则生效前已完成） | 三个应用可启动，基础检查可一键执行，本机不依赖 Docker Desktop 或 Docker daemon | Monorepo 依赖边界与本地基础设施 | `DONE` |
 | 08-03 周一 | AI | 定义共享 DTO/Zod Schema、Task 与 AgentRun 状态、错误码和基础 Prisma Schema；建立 health/readiness 与结构化日志 | —（新规则生效前已完成） | 契约不依赖具体 UI，状态迁移有单元测试 | 共享契约及 Task/AgentRun 状态分离 | `DONE` |
 | 08-04 周二 | AI | 建立最小应用壳、CI 和测试夹具；完成旧版 `isValidTaskTransition` 手写与 Review | `isValidTaskTransition`（历史手写，已完成；不抵扣阶段核心手写） | 最小应用壳、CI、测试、Tailwind UI 和旧版手写均已完成 | CI、测试夹具与纯函数可测试性 | `DONE` |
-| 08-05 周三 | 共同 | 补齐阶段 1 当日收尾验证；用户完成每日手写，AI Review、导读、每日问答、写档并创建每日 commit | 使用 Nest `TestingModule` 为 `HealthController` 手写一组 `live/ready` 控制器测试，理解 Controller、Provider 注入和 `503` 异常边界 | 每日手写 Review、相关回归、改动导读、每日问答和每日 commit 均完成；随后才交付阶段核心手写 | NestJS 测试模块、依赖注入与健康接口边界 | `NOT_STARTED` |
+| 08-05 周三 | 共同 | 补齐阶段 1 当日收尾验证；用户完成每日手写，AI Review、导读、每日问答、写档并创建每日 commit | 使用 Nest `TestingModule` 为 `HealthController` 手写一组 `live/ready` 控制器测试，理解 Controller、Provider 注入和 `503` 异常边界 | 每日手写 Review、相关回归、改动导读、每日问答和每日 commit 均完成；随后才交付阶段核心手写 | NestJS 测试模块、依赖注入与健康接口边界 | `DONE` |
 
 ### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
