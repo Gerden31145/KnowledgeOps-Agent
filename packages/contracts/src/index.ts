@@ -18,6 +18,7 @@ export {
   RESTORABLE_TASK_STATES,
   TASK_STATES,
   isRestorableTaskState,
+  isValidTaskTransition,
   restorableTaskStateSchema,
   taskStateSchema,
   type RestorableTaskState,
@@ -41,6 +42,7 @@ export {
   type LivenessResponse,
   type ReadinessResponse,
 } from './http/health.js'
+export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
 export { entityIdSchema, isoDateTimeSchema } from './shared/primitives.js'
 export {
   isServiceName,

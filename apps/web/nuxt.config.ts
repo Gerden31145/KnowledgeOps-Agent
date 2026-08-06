@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite'
 import { defineNuxtConfig } from 'nuxt/config'
 import { z } from 'zod'
 
@@ -26,5 +27,8 @@ export default defineNuxtConfig({
   typescript: {
     strict: true,
     typeCheck: true,
+  },
+  vite: {
+    plugins: [tailwindcss()],
   },
 })

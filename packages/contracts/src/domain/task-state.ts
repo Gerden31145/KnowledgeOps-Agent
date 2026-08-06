@@ -14,6 +14,16 @@ export const taskStateSchema = z.enum(TASK_STATES)
 
 export type TaskState = z.infer<typeof taskStateSchema>
 
+const taskTransitions = {
+  BLOCKED: ['READY'],
+  READY: ['IN_PROGRESS'],
+  IN_PROGRESS: ['VERIFYING'],
+  VERIFYING: ['NEEDS_REVISION', 'NEEDS_EVIDENCE', 'PASSED', 'IN_PROGRESS'],
+  NEEDS_REVISION: ['VERIFYING'],
+  NEEDS_EVIDENCE: ['VERIFYING'],
+  PASSED: [],
+} as const satisfies Record<TaskState, readonly TaskState[]>
+
 /** Stable states to which a failed, cancelled, or timed-out run may restore its task. */
 export const RESTORABLE_TASK_STATES = [
   'IN_PROGRESS',
@@ -27,4 +37,11 @@ export type RestorableTaskState = z.infer<typeof restorableTaskStateSchema>
 
 export function isRestorableTaskState(state: TaskState): state is RestorableTaskState {
   return RESTORABLE_TASK_STATES.some((restorableState) => restorableState === state)
+}
+
+/**
+ * Returns whether a Task may move directly from one business state to another.
+ */
+export function isValidTaskTransition(from: TaskState, to: TaskState): boolean {
+  return taskTransitions[from].some((allowedState: TaskState) => allowedState === to)
 }

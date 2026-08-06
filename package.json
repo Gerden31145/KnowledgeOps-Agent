@@ -31,8 +31,10 @@
     "lint": "eslint .",
     "postinstall": "pnpm build:packages && pnpm --filter @knowledgeops/web prepare",
     "test": "pnpm db:generate && vitest run",
+    "test:handwrite:task-state": "vitest run --config vitest.handwrite.config.ts",
     "test:watch": "pnpm db:generate && vitest",
-    "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck"
+    "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck",
+    "verify:ci": "pnpm check && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

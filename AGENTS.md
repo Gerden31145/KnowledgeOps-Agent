@@ -16,9 +16,18 @@
 - 产品范围：`docs/KnowledgeOps-Agent-9月求职版PRD.md`
 - 排期与阶段状态：`docs/KnowledgeOps-Agent-逐日开发计划.md`
 - 面试学习档案：`问答.md`
+- UI 视觉与交互规范：`DESIGN.md`
 - 完整阶段流程：`.agents/skills/run-interview-project-stage/SKILL.md`
 
 任何新需求默认进入 9 月后 backlog，除非用户明确决定用它替换现有 P0。
+
+### 2.1 UI 实现约束
+
+- `DESIGN.md` 约束视觉语言、设计令牌、字体层级、间距、形状、组件外观和响应式表现；若与 PRD 的业务范围、可访问性、性能或安全要求冲突，以后者为准。
+- Web 样式统一使用 Tailwind CSS，并将 `DESIGN.md` 中可复用的颜色、字体、字号和间距映射为主题令牌；全局 CSS 只保留 Tailwind 入口、令牌、基础样式和必要的平台修正。
+- 新 UI 不得随意引入内联色值、渐变、阴影、玻璃拟态、圆角卡片或新的视觉体系；确需偏离时先说明业务或可用性理由并获得用户确认。
+- 只借鉴 `DESIGN.md` 的视觉语言，不复制 Bugatti 的商标、专有字体、品牌图片或汽车内容；产品始终使用 KnowledgeOps Agent 自身的品牌与真实内容。
+- UI 改动至少检查移动端与桌面端布局、键盘焦点、颜色对比度、44px 触控目标，以及加载、空、错误等真实状态。
 
 ## 3. 每个开发阶段的硬关卡
 

@@ -51,7 +51,7 @@
 | 阶段 | 计划日期 | 当前状态 | 下一关卡 | 实际完成 | 偏差或裁剪 |
 | --- | --- | --- | --- | --- | --- |
 | 0. 协作范式与倒排 | 07-31 | `DONE` | 阶段 1 需求确认 | 2026-07-31 | 无 |
-| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 等待开始 08-04 计划日 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
+| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `AI_IMPLEMENTING` | 开始 08-05 计划日 | — | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查，待 WSL 恢复后由 `infra:up` 幂等验证；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成状态迁移手写点且 Review 已通过；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
 | 2. 目标、计划与基础工作台 | 08-06 ～ 08-10 | `NOT_STARTED` | 等待阶段 1 | — | — |
 | 3. GitHub 与可靠异步链路 | 08-11 ～ 08-16 | `NOT_STARTED` | 等待阶段 2 | — | — |
 | 4. Markdown 与 Agent 验收闭环 | 08-17 ～ 08-22 | `NOT_STARTED` | 等待阶段 3 | — | — |
@@ -81,7 +81,7 @@
 | 08-01 周六 | 共同 | 确认 Monorepo、运行环境、鉴权开发策略和部署前提；确认后讲解 Web/API/Worker 边界、服务端状态、领域状态机和测试金字塔 | 用户完成需求确认并在理解讲解后明确授权 | Web、API 与 Worker 为什么分进程 | `DONE` |
 | 08-02 周日 | AI | 初始化 pnpm workspace、Nuxt、NestJS API、Worker、共享包；使用 WSL 原生 PostgreSQL/Redis；保留显式 VPS Compose 命令；建立 lint、format、typecheck、Vitest 和环境变量校验 | 三个应用可启动，基础检查可一键执行，本机不依赖 Docker Desktop 或 Docker daemon | Monorepo 依赖边界与本地基础设施 | `DONE` |
 | 08-03 周一 | AI | 定义共享 DTO/Zod Schema、Task 与 AgentRun 状态、错误码和基础 Prisma Schema；建立 health/readiness 与结构化日志 | 契约不依赖具体 UI，状态迁移有单元测试 | 共享契约及 Task/AgentRun 状态分离 | `DONE` |
-| 08-04 周二 | AI | 建立最小应用壳、CI 和测试夹具；AI 完成范围后交付 `isValidTaskTransition` 手写缺口、契约和测试 | AI 范围验证完成，手写任务已交付 | CI、测试夹具与纯函数可测试性 | `NOT_STARTED` |
+| 08-04 周二 | AI | 建立最小应用壳、CI 和测试夹具；AI 完成范围后交付 `isValidTaskTransition` 手写缺口、契约和测试 | AI 范围验证完成，手写任务已交付 | CI、测试夹具与纯函数可测试性 | `DONE` |
 | 08-05 周三 | 用户 → 共同 | 用户在 30 分钟内完成状态迁移函数；AI Review 并修复 blocking 问题；每日问答后再完成 2 至 4 道阶段宏观题 | 手写 Review、每日问答和宏观问答均完成，阶段状态为 `DONE` | 状态迁移的边界、复杂度与解释方式 | `NOT_STARTED` |
 
 ### 用户手写点
