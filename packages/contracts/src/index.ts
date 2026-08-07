@@ -15,6 +15,15 @@ export {
   type AgentRunState,
 } from './domain/agent-run-state.js'
 export {
+  RECOVERABLE_AGENT_RUN_TERMINAL_STATES,
+  RUN_TERMINATION_RECOVERY_SKIP_REASONS,
+  decideRunTerminationRecovery,
+  type RecoverableAgentRunTerminalState,
+  type RunTerminationRecoveryDecision,
+  type RunTerminationRecoveryInput,
+  type RunTerminationRecoverySkipReason,
+} from './domain/run-termination-recovery.js'
+export {
   RESTORABLE_TASK_STATES,
   TASK_STATES,
   isRestorableTaskState,
