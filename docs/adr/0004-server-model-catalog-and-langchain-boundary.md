@@ -1,7 +1,9 @@
 # ADR 0004：服务端模型目录与 LangChain 适配边界
 
-- 状态：Accepted
+- 状态：Superseded by [ADR 0005](./0005-durable-asynchronous-plan-generation.md)
 - 日期：2026-08-08
+
+> 2026-08-08 修订：服务端模型目录、无降级和 LangChain 适配边界继续有效；“计划生成采用请求内同步调用”的决策已被 ADR 0005 的持久化异步方案取代。本文保留为决策历史。
 
 ## 背景
 

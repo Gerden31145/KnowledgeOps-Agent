@@ -5,8 +5,8 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品名称 | KnowledgeOps Agent（暂定） |
-| 文档版本 | Job Edition V1.1 |
-| 文档日期 | 2026-07-30（2026-08-07 更新） |
+| 文档版本 | Job Edition V1.2 |
+| 文档日期 | 2026-07-30（2026-08-08 更新） |
 | 目标节点 | 2026 年 9 月前完成可公开演示、可真实使用的版本 |
 | 第一目标 | 作为前端日常实习项目，展示复杂前端、全栈与 AI Agent 工程能力 |
 | 第二目标 | 验证“基于真实学习证据自动验收”的产品需求 |
@@ -154,7 +154,10 @@ flowchart LR
 - 9 月版本只支持 `MARKDOWN_NOTE` 一种任务类型。
 - 每个任务包含目标、预计耗时、建议步骤、目标文件路径、验收标准和前置任务。
 - 系统必须校验任务依赖无环、截止时间合法、任务数量处于限制内。
-- 计划生成不提供规则或 Mock 降级；模型未配置、超时、调用失败或结构化输出非法时保留 LearningGoal、返回可重试错误且不得创建半份 Plan。
+- LearningGoal 先独立持久化；生成接口在同一 PostgreSQL 事务中创建 `PlanGenerationRun` 与 `OutboxEvent`，提交后返回 `202 Accepted` 和 `generationRunId`，不在 HTTP 请求内等待模型结果。
+- Outbox Dispatcher 将生成意图可靠投递到 BullMQ，独立 Worker 通过 LangChain 适配器调用模型；前端先轮询运行状态，后续可复用 SSE 增强实时体验。
+- 计划生成不提供规则或 Mock 降级；模型未配置、超时、调用失败或结构化输出非法时保留 LearningGoal，将本次生成运行标记为明确的失败终态且不得创建半份 Plan。
+- 同一 LearningGoal 同时最多存在一个非终态生成运行；失败后重试创建新的 `PlanGenerationRun` 并关联旧记录，不复活或覆盖终态运行。
 - 计划默认处于草稿状态，用户确认后才进入活动状态。
 - MVP 同时只允许一个活动计划。
 
@@ -442,8 +445,9 @@ P0 选择性引入 LangChain，复用其标准模型接口、模型供应商集�
 - 计划生成可以独立调用 LangChain 模型与结构化输出能力，不因此启动 Agent 循环。
 - P0 的模型凭据和允许模型目录由部署方配置。业务 API 只接受目录中的稳定模型 ID，LangChain 适配层再把它解析为具体供应商、模型与服务端凭据。
 - `packages/agent-core` 负责框架无关的验收用例接口、显式步骤编排和领域输入输出；LangChain 类型只能存在于模型、工具和中间件适配实现中，不得泄漏到 `packages/contracts`、REST DTO、Prisma 模型或前端协议。
+- `PlanGenerationRun` 表示一次独立的计划生成尝试，由项目状态机、Outbox、BullMQ 和 Worker 驱动；它不复用与 Task 强绑定的 `AgentRun`，LangChain 内部状态也不能直接决定其终态。
 - `AgentRun` 表示一次完整的笔记或回答验收尝试，`AgentStep` 表示本项目定义的显式业务步骤；一次 LangChain 模型调用、工具调用或内部重试只是某个步骤下的技术子调用，不自动成为新的业务状态。
-- P0 不启用 LangGraph Checkpointer、长期 Memory 或 Thread 作为恢复机制。PostgreSQL 中的 `AgentRun`、`AgentStep`、`RunEvent` 和业务实体仍是唯一持久化真相源。
+- P0 不启用 LangGraph Checkpointer、长期 Memory 或 Thread 作为恢复机制。PostgreSQL 中的 `PlanGenerationRun`、`AgentRun`、`AgentStep`、`RunEvent` 和业务实体仍是唯一持久化真相源。
 - 默认不使用开放式 ReAct 循环控制整条验收链路。只有固定评测证明按需取证优于预先准备上下文时，才允许在 `evaluate_note` 等单一步骤内部加入只读、次数受限、可超时和可取消的 ReAct 子循环。
 
 ### 11.3 Agent 工具
@@ -472,7 +476,7 @@ P1 可增加：
 - 项目定义的 Zod Schema 是结构化输出契约真相源，可交给 LangChain 的结构化输出接口执行供应商适配与运行时解析；不得把 `AIMessage` 等框架对象直接作为业务结果持久化。
 - 所有 LLM 输出使用运行时 Schema 校验。
 - Schema 不合法时允许有限次数的修复重试。
-- 计划生成阶段不使用规则或 Mock 结果替代失败的真实模型调用；失败只返回明确错误并允许用户重新发起。
+- 计划生成阶段不使用规则或 Mock 结果替代失败的真实模型调用；失败运行进入终态并允许用户创建关联重试。
 - 修复失败后运行进入 `FAILED`，不得用不完整结果修改任务状态。
 - 保存模型标识、Prompt 版本和输出 Schema 版本。
 
@@ -487,9 +491,9 @@ P1 可增加：
 
 ### 11.6 调用预算与重试分层
 
-- 模型瞬时错误重试、结构化输出修复和只读工具重试都发生在同一个 `AgentRun` 内，必须计入统一的模型调用次数、工具调用次数、Token、成本和总耗时预算。
+- 模型瞬时错误重试和结构化输出修复必须计入所属 `PlanGenerationRun` 或 `AgentRun` 的统一模型调用次数、Token、成本和总耗时预算；验收阶段的只读工具重试还要计入同一 `AgentRun` 的工具预算。
 - LangChain 中间件、模型供应商 SDK 与 BullMQ 不得分别使用互不知情的默认重试，避免一次失败形成乘法级调用放大。
-- BullMQ 负责 Job 投递和 Worker 级故障重试；一次运行已经进入终态后，用户重试必须创建新的 `AgentRun` 并通过 `retryOfRunId` 关联旧记录。
+- BullMQ 负责 Job 投递和 Worker 级故障重试；`PlanGenerationRun` 或 `AgentRun` 已进入终态后，用户重试必须创建同类新运行并通过 `retryOfRunId` 关联旧记录。
 - 每次模型调用、工具调用、修复重试和错误分类都要关联 `runId`、`stepId` 与尝试序号，但内部调用记录不能越权修改 Task 或 Report。
 
 ## 12. 技术架构
@@ -498,12 +502,13 @@ P1 可增加：
 
 ```mermaid
 flowchart TD
-    A[GitHub App / Push] --> B[NestJS Webhook API]
+    P[Nuxt 计划页] -->|创建目标 / 请求生成| B[NestJS API / Webhook]
+    A[GitHub App / Push] --> B
     B --> C[(PostgreSQL)]
-    B --> D[Outbox Dispatcher]
+    C --> D[Outbox Dispatcher]
     D --> E[Redis / BullMQ]
-    E --> F[Agent Worker]
-    F --> G[规则检查 / LangChain / LLM]
+    E --> F[Plan / Agent Worker]
+    F --> G[结构校验 / 规则检查 / LangChain / LLM]
     F --> C
     F --> H[Redis 实时通知]
     C --> I[NestJS SSE Gateway]
@@ -517,6 +522,7 @@ flowchart TD
 PostgreSQL 是以下数据的真相源：
 
 - 用户、仓库和计划；
+- `PlanGenerationRun`；
 - 任务状态；
 - Webhook Delivery；
 - Evidence、Submission 和 Report；
@@ -532,9 +538,16 @@ Redis 只负责：
 
 不得仅在 Redis 中保存不可恢复的任务状态或运行结果。
 
-LangChain 的消息历史、Agent 内部状态和可选追踪数据也不得成为业务恢复依据。若 P1 以后评估 LangGraph 持久化，必须先用 ADR 明确 Checkpoint 与 `AgentRun`、`AgentStep`、`RunEvent` 的映射和唯一真相源。
+LangChain 的消息历史、Agent 内部状态和可选追踪数据也不得成为业务恢复依据。若 P1 以后评估 LangGraph 持久化，必须先用 ADR 明确 Checkpoint 与 `PlanGenerationRun`、`AgentRun`、`AgentStep`、`RunEvent` 的映射和唯一真相源。
 
-### 12.3 Webhook 与队列一致性
+### 12.3 Outbox 与队列一致性
+
+计划生成请求在一个 PostgreSQL 事务中：
+
+1. 为已经持久化的 LearningGoal 创建 `QUEUED` 的 `PlanGenerationRun`。
+2. 插入对应的 `OutboxEvent`。
+
+事务提交后返回 `202` 与 `generationRunId`。模型配置无效时在创建运行前明确失败；一旦事务提交，Dispatcher 和 Worker 必须能够在浏览器断开后继续处理。
 
 Webhook 请求在一个 PostgreSQL 事务中：
 
@@ -547,11 +560,14 @@ Webhook 请求在一个 PostgreSQL 事务中：
 BullMQ Job ID 使用稳定的业务键，例如：
 
 ```text
-note:{repositoryId}:{taskId}:{afterCommitSha}:{workflowVersion}
-answer:{taskId}:{answerSubmissionId}:{workflowVersion}
+plan-generation-{runId}
+note-{repositoryId}-{taskId}-{afterCommitSha}-{workflowVersion}
+answer-{taskId}-{answerSubmissionId}-{workflowVersion}
 ```
 
-即使发生重复 Delivery、重复入队或 Worker 重试，也只能产生一份有效业务结果。
+自定义 Job ID 使用连字符，不使用 BullMQ 保留为 Redis 键分隔符的冒号。稳定 Job ID 只负责队列内的第一层去重，Job 被自动清理后不能继续提供永久幂等；PostgreSQL 唯一约束、运行终态和条件更新才是最终防线。
+
+即使发生重复生成请求、重复 Delivery、重复入队或 Worker 重试，也只能产生一份有效业务结果。计划生成 Worker 只有在完整结果通过 Schema、数量、日期和 DAG 校验后，才能用单个事务创建 Plan 图并把运行推进到 `SUCCEEDED`；重复消费已经终态的运行必须返回既有结果。
 
 ### 12.4 SSE 事件流
 
@@ -600,6 +616,7 @@ SSE Gateway 行为：
 状态职责：
 
 - 计划、任务、运行和报告属于服务端状态，统一交给 TanStack Query。
+- PlanGenerationRun 在非终态时使用有退避的 Query 轮询，进入终态或页面卸载后停止；刷新页面从服务端恢复，不把计时器或运行实体复制到 Pinia。
 - Pinia 不复制服务端实体，只保存跨页面 UI 状态。
 - 流式事件进入事件 Reducer，再通过明确的 Query 更新策略刷新结果。
 - Monaco 只在任务或运行详情页客户端加载，不进入公共首页首屏包。
@@ -614,7 +631,7 @@ SSE Gateway 行为：
 | PostgreSQL | 业务、运行、事件和审计数据 |
 | Prisma | 常规数据模型、迁移和访问 |
 | Redis | BullMQ、通知、限流和取消信号 |
-| BullMQ | 异步验收任务 |
+| BullMQ | 异步计划生成与验收任务 |
 | LangChain（选择性使用） | 标准模型接口、供应商集成、Zod 结构化输出、只读工具包装和受控调用中间件 |
 
 P0 不使用 pgvector。若 P1 引入 PostgreSQL 全文检索，检索逻辑放入独立 `retrieval` 模块，避免与 Agent 流程耦合。
@@ -628,7 +645,7 @@ knowledgeops-agent/
 ├─ apps/
 │  ├─ web/                 # Nuxt 公共站与工作台
 │  ├─ api/                 # NestJS API、Webhook 与 SSE
-│  └─ worker/              # BullMQ Worker 与 Agent 工作流
+│  └─ worker/              # BullMQ Worker、计划生成与 Agent 工作流
 ├─ packages/
 │  ├─ contracts/           # DTO、Zod Schema、事件协议和共享类型
 │  ├─ agent-core/          # 工作流、Prompt、工具与模型适配
@@ -656,7 +673,8 @@ knowledgeops-agent/
 | `GitHubInstallation` | GitHub App Installation ID 与授权状态 |
 | `Repository` | 绑定仓库、默认分支和启用状态 |
 | `LearningGoal` | 目标、截止日期、基础和时间预算 |
-| `Plan` | 用户确认的计划版本、状态及生成时实际模型/Prompt/Schema 快照 |
+| `PlanGenerationRun` | 一次持久化计划生成尝试、模型/Prompt/Schema 快照、错误、耗时和关联重试 |
+| `Plan` | 完整生成并通过校验的计划版本、确认状态及对应成功生成运行 |
 | `Stage` | 计划阶段 |
 | `Task` | Markdown 任务、依赖、状态和目标路径 |
 | `AcceptanceCriterion` | 验收标准、必要性和执行类型 |
@@ -677,9 +695,12 @@ knowledgeops-agent/
 
 - `WebhookDelivery.deliveryId` 唯一。
 - `RunEvent(runId, sequence)` 唯一。
+- 同一 LearningGoal 同时最多存在一个 `QUEUED` 或 `RUNNING` 的 `PlanGenerationRun`。
+- `PlanGenerationRun` 正常路径为 `QUEUED → RUNNING → SUCCEEDED/FAILED/TIMED_OUT`，超过持久化 `deadlineAt` 的 `QUEUED` 也可由清理任务条件更新为 `TIMED_OUT`；终态不可逆，重试创建带 `retryOfRunId` 的新记录。
+- `PlanGenerationRun` 只有在 Plan、Stage、Task、Criterion 与依赖关系全部原子写入后才能进入 `SUCCEEDED`；重复 Job 不得创建第二份同版本 Plan。
 - 同一任务、Commit、工作流版本只能有一个有效验收结果。
 - `Task` 使用版本字段进行乐观并发控制。
-- `Submission`、`AgentRun` 和 `VerificationReport` 原则上不可覆盖，只能新增版本或标记失效。
+- `PlanGenerationRun`、`Submission`、`AgentRun` 和 `VerificationReport` 的终态记录原则上不可覆盖，只能创建关联重试、新增版本或标记失效。
 
 ## 14. 信息架构
 
@@ -693,6 +714,7 @@ knowledgeops-agent/
 登录后工作台
 ├─ 今日学习
 ├─ 学习计划
+│  ├─ 目标、模型与生成运行状态
 │  └─ 阶段与任务列表
 ├─ 任务详情
 │  ├─ 目标与验收标准
@@ -804,6 +826,7 @@ knowledgeops-agent/
 
 ### 17.1 性能
 
+- LearningGoal 已先持久化；计划生成接口在 PlanGenerationRun 与 Outbox 事务提交后返回 `202`，不等待模型输出；前端轮询必须有合理退避并在终态停止。
 - Webhook 接口在完成签名校验和事务写入后返回，不等待 AI。
 - 公共首页目标 LCP 不高于 2.5 秒，CLS 不高于 0.1。
 - Monaco 不进入公共页面首屏 Bundle。
@@ -812,6 +835,9 @@ knowledgeops-agent/
 
 ### 17.2 可靠性
 
+- 浏览器在计划生成后刷新或断网，不影响已经提交的生成运行；恢复页面后能够读取当前状态和最终完整 Plan。
+- 重复分发或执行同一个计划生成 Job 不得创建重复 Plan，失败运行不得留下部分 Stage、Task、Criterion 或依赖关系。
+- 超过 `deadlineAt` 的 `QUEUED/RUNNING` 运行会被条件更新为 `TIMED_OUT`，迟到 Worker 不得复活终态，页面不能永久停留在处理中。
 - 重复发送相同 Webhook 不得产生重复任务完成。
 - Worker 在任一步骤失败后保留已持久化运行和错误信息。
 - SSE 断开重连后事件无缺口，前端无重复展示。
@@ -824,6 +850,7 @@ knowledgeops-agent/
 
 - `requestId`
 - `deliveryId`
+- `generationRunId`
 - `runId`
 - `taskId`
 - `model`
@@ -846,6 +873,7 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 
 优先覆盖：
 
+- PlanGenerationRun 状态机、稳定 Job ID、计划结果 Schema 与 DAG 校验。
 - 任务和运行状态机。
 - Webhook 签名与 Delivery 去重。
 - Markdown AST 分块与行号定位。
@@ -856,6 +884,8 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 
 ### 18.2 集成测试
 
+- LearningGoal → PlanGenerationRun/Outbox → BullMQ → Worker → 完整 Plan 链路。
+- 重复投递同一个计划生成 Job 只产生一个有效 Plan；Worker 在模型调用前后或 Plan 事务提交边界崩溃时，可以安全重试且不留下半份计划。
 - Webhook → Outbox → BullMQ → Worker → Report 完整链路。
 - 重复 Webhook 只产生一个有效运行。
 - Worker 中途失败后正确记录失败并允许重试。
@@ -869,7 +899,7 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 至少包含：
 
 1. 登录并绑定测试仓库。
-2. 创建目标、生成并确认计划。
+2. 创建目标、收到 `202`、经历生成状态并在刷新后取得完整计划，然后确认计划。
 3. 开始任务并模拟 GitHub Push。
 4. 查看实时运行、Diff、引用和报告。
 5. 回答追问并完成任务。
@@ -903,12 +933,14 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 ### 19.1 产品闭环
 
 - 新用户能够在无人工修改数据库的情况下完成一次完整闭环。
+- 用户提交计划生成后可以离开或刷新页面，返回时仍能查看运行状态、失败原因或完整计划草稿。
 - 用户能够从目标创建走到至少一个任务 `PASSED`。
 - 任务通过后，后续任务能够按照依赖自动解锁。
 - 所有验收结论均有证据或缺失证据说明。
 
 ### 19.2 工程闭环
 
+- 同一个计划生成 Job 重放至少三次只创建一份完整 Plan；模型失败或 Worker 在关键边界退出时不产生半份 Plan，并可创建关联重试运行。
 - 相同 Delivery 重放至少三次只产生一份有效业务结果。
 - 运行页面断网后重连，时间线无缺失、无重复。
 - Worker 在 LLM 调用前、调用后和结果持久化前故障，均不会错误完成任务。
@@ -967,19 +999,20 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 
 - 初始化 Monorepo、Nuxt、NestJS、Worker 和本地基础设施。
 - 完成核心数据模型、状态机和共享契约。
-- 完成登录、基础页面框架和计划草稿页面。
+- 完成基础页面框架、目标输入契约和服务端模型边界。
 - 建立 CI、Lint、类型检查和基础测试。
 
-交付物：可以创建目标、生成静态或 Mock 计划并确认。
+交付物：三个应用和基础设施可运行，目标输入与领域模型具备自动化约束，不使用生产 Mock 伪造计划生成。
 
 ### 第 2 周：GitHub 与异步链路
 
+- 完成 PlanGenerationRun、Outbox、BullMQ、Worker、异步计划生成、状态轮询和计划确认。
 - 注册 GitHub App。
 - 完成安装、仓库绑定、Webhook 签名和幂等。
-- 完成 Outbox、BullMQ 和 Worker 骨架。
+- 将同一套 Outbox、BullMQ 和 Worker 基础设施复用于 GitHub Push 验收。
 - 获取 Commit Diff 并保存 Evidence。
 
-交付物：Push 后能够可靠创建运行并展示真实 Diff。
+交付物：目标可以可靠异步生成并确认完整计划，Push 后能够可靠创建验收运行并展示真实 Diff。
 
 ### 第 3 周：自动验收
 
@@ -1039,6 +1072,7 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 | PRD 再次扩张 | 无法在 9 月前形成闭环 | 新需求默认进入 P2，只有替换现有 P0 才能进入开发 |
 | AI 验收不可靠 | 用户失去信任 | 固定 Rubric、引用、三态结果、申诉反馈和评测集 |
 | GitHub 集成耗时 | 阻塞核心流程 | 只支持单仓库、单分支、Markdown 和进行中任务 |
+| 异步计划生成重复执行或卡住 | 重复 Plan、永久 loading 或不可解释失败 | PlanGenerationRun 终态、Outbox、稳定 Job ID、条件更新、轮询终止与关联重试 |
 | SSE 与 Worker 跨进程事件丢失 | 时间线不完整 | PostgreSQL 持久化事件，Redis 只作实时通知 |
 | 重复 Webhook 或重试 | 重复验收或完成任务 | Delivery 唯一键、稳定 Job ID、幂等状态迁移 |
 | LangChain/LangGraph 与业务运行状态重叠 | 出现双重真相源、重复恢复或重试放大 | P0 只选择性使用模型、结构化输出、工具与中间件；PostgreSQL 保持真相源，暂不启用 LangGraph Checkpoint/Memory |
@@ -1051,7 +1085,7 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 项目允许大量使用 AI Coding，但以下要求属于完成定义：
 
 - 每个核心模块必须有开发者能够复述的输入、输出、不变量和失败模式。
-- Webhook 幂等、状态机、RunEvent Reducer、SSE 重放和验收汇总逻辑必须有人工审阅测试。
+- 计划生成幂等、Webhook 幂等、状态机、RunEvent Reducer、SSE 重放和验收汇总逻辑必须有人工审阅测试。
 - 关键架构选择使用简短 ADR 记录“为什么这样做”和“放弃了什么方案”。
 - 不接受无法解释的生成依赖、复制代码或无用途抽象。
 - AI 生成的测试不能只验证实现细节，必须覆盖业务不变量。
@@ -1066,6 +1100,7 @@ P0 使用结构化日志和贯穿 API、队列、Worker 的 Trace ID。完整 Gr
 5. 为什么将 Task 状态与 AgentRun 状态分离。
 6. 如何处理仓库内容中的 Prompt Injection。
 7. 为什么选择性引入 LangChain，但不让其接管业务工作流、重试语义与持久化真相源。
+8. 为什么计划生成使用独立 PlanGenerationRun、Outbox 与 BullMQ，而不是请求内等待、Token 级半成品或复用 Task AgentRun。
 
 ## 25. 9 月后的产品演进
 

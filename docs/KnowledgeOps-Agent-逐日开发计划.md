@@ -5,7 +5,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 制定日期 | 2026-07-31 |
-| 最近更新 | 2026-08-08（08-06 全部日关卡完成） |
+| 最近更新 | 2026-08-08（计划生成调整为 PlanGenerationRun + Outbox + BullMQ 持久化异步链路） |
 | 开发窗口 | 2026-08-01 至 2026-09-02 |
 | 发布缓冲 | 2026-09-03 至 2026-09-06 |
 | 硬目标 | 9 月上旬得到可访问、可演示、可解释、可写入简历的生产版本 |
@@ -26,9 +26,9 @@
 - P0 不加入 pgvector、用户代码执行、多 Agent、MCP、多仓库或复杂自动重规划。
 - P0 选择性引入 LangChain 的标准模型接口、供应商集成、Zod 结构化输出、只读工具包装和必要中间件；显式业务工作流、状态机、事务、引用校验与最终决策仍由项目代码掌握，LangChain 类型不进入共享 Contracts 或持久化模型。
 - P0 由部署方通过服务端环境变量配置一个供应商、凭据和 1 至 2 个允许模型；用户只选择服务端模型目录中的稳定 ID，API Key、任意模型名和 Base URL 不进入客户端或数据库。
-- 计划生成采用有严格超时的同步 LangChain 调用，不提供规则/Mock 降级；失败时保留目标、返回明确错误并由用户主动重试，不提前引入 BullMQ/Outbox。
+- LearningGoal 先持久化；计划生成接口事务写入 `PlanGenerationRun + OutboxEvent` 后返回 `202`，Dispatcher 与 BullMQ Worker 在后台调用 LangChain，前端先轮询状态，阶段 5 再按需接入 SSE。失败保留目标、不创建半份 Plan，用户重试创建关联新运行。
 - P0 不启用 LangGraph Checkpointer、长期 Memory 或 Thread 作为恢复机制，也不让开放式 ReAct 循环控制整条验收链路；若固定评测证明动态取证有价值，只允许在单个语义步骤内使用受预算约束的只读子循环。
-- `AgentRun` 是一次完整验收尝试，`AgentStep` 是项目定义的显式业务步骤；LangChain 内部模型/工具调用与修复重试作为步骤内技术记录，并与 BullMQ 共用统一调用次数、Token、成本和总耗时预算。
+- `PlanGenerationRun` 是一次计划生成尝试；`AgentRun` 是一次笔记或回答验收尝试，`AgentStep` 是项目定义的显式验收步骤。LangChain 内部模型/工具调用与修复重试作为运行内技术记录，并与 BullMQ 共用统一调用次数、Token、成本和总耗时预算。
 - 生产版本最迟在 9 月 2 日形成；9 月 3 日后的代码改动只修 P0 blocker。
 - 每日改动导读与问答关卡从阶段 1 的 2026-08-01 开始；07-31 的阶段 0 仅用于配置协作范式，不做无代码价值的补问。
 - 每日手写与阶段核心手写双层规则自 2026-08-06 起生效：08-05 及以后尚未完成的计划日执行；08-01 至 08-04 已完成且已提交，不追溯返工。08-04 已完成的 `isValidTaskTransition` 保留为历史手写记录，但不能抵扣阶段 1 新增的核心手写。
@@ -59,9 +59,9 @@
 | 阶段 | 计划日期 | 当前状态 | 下一关卡 | 实际完成 | 偏差或裁剪 |
 | --- | --- | --- | --- | --- | --- |
 | 0. 协作范式与倒排 | 07-31 | `DONE` | 阶段 1 需求确认 | 2026-07-31 | 无 |
-| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `DONE` | 阶段 2 需求确认 | 2026-08-07 | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成旧版状态迁移手写点且 Review 已通过；2026-08-06 起新增每日 30 分钟与阶段 1 至 2 小时双层手写关卡，已完成日期不返工；08-05 计划日于 08-06 完成 TestingModule 手写、Review、改动导读和 1 道微观题，完整 CI 回归为 12 个测试文件、44 个测试通过；阶段 1 核心恢复决策手写于 2026-08-07 完成 Review 和独立提交，专用验收 11 个测试及完整 CI 55 个测试通过；阶段宏观问答共 3 道并已写档；阶段收尾首次复验遇到 `LxssManager STOP_PENDING`，重启 Windows 后确认 Ubuntu 实际为 WSL 2，随后 `infra:up` 幂等启动服务，PostgreSQL 14.23 `SELECT 1`、Redis 7.4.10 `PING` 与 Prisma 迁移状态全部通过；阶段较原计划晚 2 天，原因是新增双层手写关卡和 WSL 环境故障，无 P0 功能裁剪；Compose 改在阶段 3 BullMQ 接入日于 Linux VPS 验证 |
-| 2. 目标、计划与基础工作台 | 08-06 ～ 08-10 | `AI_IMPLEMENTING` | 开始 08-07 计划日 | — | 阶段 1 实际于 2026-08-07 完成，阶段 2 排期从需求确认起顺延；已确认部署方管理模型凭据、用户选择白名单模型、无生成降级并在本阶段支持开始任务；用户于 2026-08-08 完成阶段讲解理解确认并授权实现；同日修正流程为先导读理解、后每日手写，并完成 08-06 主体改动理解确认、手写实现、Review、完整回归、2 道每日微观题和问答写档；08-06 成果、进度状态与流程修正同批提交 |
-| 3. GitHub 与可靠异步链路 | 08-11 ～ 08-16 | `NOT_STARTED` | 等待阶段 2 | — | — |
+| 1. 工程骨架与领域模型 | 08-01 ～ 08-05 | `DONE` | 阶段 2 需求确认 | 2026-08-07 | 08-01 计划日于 07-31 提前完成；08-02 计划日于 08-03 完成，将 Node 升级到 24.18.1 LTS，实测 PostgreSQL 14.23/Redis 7.4.10、三个应用、`check` 与 `build`，并修复 WSL 服务停止时的状态查询错误；08-03 计划日于 08-05 完成共享契约、独立状态、Prisma 初始迁移、健康探针、结构化日志、改动导读和 2 道微观题，业务库迁移与协议检查通过；WSL 管理面再次出现 `0xffffffff`，专用影子库的自动创建脚本已通过 Bash 语法检查；08-04 计划日于 08-06 完成最小应用壳、CI、测试夹具、Tailwind 设计令牌、改动导读和 2 道微观题，用户提前完成旧版状态迁移手写点且 Review 已通过；2026-08-06 起新增每日 30 分钟与阶段 1 至 2 小时双层手写关卡，已完成日期不返工；08-05 计划日于 08-06 完成 TestingModule 手写、Review、改动导读和 1 道微观题，完整 CI 回归为 12 个测试文件、44 个测试通过；阶段 1 核心恢复决策手写于 2026-08-07 完成 Review 和独立提交，专用验收 11 个测试及完整 CI 55 个测试通过；阶段宏观问答共 3 道并已写档；阶段收尾首次复验遇到 `LxssManager STOP_PENDING`，重启 Windows 后确认 Ubuntu 实际为 WSL 2，随后 `infra:up` 幂等启动服务，PostgreSQL 14.23 `SELECT 1`、Redis 7.4.10 `PING` 与 Prisma 迁移状态全部通过；阶段较原计划晚 2 天，原因是新增双层手写关卡和 WSL 环境故障，无 P0 功能裁剪；Compose 改在阶段 3 收尾日于 Linux VPS 验证 |
+| 2. 目标、计划与基础工作台 | 08-06 ～ 08-11 | `AI_IMPLEMENTING` | 重新讲解异步生成数据流后开始 08-07 计划日 | — | 阶段 1 实际于 2026-08-07 完成，阶段 2 排期从需求确认起顺延；已确认部署方管理模型凭据、用户选择白名单模型、无生成降级并在本阶段支持开始任务；用户于 2026-08-08 完成 08-06 全部日关卡并提交，随后明确用持久化异步计划生成替换请求内同步方案；由于 08-07 数据模型尚未开始，无产品代码返工，阶段 2 增加 1 个计划日并从阶段 3 前移 Outbox/BullMQ 基础链路 |
+| 3. GitHub 与可靠异步链路 | 08-12 ～ 08-16 | `NOT_STARTED` | 等待阶段 2 | — | Outbox、BullMQ、Worker 基础设施已前移到阶段 2，阶段 3 聚焦 GitHub 授权、Webhook 幂等和 Diff Evidence |
 | 4. Markdown 与 Agent 验收闭环 | 08-17 ～ 08-22 | `NOT_STARTED` | 等待阶段 3 | — | — |
 | 5. SSE 与 Agent 运行工作台 | 08-23 ～ 08-27 | `NOT_STARTED` | 等待阶段 4 | — | — |
 | 6. 测试、上线与求职包装 | 08-28 ～ 09-02 | `NOT_STARTED` | 等待阶段 5 | — | — |
@@ -78,7 +78,7 @@
 
 - Windows 使用 Node.js 24.18.1 LTS 运行 Nuxt、NestJS API 与 Worker，并使用原生 pnpm workspace，不引入 Turborepo/Nx。
 - 本机开发以 WSL2 Ubuntu 原生服务运行 PostgreSQL、Redis，不依赖 Docker Desktop、本地 Docker daemon 或镜像仓库；应用通过 `DATABASE_URL`/`REDIS_URL` 与具体启动方式解耦。
-- WSL Docker Engine 虽曾短暂通过 daemon 验证，但后续启动服务导致 WSL 长时间无响应，因此不再作为开发关键路径。Compose 保留为部署资产，并在阶段 3 BullMQ 链路完成后于 Linux VPS 提前 smoke，避免把环境漂移风险留到最终发布。
+- WSL Docker Engine 虽曾短暂通过 daemon 验证，但后续启动服务导致 WSL 长时间无响应，因此不再作为开发关键路径。Compose 保留为部署资产，并在阶段 3 收尾日于 Linux VPS 提前 smoke，避免把环境漂移风险留到最终发布。
 - 阶段 1 只定义鉴权上下文并使用仅开发环境可启用的固定测试用户；真实 GitHub 登录与 GitHub App 后续接入。
 - 生产部署保持平台无关，前提是支持长驻 API/Worker、SSE、PostgreSQL、Redis、HTTPS 与安全环境变量。
 
@@ -107,7 +107,7 @@
 
 ### 阶段验收
 
-- `pnpm infra:check` 可从 Windows 应用边界验证 WSL 原生 PostgreSQL/Redis，`pnpm dev` 可启动三个应用；Compose 在阶段 3 BullMQ 接入日于 Linux VPS 完成提前 smoke；
+- `pnpm infra:check` 可从 Windows 应用边界验证 WSL 原生 PostgreSQL/Redis，`pnpm dev` 可启动三个应用；Compose 在阶段 3 收尾日于 Linux VPS 完成提前 smoke；
 - lint、typecheck、基础单测在 CI 通过；
 - Task 和 AgentRun 有独立状态与非法迁移保护；
 - 用户能画出浏览器、API、队列 Worker、PostgreSQL 和 Redis 的职责图。
@@ -116,33 +116,36 @@
 
 ### 阶段目标
 
-完成“选择允许模型 → 输入目标 → 生成计划草稿 → 校验 → 用户确认 → 首任务解锁并开始任务”的纵向闭环，并建立正确的前端服务端状态管理方式。
+完成“选择允许模型 → 持久化目标 → 创建生成运行与 Outbox → BullMQ Worker 调用模型 → 原子创建计划草稿 → 用户确认 → 首任务解锁并开始任务”的纵向闭环，并建立正确的前端服务端状态管理方式。
 
 ### 逐日安排
 
 | 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 08-06 周四 | 共同 | 确认目标表单、计划规模、部署方模型目录、无降级失败语义、选择性 LangChain 边界和页面范围；讲解 Prisma 数据模型、事务、计划 DAG、TanStack Query 与 Pinia 职责；建立目标输入契约骨架、黑盒验收和模型边界 ADR | 用 Zod 手写目标创建输入 Schema，完成日期、每周时长和字符串边界校验 | 用户确认并授权；明确服务端持有 Key、用户只选白名单模型，LangChain 只负责模型与结构化输出适配；每日改动导读与理解确认、手写 Review、问答与 commit 完成 | 运行时输入契约与模型适配边界 | `DONE` |
-| 08-07 周五 | AI | 完成 User 模型偏好、LearningGoal、Plan 生成快照、Stage、Task、Criterion 和依赖关系的迁移、Repository 层与 API 契约 | 手写一个 Prisma Repository 查询，使用 `include/select` 读取计划、阶段和任务并保持返回类型明确 | 可创建并读取目标和计划，数据库不保存模型密钥；每日手写关卡完成 | 关系建模、外键与 Repository 边界 | `NOT_STARTED` |
-| 08-08 周六 | AI | 使用 LangChain 标准模型接口与供应商集成完成受 Zod Schema 约束的同步计划生成适配器和服务端模型目录，不启用 Agent 循环、图持久化或规则降级；完成草稿版本、数量/日期/依赖校验、确认事务和首任务解锁 | 为计划生成结果手写一项 Zod `superRefine` 跨字段校验及失败用例 | Fake/真实模型共享框架无关用例接口；真实调用失败不创建 Plan，非法计划不能激活，重复确认幂等；每日手写关卡完成 | LangChain 模型适配、Schema 校验与幂等确认 | `NOT_STARTED` |
-| 08-09 周日 | AI | 完成模型选择、目标表单、计划预览、今日任务、任务详情基础页、`READY → IN_PROGRESS` 与 Markdown 路径确认，以及 loading/error/empty 状态 | 实现基于 DFS 三色标记或拓扑排序的 DAG 环检测纯函数 | 浏览器可用白名单模型完成计划闭环并开始首任务；每日手写关卡完成 | TanStack Query、Pinia 与页面状态 | `NOT_STARTED` |
-| 08-10 周一 | 共同 | 完成阶段 2 当日回归、边界修正与收尾 | 在 Nuxt 中手写一个 TanStack Query mutation，处理确认计划、错误展示和相关 Query 失效 | 每日改动导读与理解确认、手写 Review、相关回归、问答和每日 commit 完成；随后交付阶段核心手写 | DAG 环检测、Query 失效与页面一致性 | `NOT_STARTED` |
+| 08-07 周五 | AI | 完成 User 模型偏好、LearningGoal、PlanGenerationRun、Plan 生成快照、Stage、Task、Criterion、依赖关系和 OutboxEvent 的迁移、Repository 层与 API 契约；明确计划生成运行与任务验收 AgentRun 的边界 | 手写一个 Prisma Repository 查询，使用 `include/select` 读取计划、阶段和任务并保持返回类型明确 | 对已持久化目标发起生成时，事务写入 `QUEUED` 运行和 Outbox，返回 `202 + generationRunId`；数据库不保存模型密钥；每日手写关卡完成 | 关系建模、生成运行状态与 Repository 边界 | `NOT_STARTED` |
+| 08-08 周六 | AI | 完成服务端模型目录、框架无关的计划生成端口、LangChain 适配器和受 Zod Schema 约束的计划输出；完成数量、日期基础校验，为依赖引用与后续 DAG 环检测建立契约和测试夹具，不启用 Agent 循环、图持久化或规则降级 | 用 Zod `superRefine` 手写任务 ID 唯一、依赖存在且不能依赖自身的跨字段校验及失败用例 | Fake/真实模型共享同一业务端口；结构或引用非法的输出在进入 Repository 前被拒绝，真实调用失败不创建 Plan；每日手写关卡完成 | LangChain 适配边界、结构化输出与 Schema 校验 | `NOT_STARTED` |
+| 08-09 周日 | AI | 完成 Outbox Dispatcher、稳定 `plan-generation-{runId}` Job ID、BullMQ 队列、Worker 骨架、未分发事件补扫和重试分类，并建立本地异步链路集成测试 | 手写一次 `Queue.add`/Worker 注册与 `attempts/backoff/jobId` 配置，并为稳定 Job ID 补边界测试 | 数据库提交后最终可入队；重复分发不产生第二个 Job，Dispatcher/Worker 重启可恢复；每日手写关卡完成 | Outbox、至少一次投递与稳定 Job ID | `NOT_STARTED` |
+| 08-10 周一 | AI | 完成 Worker 调用 LangChain、失败终态、`deadlineAt` 超时扫描、生成状态查询、重复 Job 短路、计划确认事务、首任务解锁和 `READY → IN_PROGRESS`；为阶段核心的原子成功落库器准备接口与黑盒测试 | 实现基于 DFS 三色标记或拓扑排序的 DAG 环检测纯函数 | 失败不创建半份 Plan，超时或其他终态运行不可复活；重复确认和开始任务幂等；除阶段核心成功落库器外链路就绪；每日手写关卡完成 | Worker 状态机、失败原子性与 DAG 校验 | `NOT_STARTED` |
+| 08-11 周二 | 共同 | 完成模型选择、目标表单、生成状态轮询、计划预览、今日任务、任务详情基础页、刷新恢复和 loading/error/empty 状态，并完成阶段回归及核心手写夹具 | 在 Nuxt 中手写 TanStack Query 轮询：非终态退避、终态停止、失败展示和相关 Query 失效 | 刷新后可恢复生成状态，不展示半份计划且不把服务端实体复制进 Pinia；问答和每日 commit 完成后交付阶段核心手写 | TanStack Query 轮询、缓存边界与页面一致性 | `NOT_STARTED` |
 
 ### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
-- 目标关卡日：08-10 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 3。
-- 计划位置：`apps/api/src/modules/plans/confirm-plan.service.ts` 及对应集成测试（以阶段实现后的实际模块路径为准）。
-- 内容：在已有 Repository/事务边界上实现计划确认用例：校验草稿版本和 DAG、保证重复确认幂等、限制单一活动计划、把无前置依赖任务解锁为 `READY`，并让任一步失败时整体回滚。
-- 面试价值：同时训练 NestJS Service、Prisma 事务、数据库不变量、幂等 API、DAG 业务规则和可验证的应用服务设计。
+- 目标关卡日：08-11 每日 commit 之后；未通过 Review 和独立 commit 前不启动阶段 3。
+- 计划位置：`apps/worker/src/plan-generation/finalize-plan-generation-run.ts` 及对应集成测试（以阶段实现后的实际模块路径为准）。
+- 内容：在已有 Repository 与事务边界上实现一次生成成功的原子落库：只有 `RUNNING` 且版本匹配的 PlanGenerationRun 可以写入完整 Plan/Stage/Task/Criterion/依赖图并进入 `SUCCEEDED`；重复 BullMQ Job 返回既有结果，过期或终态运行不得覆盖新状态，任一步失败不得留下半份计划。
+- 面试价值：同时训练 Worker、Prisma 事务、至少一次投递下的业务幂等、状态机、乐观并发、DAG 不变量和不可变运行记录。
 
 ### 阶段宏观题方向
 
-服务端状态与 Pinia 的边界、计划确认为何使用事务、DAG 校验、Schema 校验、LangChain 与业务用例接口的边界，以及 LLM 非确定性。
+请求内流式响应与可恢复后台任务的区别、Outbox/BullMQ 至少一次投递、PlanGenerationRun 与 AgentRun 的边界、服务端状态与 Pinia、完整计划图原子落库、DAG/Schema 校验、LangChain 与业务用例接口的边界，以及 LLM 非确定性。
 
 ### 阶段验收
 
-- 用户无需改数据库即可创建目标并确认计划；
+- 用户无需改数据库即可创建目标，生成接口在持久化运行与 Outbox 后快速返回 `202`；
 - 部署方持有模型凭据，用户只能选择服务端白名单模型；数据库与客户端不保存 API Key，模型失败时不降级；
+- 页面刷新后能够通过 generationRunId 恢复状态；同一 Job 重放三次也只产生一份完整计划，失败运行保留原因且重试创建关联新运行；
+- 模型失败、输出非法或 Worker 在落库中途异常时不得留下半份 Plan；终态 PlanGenerationRun 不可被旧 Job 覆盖；
 - 计划始终为 1 至 3 个阶段、3 至 8 个任务且无环；
 - 确认后只有满足依赖的任务进入 `READY`；
 - 计划生成可在测试 Fake 与真实 LangChain 模型实现间切换，框架类型不泄漏到 REST DTO、共享 Contracts 或 Prisma 模型；
@@ -153,18 +156,17 @@
 
 ### 阶段目标
 
-完成真实 GitHub 登录、App 安装、仓库绑定和 Push 处理，使一次目标分支 Markdown 提交能够可靠生成 AgentRun 并保存 Diff 证据。
+复用阶段 2 已建立的 Outbox、BullMQ 与 Worker 基础设施，完成真实 GitHub 登录、App 安装、仓库绑定和 Push 处理，使一次目标分支 Markdown 提交能够可靠生成 AgentRun 并保存 Diff 证据。
 
 ### 逐日安排
 
 | 日期 | 负责人 | 当日工作 | 每日手写（约 30 分钟） | 当日检查点 | 每日微观问答主题 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 08-11 周二 | 共同 | 确认 GitHub App 权限、单仓库/单分支限制和异常 Push 行为；讲解 HMAC、Delivery 幂等、数据库事务、Outbox、BullMQ 和至少一次投递 | 手写稳定 BullMQ Job ID 构造函数及边界测试，区分业务幂等键和随机队列 ID | 用户确认并授权；每日手写关卡完成 | 至少一次投递下的端到端可靠性 | `NOT_STARTED` |
-| 08-12 周三 | AI | 完成 GitHub 登录、App Installation 回调、选定仓库绑定/解绑、权限披露和设置页 | 使用 Nest `TestingModule` 手写 Installation 回调 Controller 的成功与拒绝用例 | 可用测试账号绑定一个仓库；每日手写关卡完成 | GitHub App 权限与 Installation 生命周期 | `NOT_STARTED` |
-| 08-13 周四 | AI | 完成 raw body 接收、事件过滤、Delivery 唯一键、WebhookDelivery/Submission/AgentRun/Outbox 同事务写入与快速 `202` | 实现 `sha256=` 前缀、HMAC SHA-256 和常量时间比较的 Webhook 签名校验 | 重放 Delivery 不重复创建有效运行；每日手写关卡完成 | HMAC 可信性与 Delivery 幂等的区别 | `NOT_STARTED` |
-| 08-14 周五 | AI | 完成 Outbox Dispatcher、稳定 Job ID、BullMQ 队列、Worker 骨架、重试分类和未分发事件补扫；在 Linux VPS 用 Compose 提前验证 PostgreSQL/Redis | 手写一次 `Queue.add`/Worker 注册与 `attempts/backoff/jobId` 配置，并为错误分类补测试 | 数据库提交后最终可以稳定入队；VPS 基础设施 smoke 通过；每日手写关卡完成 | Outbox、稳定 Job ID、重试语义与环境一致性 | `NOT_STARTED` |
-| 08-15 周六 | AI | 完成 Commit compare、Markdown 路径匹配、Diff/快照/哈希/行号 Evidence 持久化和链路集成测试 | 手写 GitHub compare 响应到 Markdown Evidence 的窄化/过滤函数及多文件边界用例 | 真实 Push 能产生可查看的证据；每日手写关卡完成 | Diff Evidence 的完整性与任务匹配 | `NOT_STARTED` |
-| 08-16 周日 | 共同 | 完成阶段 3 当日回归、异常 Push 修正与收尾 | 手写“相同 Delivery 三次重放只产生一份有效运行”的集成测试断言 | 每日改动导读与理解确认、手写 Review、相关回归、问答和每日 commit 完成；随后交付阶段核心手写 | 重复投递、唯一约束与集成测试证据 | `NOT_STARTED` |
+| 08-12 周三 | 共同 | 确认 GitHub App 权限、单仓库/单分支限制、异常 Push 行为和阶段 2 队列基础设施的复用边界；讲解 HMAC、Delivery 幂等和至少一次投递 | 实现 `sha256=` 前缀、HMAC SHA-256 和常量时间比较的 Webhook 签名校验 | 用户确认并授权；明确 HTTP 重放、Outbox 重发与 BullMQ 重试的不同幂等边界；每日手写关卡完成 | HMAC 可信性与幂等边界 | `NOT_STARTED` |
+| 08-13 周四 | AI | 完成 GitHub 登录、App Installation 回调、选定仓库绑定/解绑、权限披露和设置页 | 使用 Nest `TestingModule` 手写 Installation 回调 Controller 的成功与拒绝用例 | 可用测试账号绑定一个仓库；每日手写关卡完成 | GitHub App 权限与 Installation 生命周期 | `NOT_STARTED` |
+| 08-14 周五 | AI | 完成 raw body 接收、事件过滤、Delivery 唯一键，以及 WebhookDelivery/Submission/AgentRun/Outbox 同事务写入与快速 `202`；复用稳定 Job ID 与 Dispatcher | 手写 Delivery ID 规范化和唯一冲突处理测试，区分 HTTP 重放、Outbox 重发与 BullMQ 重试 | 重放 Delivery 不重复创建有效运行；数据库提交后最终可进入既有队列；每日手写关卡完成 | Delivery 唯一约束与三层重复投递 | `NOT_STARTED` |
+| 08-15 周六 | AI | 完成 Commit compare、Markdown 路径匹配、Diff/快照/哈希/行号 Evidence 持久化，以及 Webhook → Dispatcher → Worker 链路集成测试 | 手写 GitHub compare 响应到 Markdown Evidence 的窄化/过滤函数及多文件边界用例 | 真实 Push 能产生可查看的证据，Worker 重试不重复保存业务结果；每日手写关卡完成 | Diff Evidence 的完整性与任务匹配 | `NOT_STARTED` |
+| 08-16 周日 | 共同 | 完成异常 Push、重放和 Worker 恢复回归；在 Linux VPS 用 Compose 验证 PostgreSQL/Redis 与队列基础设施并收尾 | 手写“相同 Delivery 三次重放只产生一份有效运行”的集成测试断言 | 三次重放、Dispatcher/Worker 重启和 VPS smoke 通过；问答和每日 commit 完成后交付阶段核心手写 | 重复投递、唯一约束与集成测试证据 | `NOT_STARTED` |
 
 ### 阶段核心手写（每日计划全部 `DONE` 后，1 至 2 小时）
 
@@ -310,7 +312,7 @@ SSE 与 WebSocket 取舍、断线重放竞态、事件去重、TanStack Query �
 | 截止日期 | 里程碑 | 未达到时的动作 |
 | --- | --- | --- |
 | 08-05 | 工程骨架与状态机可运行 | 取消非必要 UI 基建，不增加共享包 |
-| 08-10 | 目标到首任务解锁闭环 | 计划生成暂用受 Schema 约束的固定适配器 |
+| 08-11 | 异步目标到首任务解锁闭环 | 冻结装饰页面；生成状态保留轮询，不提前实现 PlanGeneration SSE |
 | 08-16 | 真实 Push 能保存 Diff Evidence | 暂不做人工多任务匹配 UI，只明确报错 |
 | 08-22 | 单任务能走到 `PASSED` | 冻结报告美化，优先修验收正确性 |
 | 08-27 | SSE 工作台可断线恢复 | 取消虚拟列表等 P1，只保留核心时间线 |
