@@ -51,8 +51,13 @@ export {
   type LivenessResponse,
   type ReadinessResponse,
 } from './http/health.js'
+export {
+  LEARNING_GOAL_INPUT_LIMITS,
+  createLearningGoalInputSchema,
+  type LearningGoalInput,
+} from './http/learning-goal.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
-export { entityIdSchema, isoDateTimeSchema } from './shared/primitives.js'
+export { entityIdSchema, isoDateSchema, isoDateTimeSchema } from './shared/primitives.js'
 export {
   isServiceName,
   SERVICE_NAMES,
