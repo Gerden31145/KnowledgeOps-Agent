@@ -25,4 +25,42 @@ describe('API environment', () => {
       'Invalid API environment fields: LOG_LEVEL',
     )
   })
+
+  it('parses one or two public model catalog entries without credential fields', () => {
+    const environment = readApiEnvironment({
+      PLAN_GENERATION_MODELS_JSON: JSON.stringify([
+        { id: 'primary-model', provider: 'configured', model: 'provider-model-name' },
+        { id: 'backup-model', provider: 'configured', model: 'second-provider-model' },
+      ]),
+    })
+
+    expect(environment.PLAN_GENERATION_MODELS_JSON).toEqual([
+      { id: 'primary-model', provider: 'configured', model: 'provider-model-name' },
+      { id: 'backup-model', provider: 'configured', model: 'second-provider-model' },
+    ])
+  })
+
+  it('rejects duplicate model IDs and secret-shaped catalog properties', () => {
+    expect(() =>
+      readApiEnvironment({
+        PLAN_GENERATION_MODELS_JSON: JSON.stringify([
+          { id: 'same-model', provider: 'configured', model: 'first' },
+          { id: 'same-model', provider: 'configured', model: 'second' },
+        ]),
+      }),
+    ).toThrow('Invalid API environment fields: PLAN_GENERATION_MODELS_JSON.1.id')
+
+    expect(() =>
+      readApiEnvironment({
+        PLAN_GENERATION_MODELS_JSON: JSON.stringify([
+          {
+            id: 'primary-model',
+            provider: 'configured',
+            model: 'provider-model-name',
+            apiKey: 'must-not-be-catalog-data',
+          },
+        ]),
+      }),
+    ).toThrow('Invalid API environment fields: PLAN_GENERATION_MODELS_JSON.0')
+  })
 })

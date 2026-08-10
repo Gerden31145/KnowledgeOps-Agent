@@ -1,7 +1,8 @@
 generator client {
-  provider     = "prisma-client"
-  output       = "../generated/prisma"
-  moduleFormat = "esm"
+  provider        = "prisma-client"
+  output          = "../packages/database/src/generated/prisma"
+  moduleFormat    = "esm"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -26,6 +27,32 @@ enum TaskState {
   PASSED
 }
 
+enum TaskType {
+  MARKDOWN_NOTE
+}
+
+enum AcceptanceCriterionType {
+  FILE_CHANGED
+  SECTION_PRESENT
+  CONTENT_MINIMUM
+  SEMANTIC_CORRECTNESS
+  TOPIC_COVERAGE
+  EXPLANATION_QUALITY
+  FOLLOW_UP_ANSWER
+}
+
+enum PlanGenerationRunState {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
+enum OutboxEventType {
+  PLAN_GENERATION_REQUESTED
+}
+
 enum AgentRunKind {
   NOTE_VERIFICATION
   ANSWER_VERIFICATION
@@ -42,43 +69,47 @@ enum AgentRunState {
 }
 
 model User {
-  id           String         @id @default(uuid()) @db.Uuid
-  githubUserId String?        @unique @map("github_user_id")
-  githubLogin  String?        @map("github_login")
-  timezone     String         @default("Asia/Shanghai")
-  goals        LearningGoal[]
-  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String         @id @default(uuid()) @db.Uuid
+  githubUserId     String?        @unique @map("github_user_id")
+  githubLogin      String?        @map("github_login")
+  timezone         String         @default("Asia/Shanghai")
+  preferredModelId String?        @map("preferred_model_id") @db.VarChar(100)
+  goals            LearningGoal[]
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("users")
 }
 
 model LearningGoal {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  title         String   @db.VarChar(160)
-  currentLevel  String   @map("current_level") @db.VarChar(500)
-  deadline      DateTime @db.Date
-  weeklyMinutes Int      @map("weekly_minutes")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plans         Plan[]
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  title              String              @db.VarChar(160)
+  currentLevel       String              @map("current_level") @db.VarChar(500)
+  deadline           DateTime            @db.Date
+  weeklyMinutes      Int                 @map("weekly_minutes")
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plans              Plan[]
+  planGenerationRuns PlanGenerationRun[]
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([userId, createdAt])
   @@map("learning_goals")
 }
 
 model Plan {
-  id          String       @id @default(uuid()) @db.Uuid
-  goalId      String       @map("goal_id") @db.Uuid
-  version     Int          @default(1)
-  status      PlanStatus   @default(DRAFT)
-  confirmedAt DateTime?    @map("confirmed_at") @db.Timestamptz(3)
-  goal        LearningGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  stages      Stage[]
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id              String             @id @default(uuid()) @db.Uuid
+  goalId          String             @map("goal_id") @db.Uuid
+  generationRunId String?            @unique @map("generation_run_id") @db.Uuid
+  version         Int                @default(1)
+  status          PlanStatus         @default(DRAFT)
+  confirmedAt     DateTime?          @map("confirmed_at") @db.Timestamptz(3)
+  goal            LearningGoal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  generationRun   PlanGenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: Restrict)
+  stages          Stage[]
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([goalId, version])
   @@index([status])
@@ -100,25 +131,44 @@ model Stage {
 }
 
 model Task {
-  id               String           @id @default(uuid()) @db.Uuid
-  stageId          String           @map("stage_id") @db.Uuid
-  title            String           @db.VarChar(160)
-  description      String           @db.Text
+  id               String                @id @default(uuid()) @db.Uuid
+  stageId          String                @map("stage_id") @db.Uuid
+  title            String                @db.VarChar(160)
+  description      String                @db.Text
   position         Int
-  estimatedMinutes Int              @map("estimated_minutes")
-  targetPath       String?          @map("target_path") @db.VarChar(1024)
-  state            TaskState        @default(BLOCKED)
-  version          Int              @default(0)
-  stage            Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
-  prerequisites    TaskDependency[] @relation("TaskPrerequisites")
-  dependents       TaskDependency[] @relation("TaskDependents")
+  type             TaskType              @default(MARKDOWN_NOTE)
+  estimatedMinutes Int                   @map("estimated_minutes")
+  suggestedSteps   String[]              @default([]) @map("suggested_steps")
+  targetPath       String?               @map("target_path") @db.VarChar(1024)
+  state            TaskState             @default(BLOCKED)
+  version          Int                   @default(0)
+  stage            Stage                 @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  prerequisites    TaskDependency[]      @relation("TaskPrerequisites")
+  dependents       TaskDependency[]      @relation("TaskDependents")
+  criteria         AcceptanceCriterion[]
   runs             AgentRun[]
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([stageId, position])
   @@index([state, updatedAt])
   @@map("tasks")
+}
+
+model AcceptanceCriterion {
+  id          String                  @id @default(uuid()) @db.Uuid
+  taskId      String                  @map("task_id") @db.Uuid
+  type        AcceptanceCriterionType
+  description String                  @db.Text
+  required    Boolean                 @default(true)
+  position    Int
+  config      Json?                   @db.JsonB
+  task        Task                    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([taskId, position])
+  @@map("acceptance_criteria")
 }
 
 model TaskDependency {
@@ -154,4 +204,54 @@ model AgentRun {
   @@index([taskId, queuedAt])
   @@index([status, queuedAt])
   @@map("agent_runs")
+}
+
+model PlanGenerationRun {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  goalId              String                 @map("goal_id") @db.Uuid
+  status              PlanGenerationRunState @default(QUEUED)
+  retryOfRunId        String?                @map("retry_of_run_id") @db.Uuid
+  modelCatalogId      String                 @map("model_catalog_id") @db.VarChar(100)
+  modelProvider       String                 @map("model_provider") @db.VarChar(64)
+  modelName           String                 @map("model_name") @db.VarChar(160)
+  promptVersion       String                 @map("prompt_version") @db.VarChar(64)
+  outputSchemaVersion String                 @map("output_schema_version") @db.VarChar(64)
+  errorCode           String?                @map("error_code") @db.VarChar(64)
+  errorMessage        String?                @map("error_message") @db.VarChar(500)
+  version             Int                    @default(0)
+  deadlineAt          DateTime               @map("deadline_at") @db.Timestamptz(3)
+  queuedAt            DateTime               @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt           DateTime?              @map("started_at") @db.Timestamptz(3)
+  finishedAt          DateTime?              @map("finished_at") @db.Timestamptz(3)
+  goal                LearningGoal           @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  retryOfRun          PlanGenerationRun?     @relation("PlanGenerationRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries             PlanGenerationRun[]    @relation("PlanGenerationRunRetries")
+  plan                Plan?
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([goalId], map: "plan_generation_runs_one_active_per_goal", where: raw("(status = ANY (ARRAY['QUEUED'::\"PlanGenerationRunState\", 'RUNNING'::\"PlanGenerationRunState\"]))"))
+  @@index([goalId, queuedAt])
+  @@index([status, deadlineAt])
+  @@map("plan_generation_runs")
+}
+
+model OutboxEvent {
+  id                   String          @id @default(uuid()) @db.Uuid
+  type                 OutboxEventType
+  aggregateId          String          @map("aggregate_id") @db.Uuid
+  deduplicationKey     String          @unique @map("deduplication_key") @db.VarChar(200)
+  payload              Json            @db.JsonB
+  schemaVersion        Int             @default(1) @map("schema_version")
+  availableAt          DateTime        @default(now()) @map("available_at") @db.Timestamptz(3)
+  dispatchedAt         DateTime?       @map("dispatched_at") @db.Timestamptz(3)
+  dispatchAttemptCount Int             @default(0) @map("dispatch_attempt_count")
+  lastError            String?         @map("last_error") @db.Text
+  occurredAt           DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([dispatchedAt, availableAt])
+  @@index([type, aggregateId])
+  @@map("outbox_events")
 }

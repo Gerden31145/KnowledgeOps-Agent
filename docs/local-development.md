@@ -108,7 +108,17 @@ pnpm db:validate
 pnpm db:generate
 ```
 
-当前初始迁移只建立 `User → LearningGoal → Plan → Stage → Task → AgentRun` 的核心关系；Webhook、Submission、Evidence、Report、RunEvent 与 Outbox 在对应阶段再加入，不用空表假装业务已实现。
+Prisma Client 生成到 `packages/database/src/generated/prisma`，由 `@knowledgeops/database` 统一创建连接并供 API、Worker 复用；生成目录不提交 Git，`build:packages`、`typecheck`、`test` 和 `build` 都会先重新生成。
+
+当前迁移已经建立两条独立运行关系：`LearningGoal → PlanGenerationRun → Plan` 负责计划生成，`Task → AgentRun` 负责笔记或回答验收。`PlanGenerationRun + OutboxEvent` 是阶段 2 的持久化异步入口；Webhook、Submission、Evidence、Report 与 RunEvent 仍在对应阶段按真实链路加入。
+
+08-07 的 PostgreSQL 事务专用测试需要本地基础设施和迁移已经就绪：
+
+```powershell
+pnpm infra:check
+pnpm db:migrate:deploy
+pnpm test:integration:day-08-07
+```
 
 ## 6. 启动应用
 
@@ -122,7 +132,7 @@ pnpm dev
 - 请求 `http://127.0.0.1:4000` 返回 API 描述；
 - 终端中出现 Worker ready 日志，并保持独立运行。
 
-当前 Worker 的定时 handle 只是阶段 1 的进程存活占位；阶段 3 接入 BullMQ 后由真实队列连接替换。
+当前 Worker 的定时 handle 只是阶段 1 的进程存活占位；阶段 2 的 08-09 计划日接入 BullMQ 后由真实队列连接替换。
 
 API 的探针：
 

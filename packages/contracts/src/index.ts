@@ -34,6 +34,30 @@ export {
   type TaskState,
 } from './domain/task-state.js'
 export {
+  PLAN_GENERATION_RUN_RETRYABLE_STATES,
+  PLAN_GENERATION_RUN_STATES,
+  PLAN_GENERATION_RUN_TERMINAL_STATES,
+  isPlanGenerationRunRetryableState,
+  isPlanGenerationRunTerminalState,
+  planGenerationRunStateSchema,
+  type PlanGenerationRunState,
+} from './domain/plan-generation-run-state.js'
+export {
+  ACCEPTANCE_CRITERION_TYPES,
+  TASK_TYPES,
+  acceptanceCriterionTypeSchema,
+  taskTypeSchema,
+  type AcceptanceCriterionType,
+  type TaskType,
+} from './domain/plan.js'
+export {
+  OUTBOX_EVENT_TYPES,
+  outboxEventTypeSchema,
+  planGenerationRequestedEventPayloadSchema,
+  type OutboxEventType,
+  type PlanGenerationRequestedEventPayload,
+} from './events/plan-generation.js'
+export {
   ERROR_CODES,
   apiErrorResponseSchema,
   errorCodeSchema,
@@ -56,6 +80,14 @@ export {
   createLearningGoalInputSchema,
   type LearningGoalInput,
 } from './http/learning-goal.js'
+export {
+  MODEL_CATALOG_ID_PATTERN,
+  modelCatalogIdSchema,
+  planGenerationAcceptedResponseSchema,
+  startPlanGenerationInputSchema,
+  type PlanGenerationAcceptedResponse,
+  type StartPlanGenerationInput,
+} from './http/plan-generation.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
 export { entityIdSchema, isoDateSchema, isoDateTimeSchema } from './shared/primitives.js'
 export {

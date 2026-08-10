@@ -12,6 +12,7 @@ dist/
 coverage/
 *.tsbuildinfo
 /generated/prisma/
+/packages/database/src/generated/prisma/
 
 *.log
 .DS_Store
