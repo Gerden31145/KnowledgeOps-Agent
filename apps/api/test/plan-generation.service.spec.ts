@@ -7,7 +7,14 @@ import type { PlanGenerationRepository } from '../src/plan-generation/plan-gener
 
 describe('AcceptPlanGenerationService', () => {
   const catalog = new PlanGenerationModelCatalog(
-    [{ id: 'configured-primary', provider: 'configured', model: 'configured-model' }],
+    [
+      {
+        id: 'configured-primary',
+        label: 'Configured primary',
+        model: 'configured-model',
+      },
+    ],
+    'openai',
     'prompt-v1',
     'schema-v1',
   )
@@ -32,7 +39,7 @@ describe('AcceptPlanGenerationService', () => {
       goalId: '69057518-5456-4e20-a956-1c2c021452f3',
       model: {
         catalogId: 'configured-primary',
-        provider: 'configured',
+        provider: 'openai',
         modelName: 'configured-model',
         promptVersion: 'prompt-v1',
         outputSchemaVersion: 'schema-v1',
@@ -55,5 +62,14 @@ describe('AcceptPlanGenerationService', () => {
       }),
     ).rejects.toBeInstanceOf(UnknownPlanGenerationModelError)
     expect(accept).not.toHaveBeenCalled()
+  })
+
+  it('lists only stable public IDs and labels without provider configuration', () => {
+    expect(catalog.list()).toEqual([
+      {
+        id: 'configured-primary',
+        label: 'Configured primary',
+      },
+    ])
   })
 })

@@ -29,14 +29,22 @@ describe('API environment', () => {
   it('parses one or two public model catalog entries without credential fields', () => {
     const environment = readApiEnvironment({
       PLAN_GENERATION_MODELS_JSON: JSON.stringify([
-        { id: 'primary-model', provider: 'configured', model: 'provider-model-name' },
-        { id: 'backup-model', provider: 'configured', model: 'second-provider-model' },
+        {
+          id: 'primary-model',
+          label: 'Primary model',
+          model: 'provider-model-name',
+        },
+        { id: 'backup-model', model: 'second-provider-model' },
       ]),
     })
 
     expect(environment.PLAN_GENERATION_MODELS_JSON).toEqual([
-      { id: 'primary-model', provider: 'configured', model: 'provider-model-name' },
-      { id: 'backup-model', provider: 'configured', model: 'second-provider-model' },
+      {
+        id: 'primary-model',
+        label: 'Primary model',
+        model: 'provider-model-name',
+      },
+      { id: 'backup-model', model: 'second-provider-model' },
     ])
   })
 
@@ -44,8 +52,8 @@ describe('API environment', () => {
     expect(() =>
       readApiEnvironment({
         PLAN_GENERATION_MODELS_JSON: JSON.stringify([
-          { id: 'same-model', provider: 'configured', model: 'first' },
-          { id: 'same-model', provider: 'configured', model: 'second' },
+          { id: 'same-model', model: 'first' },
+          { id: 'same-model', model: 'second' },
         ]),
       }),
     ).toThrow('Invalid API environment fields: PLAN_GENERATION_MODELS_JSON.1.id')
@@ -55,12 +63,19 @@ describe('API environment', () => {
         PLAN_GENERATION_MODELS_JSON: JSON.stringify([
           {
             id: 'primary-model',
-            provider: 'configured',
             model: 'provider-model-name',
             apiKey: 'must-not-be-catalog-data',
           },
         ]),
       }),
     ).toThrow('Invalid API environment fields: PLAN_GENERATION_MODELS_JSON.0')
+  })
+
+  it('rejects a provider that has no production adapter', () => {
+    expect(() =>
+      readApiEnvironment({
+        PLAN_GENERATION_PROVIDER: 'unsupported',
+      }),
+    ).toThrow('Invalid API environment fields: PLAN_GENERATION_PROVIDER')
   })
 })

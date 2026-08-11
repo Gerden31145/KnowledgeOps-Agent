@@ -5,6 +5,7 @@ import type { ApiEnvironment } from '../config/environment.js'
 import { DatabaseService } from '../database/database.service.js'
 import { AcceptPlanGenerationService } from './accept-plan-generation.service.js'
 import { PlanGenerationController } from './plan-generation.controller.js'
+import { PlanGenerationModelController } from './plan-generation-model.controller.js'
 import { PlanGenerationModelCatalog } from './plan-generation-model-catalog.js'
 import { PlanGenerationRepository } from './plan-generation.repository.js'
 
@@ -14,6 +15,7 @@ const modelCatalogProvider: Provider<PlanGenerationModelCatalog> = {
   useFactory: (environment: ApiEnvironment) =>
     new PlanGenerationModelCatalog(
       environment.PLAN_GENERATION_MODELS_JSON,
+      environment.PLAN_GENERATION_PROVIDER,
       environment.PLAN_GENERATION_PROMPT_VERSION,
       environment.PLAN_GENERATION_OUTPUT_SCHEMA_VERSION,
     ),
@@ -41,7 +43,7 @@ const acceptPlanGenerationProvider: Provider<AcceptPlanGenerationService> = {
 }
 
 @Module({
-  controllers: [PlanGenerationController],
+  controllers: [PlanGenerationController, PlanGenerationModelController],
   providers: [modelCatalogProvider, repositoryProvider, acceptPlanGenerationProvider],
 })
 export class PlanGenerationModule {}

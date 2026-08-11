@@ -120,6 +120,22 @@ pnpm db:migrate:deploy
 pnpm test:integration:day-08-07
 ```
 
+### 5.1 模型目录与计划生成适配层
+
+`.env` 使用 `PLAN_GENERATION_PROVIDER=openai` 声明部署方唯一供应商，`PLAN_GENERATION_MODELS_JSON` 只允许配置该供应商下的 1～2 个白名单模型。每项包含稳定 `id`、可选 `label` 和真实模型名；密钥必须单独放在 `OPENAI_API_KEY`，不能写进目录 JSON。已有本地 `.env` 需要参照 `.env.example` 补上独立的 `PLAN_GENERATION_PROVIDER`，并删除模型 JSON 中早期的 `provider: "configured"` 占位字段。
+
+浏览器读取：
+
+```http
+GET /plan-generation-models
+```
+
+响应只包含 `id + label`，不会暴露 provider、真实模型名、Prompt/Schema 版本或密钥。API 接受生成请求时再把稳定 ID 解析为持久化快照。
+
+`@knowledgeops/agent-core` 定义框架无关的 `PlanGenerationPort`、请求/输出 Schema 和 `generatePlanCandidate()` 边界；`LangChainPlanGenerator` 是当前 OpenAI 适配器，使用 `withStructuredOutput()`，并显式关闭 SDK 内部重试，避免以后与 BullMQ 重试形成调用放大。它没有 Repository 或 Prisma 依赖，因此只能产生候选计划，不能直接创建 Plan 或改变运行状态。
+
+08-08 只完成模型与结构校验层，尚未把适配器接到 Worker；08-09 建立 Outbox/BullMQ，08-10 才由 Worker 读取运行快照、调用该端口并在完整校验后进入原子落库。当前跨任务 ID/依赖引用的 `superRefine` 是每日手写缺口，DAG 环检测仍明确留到 08-10。
+
 ## 6. 启动应用
 
 ```powershell

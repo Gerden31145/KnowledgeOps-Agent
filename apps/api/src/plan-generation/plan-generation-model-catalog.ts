@@ -1,19 +1,24 @@
-import type { ApiEnvironment } from '../config/environment.js'
+import type {
+  PlanGenerationModelOption,
+  PlanGenerationModelSnapshot,
+} from '@knowledgeops/contracts'
 
-export interface PlanGenerationModelSnapshot {
-  catalogId: string
-  provider: string
-  modelName: string
-  promptVersion: string
-  outputSchemaVersion: string
-}
+import type { ApiEnvironment } from '../config/environment.js'
 
 export class PlanGenerationModelCatalog {
   constructor(
     private readonly models: ApiEnvironment['PLAN_GENERATION_MODELS_JSON'],
+    private readonly provider: ApiEnvironment['PLAN_GENERATION_PROVIDER'],
     private readonly promptVersion: string,
     private readonly outputSchemaVersion: string,
   ) {}
+
+  list(): readonly PlanGenerationModelOption[] {
+    return this.models.map((model) => ({
+      id: model.id,
+      label: model.label ?? model.id,
+    }))
+  }
 
   resolve(catalogId: string): PlanGenerationModelSnapshot | undefined {
     const configuredModel = this.models.find((model) => model.id === catalogId)
@@ -24,7 +29,7 @@ export class PlanGenerationModelCatalog {
 
     return {
       catalogId: configuredModel.id,
-      provider: configuredModel.provider,
+      provider: this.provider,
       modelName: configuredModel.model,
       promptVersion: this.promptVersion,
       outputSchemaVersion: this.outputSchemaVersion,

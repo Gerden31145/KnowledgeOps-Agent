@@ -1,11 +1,7 @@
 import { z } from 'zod'
 
 import { planGenerationRunStateSchema } from '../domain/plan-generation-run-state.js'
-import { entityIdSchema } from '../shared/primitives.js'
-
-export const MODEL_CATALOG_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,99}$/
-
-export const modelCatalogIdSchema = z.string().regex(MODEL_CATALOG_ID_PATTERN)
+import { entityIdSchema, modelCatalogIdSchema } from '../shared/primitives.js'
 
 export const startPlanGenerationInputSchema = z
   .object({
@@ -21,5 +17,22 @@ export const planGenerationAcceptedResponseSchema = z
   })
   .strict()
 
+export const planGenerationModelOptionSchema = z
+  .object({
+    id: modelCatalogIdSchema,
+    label: z.string().trim().min(1).max(100),
+  })
+  .strict()
+
+export const planGenerationModelCatalogResponseSchema = z
+  .object({
+    models: z.array(planGenerationModelOptionSchema).min(1).max(2),
+  })
+  .strict()
+
 export type StartPlanGenerationInput = z.infer<typeof startPlanGenerationInputSchema>
 export type PlanGenerationAcceptedResponse = z.infer<typeof planGenerationAcceptedResponseSchema>
+export type PlanGenerationModelOption = z.infer<typeof planGenerationModelOptionSchema>
+export type PlanGenerationModelCatalogResponse = z.infer<
+  typeof planGenerationModelCatalogResponseSchema
+>

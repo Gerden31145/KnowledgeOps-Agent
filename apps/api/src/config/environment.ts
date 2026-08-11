@@ -5,13 +5,13 @@ import { z } from 'zod'
 const configuredModelSchema = z
   .object({
     id: modelCatalogIdSchema,
-    provider: z.string().trim().min(1).max(64),
+    label: z.string().trim().min(1).max(100).optional(),
     model: z.string().trim().min(1).max(160),
   })
   .strict()
 
 const DEFAULT_CONFIGURED_MODELS_JSON =
-  '[{"id":"configured-primary","provider":"configured","model":"configured-model"}]'
+  '[{"id":"openai-primary","label":"Fast model","model":"gpt-5.4-mini"}]'
 
 const configuredModelsSchema = z
   .string()
@@ -58,6 +58,7 @@ const apiEnvironmentSchema = z.object({
   DEVELOPMENT_USER_ID: z.uuid().default('00000000-0000-4000-8000-000000000001'),
   DEVELOPMENT_USER_TIMEZONE: z.string().trim().min(1).default('Asia/Shanghai'),
   PLAN_GENERATION_MODELS_JSON: configuredModelsSchema,
+  PLAN_GENERATION_PROVIDER: z.literal('openai').default('openai'),
   PLAN_GENERATION_OUTPUT_SCHEMA_VERSION: z
     .string()
     .trim()

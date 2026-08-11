@@ -44,12 +44,19 @@ export {
 } from './domain/plan-generation-run-state.js'
 export {
   ACCEPTANCE_CRITERION_TYPES,
+  PLAN_TASK_ACCEPTANCE_CRITERION_TYPES,
   TASK_TYPES,
   acceptanceCriterionTypeSchema,
+  planTaskAcceptanceCriterionTypeSchema,
   taskTypeSchema,
   type AcceptanceCriterionType,
+  type PlanTaskAcceptanceCriterionType,
   type TaskType,
 } from './domain/plan.js'
+export {
+  planGenerationModelSnapshotSchema,
+  type PlanGenerationModelSnapshot,
+} from './domain/plan-generation-model.js'
 export {
   OUTBOX_EVENT_TYPES,
   outboxEventTypeSchema,
@@ -81,15 +88,23 @@ export {
   type LearningGoalInput,
 } from './http/learning-goal.js'
 export {
-  MODEL_CATALOG_ID_PATTERN,
-  modelCatalogIdSchema,
   planGenerationAcceptedResponseSchema,
+  planGenerationModelCatalogResponseSchema,
+  planGenerationModelOptionSchema,
   startPlanGenerationInputSchema,
   type PlanGenerationAcceptedResponse,
+  type PlanGenerationModelCatalogResponse,
+  type PlanGenerationModelOption,
   type StartPlanGenerationInput,
 } from './http/plan-generation.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
-export { entityIdSchema, isoDateSchema, isoDateTimeSchema } from './shared/primitives.js'
+export {
+  MODEL_CATALOG_ID_PATTERN,
+  entityIdSchema,
+  isoDateSchema,
+  isoDateTimeSchema,
+  modelCatalogIdSchema,
+} from './shared/primitives.js'
 export {
   isServiceName,
   SERVICE_NAMES,

@@ -1,0 +1,31 @@
+{
+  "name": "@knowledgeops/agent-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --root ../.. packages/agent-core/test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@knowledgeops/contracts": "workspace:*",
+    "@langchain/core": "1.2.2",
+    "@langchain/openai": "1.5.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

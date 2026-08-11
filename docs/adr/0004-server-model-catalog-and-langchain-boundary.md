@@ -19,6 +19,12 @@
 
 Plan 保存实际使用的供应商、模型、Prompt 版本和输出 Schema 版本快照；之后修改用户模型偏好不能改写历史记录。
 
+### 2026-08-10 实现注记
+
+P0 首个生产适配器使用 LangChain `ChatOpenAI`，服务端目录当前只接受 `openai` provider，但模型名仍由部署配置决定。适配器调用 `withStructuredOutput()` 获取候选对象，项目 Zod Schema 在框架无关边界再次校验；`maxRetries` 显式设为 0，后续由统一运行预算决定修复与重试，不能和 BullMQ 默认重试相乘。
+
+浏览器目录响应只有稳定 ID 与展示名。provider、真实模型名、Prompt/Schema 版本进入可信运行快照，API Key 只通过适配器构造参数进入模型 SDK。`LangChainPlanGenerator` 不依赖 Prisma 或业务 Repository，因此即使模型调用成功也没有权限创建半份 Plan。
+
 ## 结果
 
 - 模型密钥和供应商细节留在可信服务端，客户端输入面和泄密风险更小。

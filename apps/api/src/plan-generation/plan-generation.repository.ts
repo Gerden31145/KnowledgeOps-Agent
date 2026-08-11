@@ -2,6 +2,7 @@ import {
   isPlanGenerationRunRetryableState,
   planGenerationRunStateSchema,
   planGenerationRequestedEventPayloadSchema,
+  type PlanGenerationModelSnapshot,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
@@ -11,8 +12,6 @@ import {
   InvalidPlanGenerationRetryError,
   LearningGoalNotFoundError,
 } from './plan-generation.errors.js'
-import type { PlanGenerationModelSnapshot } from './plan-generation-model-catalog.js'
-
 export interface AcceptPlanGenerationCommand {
   actorUserId: string
   goalId: string

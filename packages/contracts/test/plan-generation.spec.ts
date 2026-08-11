@@ -4,6 +4,8 @@ import {
   isPlanGenerationRunRetryableState,
   isPlanGenerationRunTerminalState,
   planGenerationAcceptedResponseSchema,
+  planGenerationModelCatalogResponseSchema,
+  planGenerationModelSnapshotSchema,
   planGenerationRequestedEventPayloadSchema,
   startPlanGenerationInputSchema,
 } from '../src/index.js'
@@ -43,6 +45,36 @@ describe('plan generation contracts', () => {
       planGenerationAcceptedResponseSchema.safeParse({
         generationRunId: '4d58c95a-cc50-4ad9-861d-7f8c6f03f104',
         status: 'RUNNING',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('separates the browser-safe catalog from the persisted model snapshot', () => {
+    expect(
+      planGenerationModelCatalogResponseSchema.parse({
+        models: [{ id: 'openai-primary', label: 'Fast model' }],
+      }),
+    ).toEqual({ models: [{ id: 'openai-primary', label: 'Fast model' }] })
+
+    expect(
+      planGenerationModelSnapshotSchema.parse({
+        catalogId: 'openai-primary',
+        provider: 'openai',
+        modelName: 'provider-model-name',
+        promptVersion: 'plan-generation-v1',
+        outputSchemaVersion: 'plan-generation-output-v1',
+      }),
+    ).toMatchObject({ provider: 'openai', modelName: 'provider-model-name' })
+
+    expect(
+      planGenerationModelCatalogResponseSchema.safeParse({
+        models: [
+          {
+            id: 'openai-primary',
+            label: 'Fast model',
+            apiKey: 'must-never-reach-the-browser',
+          },
+        ],
       }).success,
     ).toBe(false)
   })
