@@ -6,6 +6,10 @@ const MIGRATION_PATH = new URL(
   '../../prisma/migrations/20260808130000_stage_2_plan_generation_intake/migration.sql',
   import.meta.url,
 )
+const OUTBOX_RECOVERY_MIGRATION_PATH = new URL(
+  '../../prisma/migrations/20260811170000_outbox_dispatch_recovery/migration.sql',
+  import.meta.url,
+)
 
 describe('plan generation persistence invariants', () => {
   it('keeps the one-active-run invariant in both Prisma and PostgreSQL', () => {
@@ -28,5 +32,15 @@ describe('plan generation persistence invariants', () => {
       expect(schema).not.toContain(forbiddenField)
       expect(migration).not.toContain(forbiddenField)
     }
+  })
+
+  it('keeps retryable and dead-lettered outbox events distinguishable', () => {
+    const schema = readFileSync(SCHEMA_PATH, 'utf8')
+    const migration = readFileSync(OUTBOX_RECOVERY_MIGRATION_PATH, 'utf8')
+
+    expect(schema).toContain('deadLetteredAt')
+    expect(schema).toContain('@@index([dispatchedAt, deadLetteredAt, availableAt])')
+    expect(migration).toContain('ADD COLUMN "dead_lettered_at"')
+    expect(migration).toContain('"outbox_events_dispatched_at_dead_lettered_at_available_at_idx"')
   })
 })

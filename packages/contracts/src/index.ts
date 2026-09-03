@@ -59,6 +59,10 @@ export {
 } from './domain/plan-generation-model.js'
 export {
   OUTBOX_EVENT_TYPES,
+  PLAN_GENERATION_JOB_ID_PREFIX,
+  PLAN_GENERATION_JOB_NAME,
+  PLAN_GENERATION_QUEUE_NAME,
+  buildPlanGenerationJobId,
   outboxEventTypeSchema,
   planGenerationRequestedEventPayloadSchema,
   type OutboxEventType,

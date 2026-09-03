@@ -34,6 +34,16 @@ BullMQ 至少一次投递意味着相同 Job 可能重复执行。Worker 必须�
 - 阶段 2 需要提前实现一部分原计划属于阶段 3 的异步基础设施，并增加运行状态、轮询与幂等复杂度。
 - Token 级流式展示不进入 P0；用户只能看到可信的运行状态和最终完整计划。
 
+## 08-09 分发实现细节
+
+Dispatcher 使用 `FOR UPDATE SKIP LOCKED` 每次领取一条到期事件，并把“调用 `Queue.add` 后标记成功”放在同一个有时限的 PostgreSQL 事务中。锁只覆盖单条事件，多个 Dispatcher 可以跳过彼此正在处理的行；代价是 Redis 调用期间会短暂占用一个数据库连接和行锁，因此 producer 连接必须快速失败，批次也保持有界。当前方案比额外引入 claim/lease 字段更小，若线上测量显示事务时间或吞吐成为瓶颈，再迁移为带租约的两阶段领取。
+
+进程可能在 BullMQ 已接受 Job、但 `dispatchedAt` 尚未提交时崩溃。此时事务回滚，重启补扫会再次调用 `Queue.add`，但同一运行始终生成 `plan-generation-{runId}`。BullMQ 在同一 Queue 内忽略仍然存在的重复 Job；成功和失败 Job 在 MVP 中不会自动删除。Job 将来被清理后可以再次加入，所以这一层仍不替代 PostgreSQL 的运行终态、版本、唯一约束和 08-10 的原子结果落库。
+
+错误按故障层分类：Redis/网络错误是可重试 transport failure，Outbox 保持未分发并使用有上限的指数退避；不支持的事件类型、Schema 版本或与 aggregate 不一致的 payload 是永久 contract failure，写入 `deadLetteredAt` 等待人工诊断。BullMQ Worker 内部则把非法 Job 契约映射为 `UnrecoverableError`，把未知运行错误继续抛为普通 `Error`，由 Job 的 `attempts/backoff` 控制技术重试。两层重试各自解决“尚未可靠入队”和“已经入队但执行失败”，不能互相替代。
+
+producer 使用快速失败的 Redis 连接配置，避免外部调用长期占住 PostgreSQL 分发事务；Worker 使用持续重连语义，并在进程关闭时先停止轮询、等待当前 Job，再关闭 Queue 连接。BullMQ 2.0 以后不再需要独立 `QueueScheduler` 处理 stalled Job，当前 BullMQ 6 因此不增加旧式 scheduler 进程。
+
 ## 放弃的方案
 
 - 请求内等待完整 JSON：实现最短，但连接、超时和进程故障边界不适合最终产品。
@@ -45,3 +55,6 @@ BullMQ 至少一次投递意味着相同 Job 可能重复执行。Worker 必须�
 ## 参考
 
 - [BullMQ：Job IDs](https://docs.bullmq.io/guide/jobs/job-ids)（自定义 Job ID 的唯一性范围、冒号限制与重复任务行为）
+- [BullMQ：Retrying failing jobs](https://docs.bullmq.io/guide/retrying-failing-jobs)（`attempts`、内置指数退避与 Job 失败语义）
+- [BullMQ：Connections](https://docs.bullmq.io/guide/connections)（producer 快速失败与 Worker 持续重连的不同连接策略）
+- [BullMQ：Stalled jobs](https://docs.bullmq.io/guide/jobs/stalled)（至少一次执行、stalled 恢复与新版本不再需要 `QueueScheduler`）

@@ -136,6 +136,38 @@ GET /plan-generation-models
 
 08-08 只完成模型与结构校验层，尚未把适配器接到 Worker；08-09 建立 Outbox/BullMQ，08-10 才由 Worker 读取运行快照、调用该端口并在完整校验后进入原子落库。当前跨任务 ID/依赖引用的 `superRefine` 是每日手写缺口，DAG 环检测仍明确留到 08-10。
 
+### 5.2 Outbox 与 BullMQ 本地链路
+
+08-09 的 Worker 同时承载两个独立角色：Outbox Dispatcher 周期性扫描 PostgreSQL，BullMQ Worker 从 Redis 消费计划生成 Job。它们当前部署在同一个 Node 进程以减少本地运维单元，但职责、类型和测试边界保持分离；后续可以独立部署 Dispatcher，而不改变 Outbox 或 Job 契约。
+
+Dispatcher 每次在短事务中用 `FOR UPDATE SKIP LOCKED` 领取一条到期且未分发的事件。只有 `Queue.add()` 返回后才写入 `dispatchedAt`。若 Redis 暂时不可用，事件保持未分发并按指数退避更新 `availableAt`；若事件类型、Schema 版本或 payload 已损坏，则写入 `deadLetteredAt`，避免无限重试阻塞后续事件。
+
+```text
+PlanGenerationRun + OutboxEvent（已提交）
+  → Dispatcher 锁定一条事件
+  → Queue.add(jobId = plan-generation-{runId})
+  → 成功：dispatchedAt
+  → 暂时失败：availableAt 延后，重启后补扫
+  → 永久契约错误：deadLetteredAt
+  → BullMQ Worker 再次校验 Job 并进入处理骨架
+```
+
+本地参数均有安全边界，默认值见 `.env.example`。`BULLMQ_JOB_ATTEMPTS` 表示包括首次执行在内的总尝试数；`BULLMQ_JOB_BACKOFF_MS` 是指数退避的基准。Outbox 投递退避与 BullMQ Job 执行退避是两个不同故障层，不能混为一次重试。
+
+数据库锁与补扫集成测试需要先部署迁移：
+
+```powershell
+pnpm infra:check
+pnpm db:migrate:deploy
+pnpm test:integration:day-08-09
+```
+
+08-09 的 BullMQ 适配手写完成后，再运行 PostgreSQL → Outbox → BullMQ → Worker 的专用验收：
+
+```powershell
+pnpm test:handwrite:day-08-09-bullmq
+```
+
 ## 6. 启动应用
 
 ```powershell
@@ -148,7 +180,7 @@ pnpm dev
 - 请求 `http://127.0.0.1:4000` 返回 API 描述；
 - 终端中出现 Worker ready 日志，并保持独立运行。
 
-当前 Worker 的定时 handle 只是阶段 1 的进程存活占位；阶段 2 的 08-09 计划日接入 BullMQ 后由真实队列连接替换。
+Worker 的进程存活现在由真实 BullMQ 连接和 Outbox 轮询器维持，不再使用阶段 1 的空心跳占位。启动日志会记录 Dispatcher 批次结果、Job ID 和 `generationRunId`，不会记录模型密钥或完整 Prompt。
 
 API 的探针：
 

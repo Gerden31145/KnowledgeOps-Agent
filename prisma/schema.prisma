@@ -245,13 +245,14 @@ model OutboxEvent {
   schemaVersion        Int             @default(1) @map("schema_version")
   availableAt          DateTime        @default(now()) @map("available_at") @db.Timestamptz(3)
   dispatchedAt         DateTime?       @map("dispatched_at") @db.Timestamptz(3)
+  deadLetteredAt       DateTime?       @map("dead_lettered_at") @db.Timestamptz(3)
   dispatchAttemptCount Int             @default(0) @map("dispatch_attempt_count")
   lastError            String?         @map("last_error") @db.Text
   occurredAt           DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(3)
   createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@index([dispatchedAt, availableAt])
+  @@index([dispatchedAt, deadLetteredAt, availableAt])
   @@index([type, aggregateId])
   @@map("outbox_events")
 }
