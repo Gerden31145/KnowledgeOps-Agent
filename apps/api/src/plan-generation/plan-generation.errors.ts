@@ -25,3 +25,10 @@ export class InvalidPlanGenerationRetryError extends Error {
     this.name = 'InvalidPlanGenerationRetryError'
   }
 }
+
+export class PlanGenerationRunNotFoundError extends Error {
+  constructor() {
+    super('Plan generation run was not found for the current user')
+    this.name = 'PlanGenerationRunNotFoundError'
+  }
+}

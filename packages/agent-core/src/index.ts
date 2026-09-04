@@ -21,3 +21,8 @@ export {
   type LangChainChatModelFactoryInput,
   type PlanGenerationModelErrorCode,
 } from './plan-generation/langchain-plan-generator.js'
+export {
+  PlanGenerationDependencyCycleError,
+  assertPlanGenerationDependenciesAreAcyclic,
+  hasPlanGenerationDependencyCycle,
+} from './plan-generation/plan-dependency-graph.exercise.js'

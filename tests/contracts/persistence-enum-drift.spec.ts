@@ -4,6 +4,7 @@ import {
   AGENT_RUN_STATES,
   OUTBOX_EVENT_TYPES,
   PLAN_GENERATION_RUN_STATES,
+  PLAN_STATUSES,
   TASK_TYPES,
   TASK_STATES,
 } from '../../packages/contracts/src/index.js'
@@ -13,6 +14,7 @@ import {
   AgentRunState as PrismaAgentRunState,
   OutboxEventType as PrismaOutboxEventType,
   PlanGenerationRunState as PrismaPlanGenerationRunState,
+  PlanStatus as PrismaPlanStatus,
   TaskType as PrismaTaskType,
   TaskState as PrismaTaskState,
 } from '../../packages/database/src/generated/prisma/enums.js'
@@ -31,6 +33,10 @@ describe('persistence enum drift', () => {
   it('keeps plan generation and outbox enums aligned with persistence', () => {
     expect(Object.values(PrismaPlanGenerationRunState)).toEqual(PLAN_GENERATION_RUN_STATES)
     expect(Object.values(PrismaOutboxEventType)).toEqual(OUTBOX_EVENT_TYPES)
+  })
+
+  it('keeps Plan states aligned between the transport contract and Prisma', () => {
+    expect(Object.values(PrismaPlanStatus)).toEqual(PLAN_STATUSES)
   })
 
   it('keeps plan task and criterion enums aligned with persistence', () => {

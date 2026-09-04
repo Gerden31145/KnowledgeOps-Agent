@@ -44,12 +44,16 @@ export {
 } from './domain/plan-generation-run-state.js'
 export {
   ACCEPTANCE_CRITERION_TYPES,
+  PLAN_STATUSES,
   PLAN_TASK_ACCEPTANCE_CRITERION_TYPES,
   TASK_TYPES,
   acceptanceCriterionTypeSchema,
+  markdownTargetPathSchema,
+  planStatusSchema,
   planTaskAcceptanceCriterionTypeSchema,
   taskTypeSchema,
   type AcceptanceCriterionType,
+  type PlanStatus,
   type PlanTaskAcceptanceCriterionType,
   type TaskType,
 } from './domain/plan.js'
@@ -95,12 +99,22 @@ export {
   planGenerationAcceptedResponseSchema,
   planGenerationModelCatalogResponseSchema,
   planGenerationModelOptionSchema,
+  planGenerationRunStatusResponseSchema,
   startPlanGenerationInputSchema,
   type PlanGenerationAcceptedResponse,
   type PlanGenerationModelCatalogResponse,
   type PlanGenerationModelOption,
+  type PlanGenerationRunStatusResponse,
   type StartPlanGenerationInput,
 } from './http/plan-generation.js'
+export {
+  confirmPlanResponseSchema,
+  startTaskInputSchema,
+  startTaskResponseSchema,
+  type ConfirmPlanResponse,
+  type StartTaskInput,
+  type StartTaskResponse,
+} from './http/plan.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
 export {
   MODEL_CATALOG_ID_PATTERN,

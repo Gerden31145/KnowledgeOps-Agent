@@ -1,8 +1,10 @@
 import {
   isPlanGenerationRunRetryableState,
+  planGenerationRunStatusResponseSchema,
   planGenerationRunStateSchema,
   planGenerationRequestedEventPayloadSchema,
   type PlanGenerationModelSnapshot,
+  type PlanGenerationRunStatusResponse,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
@@ -154,6 +156,54 @@ export class PlanGenerationRepository {
 
       throw error
     }
+  }
+
+  async findStatusForUser(
+    generationRunId: string,
+    actorUserId: string,
+  ): Promise<PlanGenerationRunStatusResponse | null> {
+    const run = await this.database.planGenerationRun.findFirst({
+      where: {
+        id: generationRunId,
+        goal: { userId: actorUserId },
+      },
+      select: {
+        id: true,
+        goalId: true,
+        status: true,
+        queuedAt: true,
+        startedAt: true,
+        finishedAt: true,
+        errorCode: true,
+        errorMessage: true,
+        plan: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    })
+
+    if (!run) {
+      return null
+    }
+
+    return planGenerationRunStatusResponseSchema.parse({
+      generationRunId: run.id,
+      goalId: run.goalId,
+      status: run.status,
+      queuedAt: run.queuedAt.toISOString(),
+      startedAt: run.startedAt?.toISOString() ?? null,
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+      error: run.errorCode
+        ? {
+            code: run.errorCode,
+            message: run.errorMessage ?? 'No additional error details were recorded',
+          }
+        : null,
+      plan: run.plan,
+    })
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

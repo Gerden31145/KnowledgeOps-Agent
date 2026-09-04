@@ -44,6 +44,16 @@ Dispatcher 使用 `FOR UPDATE SKIP LOCKED` 每次领取一条到期事件，并�
 
 producer 使用快速失败的 Redis 连接配置，避免外部调用长期占住 PostgreSQL 分发事务；Worker 使用持续重连语义，并在进程关闭时先停止轮询、等待当前 Job，再关闭 Queue 连接。BullMQ 2.0 以后不再需要独立 `QueueScheduler` 处理 stalled Job，当前 BullMQ 6 因此不增加旧式 scheduler 进程。
 
+## 08-10 执行、超时与业务入口实现细节
+
+Worker 消费 Job 后不直接调用模型，而是先从 PostgreSQL 领取 `PlanGenerationRun`。领取使用 `status + version + deadlineAt` 条件更新，并把递增后的 `version` 作为本轮执行的 fencing token。终态运行直接返回既有状态和 Plan，不调用模型；两个执行者读取到同一版本时只有一个能够更新成功，失败者按并发重复短路。一个因 stalled 或进程退出而重新执行的 `RUNNING` Job 可以领取新版本继续工作，但旧执行者随后提交结果时会因版本不匹配被拒绝。因此系统允许模型在极端故障窗口被重复调用，却只允许当前版本修改业务结果。
+
+领取成功后，Worker 从运行快照与 LearningGoal 构造框架无关请求，调用 `PlanGenerationPort` 的 LangChain 实现，再依次执行 Zod 输出约束和 DAG 环检查。模型配置、供应商、结构或依赖图错误会映射为稳定错误码，并通过 `id + RUNNING + expectedVersion` 条件更新记录 `FAILED`；失败路径没有创建 Plan 图的权限。持久化 `deadlineAt` 同时用于模型调用的 `AbortSignal` 和后台扫描，扫描器通过 `FOR UPDATE SKIP LOCKED` 批量把过期 `QUEUED/RUNNING` 运行推进到 `TIMED_OUT` 并递增版本。迟到模型结果因此无法复活超时运行。
+
+完整计划图与 `SUCCEEDED` 的原子成功落库被保留为阶段 2 核心手写。08-10 只建立 `PlanGenerationSuccessFinalizer` 接口、Worker 调用点和黑盒验收；接口必须接收 fencing version，且只能返回“完整落库”或“因终态/过期而跳过”，不能暴露半份 Plan。
+
+计划确认与任务开始属于 API 的短事务。两个入口先锁定当前用户行，以同一个用户作为并发串行化边界：确认 `DRAFT` Plan 时先排除另一份 `ACTIVE` Plan，再把无前置依赖的根任务从 `BLOCKED` 解锁为 `READY`；开始任务时排除另一项进行中或等待验收的任务，再用 Task `version` 条件更新执行 `READY → IN_PROGRESS`。相同计划的重复确认、相同任务与路径的重复开始都返回当前结果，不重复递增版本；跨用户查询统一表现为不存在。
+
 ## 放弃的方案
 
 - 请求内等待完整 JSON：实现最短，但连接、超时和进程故障边界不适合最终产品。

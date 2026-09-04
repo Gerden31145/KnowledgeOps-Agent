@@ -4,8 +4,10 @@ import { API_ENVIRONMENT } from '../config/config.module.js'
 import type { ApiEnvironment } from '../config/environment.js'
 import { DatabaseService } from '../database/database.service.js'
 import { AcceptPlanGenerationService } from './accept-plan-generation.service.js'
+import { GetPlanGenerationRunService } from './get-plan-generation-run.service.js'
 import { PlanGenerationController } from './plan-generation.controller.js'
 import { PlanGenerationModelController } from './plan-generation-model.controller.js'
+import { PlanGenerationRunController } from './plan-generation-run.controller.js'
 import { PlanGenerationModelCatalog } from './plan-generation-model-catalog.js'
 import { PlanGenerationRepository } from './plan-generation.repository.js'
 
@@ -42,8 +44,23 @@ const acceptPlanGenerationProvider: Provider<AcceptPlanGenerationService> = {
     ),
 }
 
+const getPlanGenerationRunProvider: Provider<GetPlanGenerationRunService> = {
+  provide: GetPlanGenerationRunService,
+  inject: [PlanGenerationRepository],
+  useFactory: (repository: PlanGenerationRepository) => new GetPlanGenerationRunService(repository),
+}
+
 @Module({
-  controllers: [PlanGenerationController, PlanGenerationModelController],
-  providers: [modelCatalogProvider, repositoryProvider, acceptPlanGenerationProvider],
+  controllers: [
+    PlanGenerationController,
+    PlanGenerationModelController,
+    PlanGenerationRunController,
+  ],
+  providers: [
+    modelCatalogProvider,
+    repositoryProvider,
+    acceptPlanGenerationProvider,
+    getPlanGenerationRunProvider,
+  ],
 })
 export class PlanGenerationModule {}

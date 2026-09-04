@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@knowledgeops/agent-core": "workspace:*",
     "@knowledgeops/contracts": "workspace:*",
     "@knowledgeops/database": "workspace:*",
     "@knowledgeops/observability": "workspace:*",

@@ -2,6 +2,7 @@ import {
   LEARNING_GOAL_INPUT_LIMITS,
   entityIdSchema,
   isoDateSchema,
+  markdownTargetPathSchema,
   planGenerationModelSnapshotSchema,
   planTaskAcceptanceCriterionTypeSchema,
 } from '@knowledgeops/contracts'
@@ -24,14 +25,6 @@ const taskReferenceIdSchema = z
   .string()
   .regex(/^[a-z][a-z0-9-]{0,63}$/)
   .describe('A temporary task ID such as task-1, unique across the whole plan')
-
-const markdownTargetPathSchema = z
-  .string()
-  .trim()
-  .min(3)
-  .max(1_024)
-  .regex(/^(?!\/)(?![a-zA-Z]:)(?!.*(?:^|\/)\.\.(?:\/|$)).+\.md$/i)
-  .describe('A repository-relative Markdown path without parent traversal')
 
 const planGenerationGoalSchema = z
   .object({

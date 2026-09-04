@@ -43,4 +43,18 @@ describe('Worker environment', () => {
       }),
     ).toThrow('Invalid Worker environment fields: OUTBOX_RETRY_MAX_DELAY_MS')
   })
+
+  it('normalizes blank optional model secrets and bounds the timeout sweep', () => {
+    const environment = readWorkerEnvironment({
+      OPENAI_API_KEY: '',
+      OPENAI_BASE_URL: '',
+      PLAN_GENERATION_TIMEOUT_SWEEP_BATCH_SIZE: '8',
+      PLAN_GENERATION_TIMEOUT_SWEEP_INTERVAL_MS: '2500',
+    })
+
+    expect(environment.OPENAI_API_KEY).toBeUndefined()
+    expect(environment.OPENAI_BASE_URL).toBeUndefined()
+    expect(environment.PLAN_GENERATION_TIMEOUT_SWEEP_BATCH_SIZE).toBe(8)
+    expect(environment.PLAN_GENERATION_TIMEOUT_SWEEP_INTERVAL_MS).toBe(2500)
+  })
 })

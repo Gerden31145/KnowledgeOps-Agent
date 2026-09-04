@@ -13,6 +13,8 @@ import { DatabaseService } from './database/database.service.js'
 import { OutboxDispatchLoop } from './outbox/outbox-dispatch-loop.js'
 import { OutboxDispatcher } from './outbox/outbox-dispatcher.js'
 import { PlanGenerationJobProcessor } from './plan-generation/plan-generation-job-processor.js'
+import { PlanGenerationRunRepository } from './plan-generation/plan-generation-run.repository.js'
+import { PlanGenerationTimeoutSweepLoop } from './plan-generation/plan-generation-timeout-sweep-loop.js'
 import { BullMqPlanGenerationQueue } from './queue/bullmq-plan-generation-queue.js'
 
 @Injectable()
@@ -20,11 +22,13 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
   private readonly logger = new Logger(WorkerRuntimeService.name)
   private dispatchLoop: OutboxDispatchLoop | undefined
   private queue: BullMqPlanGenerationQueue | undefined
+  private timeoutSweepLoop: PlanGenerationTimeoutSweepLoop | undefined
 
   constructor(
     @Inject(WORKER_ENVIRONMENT) private readonly environment: WorkerEnvironment,
     private readonly database: DatabaseService,
     private readonly planGenerationProcessor: PlanGenerationJobProcessor,
+    private readonly planGenerationRunRepository: PlanGenerationRunRepository,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -40,6 +44,13 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
 
     try {
       this.queue.start()
+
+      this.timeoutSweepLoop = new PlanGenerationTimeoutSweepLoop(
+        this.planGenerationRunRepository,
+        this.environment.PLAN_GENERATION_TIMEOUT_SWEEP_BATCH_SIZE,
+        this.environment.PLAN_GENERATION_TIMEOUT_SWEEP_INTERVAL_MS,
+      )
+      await this.timeoutSweepLoop.start()
 
       const dispatcher = new OutboxDispatcher(this.database.client, this.queue, {
         baseDelayMs: this.environment.OUTBOX_RETRY_BASE_DELAY_MS,
@@ -60,17 +71,20 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
       })
     } catch (error: unknown) {
       try {
+        await this.timeoutSweepLoop?.stop()
         await this.queue.close()
       } finally {
         await this.database.close()
       }
       this.queue = undefined
+      this.timeoutSweepLoop = undefined
       throw error
     }
   }
 
   async onApplicationShutdown(): Promise<void> {
     await this.dispatchLoop?.stop()
+    await this.timeoutSweepLoop?.stop()
     try {
       await this.queue?.close()
     } finally {

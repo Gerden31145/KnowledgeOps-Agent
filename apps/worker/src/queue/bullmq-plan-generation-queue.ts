@@ -66,6 +66,9 @@ export class BullMqPlanGenerationQueue implements OutboxPublisher {
         event: 'plan_generation_job_completed',
         generationRunId: result.generationRunId,
         jobId: job.id,
+        outcome: result.status,
+        ...('planId' in result ? { planId: result.planId } : {}),
+        ...('reason' in result ? { reason: result.reason } : {}),
       })
     })
     this.worker.on('failed', (job, error) => {

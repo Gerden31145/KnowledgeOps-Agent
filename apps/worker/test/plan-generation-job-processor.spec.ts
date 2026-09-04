@@ -28,7 +28,10 @@ describe('BullMQ plan generation processor boundary', () => {
   it('validates the job and delegates a stable payload to the handler', async () => {
     const process = vi.fn<PlanGenerationJobHandler['process']>(async (payload) => ({
       generationRunId: payload.generationRunId,
-      status: 'SKELETON_ACCEPTED',
+      planId: null,
+      reason: 'TERMINAL',
+      runStatus: 'SUCCEEDED',
+      status: 'SKIPPED',
     }))
     const processor = createPlanGenerationBullMqProcessor(createHandler(process))
     const generationRunId = randomUUID()
@@ -37,7 +40,10 @@ describe('BullMQ plan generation processor boundary', () => {
 
     await expect(processor(job as never, 'token')).resolves.toEqual({
       generationRunId,
-      status: 'SKELETON_ACCEPTED',
+      planId: null,
+      reason: 'TERMINAL',
+      runStatus: 'SUCCEEDED',
+      status: 'SKIPPED',
     })
     expect(process).toHaveBeenCalledWith(data, {})
   })
