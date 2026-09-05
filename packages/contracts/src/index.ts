@@ -93,7 +93,9 @@ export {
 export {
   LEARNING_GOAL_INPUT_LIMITS,
   createLearningGoalInputSchema,
+  learningGoalResponseSchema,
   type LearningGoalInput,
+  type LearningGoalResponse,
 } from './http/learning-goal.js'
 export {
   planGenerationAcceptedResponseSchema,
@@ -115,6 +117,18 @@ export {
   type StartTaskInput,
   type StartTaskResponse,
 } from './http/plan.js'
+export {
+  acceptanceCriterionSummarySchema,
+  planDetailResponseSchema,
+  planTaskSummarySchema,
+  taskDetailResponseSchema,
+  todayTasksResponseSchema,
+  type AcceptanceCriterionSummary,
+  type PlanDetailResponse,
+  type PlanTaskSummary,
+  type TaskDetailResponse,
+  type TodayTasksResponse,
+} from './http/workspace.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
 export {
   MODEL_CATALOG_ID_PATTERN,

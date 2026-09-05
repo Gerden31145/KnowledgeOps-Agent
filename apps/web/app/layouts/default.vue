@@ -18,7 +18,7 @@
         KnowledgeOps
       </NuxtLink>
       <span class="text-right font-mono text-caption tracking-label text-muted uppercase"
-        >Phase 01</span
+        >Phase 02</span
       >
     </header>
 

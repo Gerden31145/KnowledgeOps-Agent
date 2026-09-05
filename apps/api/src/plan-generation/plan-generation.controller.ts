@@ -31,6 +31,7 @@ import {
 @Controller('learning-goals')
 export class PlanGenerationController {
   constructor(
+    @Inject(AcceptPlanGenerationService)
     private readonly acceptPlanGeneration: AcceptPlanGenerationService,
     @Inject(CURRENT_ACTOR) private readonly currentActor: CurrentActor,
   ) {}

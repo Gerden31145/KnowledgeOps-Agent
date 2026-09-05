@@ -14,6 +14,7 @@ import { PlanGenerationRunNotFoundError } from './plan-generation.errors.js'
 @Controller('plan-generation-runs')
 export class PlanGenerationRunController {
   constructor(
+    @Inject(GetPlanGenerationRunService)
     private readonly getPlanGenerationRun: GetPlanGenerationRunService,
     @Inject(CURRENT_ACTOR) private readonly currentActor: CurrentActor,
   ) {}

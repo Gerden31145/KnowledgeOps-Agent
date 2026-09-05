@@ -19,6 +19,10 @@ async function bootstrap() {
 
   // 让 Nest 在收到 SIGTERM、SIGINT 等关闭信号时，调用 Provider 的生命周期方法
   app.enableShutdownHooks()
+  app.enableCors({
+    credentials: true,
+    origin: environment.WEB_ORIGIN,
+  })
   app.use(createHttpRequestLogger(logger))
   await app.listen(environment.API_PORT, environment.API_HOST)
 

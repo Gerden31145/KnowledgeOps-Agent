@@ -41,9 +41,18 @@ const processDescriptions = [
       </h1>
 
       <p class="mt-10 max-w-2xl text-lg leading-8 text-body md:ml-auto md:text-xl md:leading-9">
-        当前页面用于验证阶段 1 的工程边界。产品闭环会在后续计划日逐步接入，不使用 Mock
-        冒充生产链路。
+        目标、异步计划生成与任务启动已经接入真实 API。模型运行失败会保留明确状态，不使用 Mock
+        冒充生产结果。
       </p>
+
+      <div class="mt-10 flex justify-end">
+        <NuxtLink
+          class="inline-flex min-h-11 items-center rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          to="/app/plan"
+        >
+          进入学习工作台
+        </NuxtLink>
+      </div>
     </section>
 
     <section class="py-16 md:py-24 lg:py-section" aria-labelledby="process-boundaries">

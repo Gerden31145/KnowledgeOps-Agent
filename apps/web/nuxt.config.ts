@@ -24,6 +24,9 @@ export default defineNuxtConfig({
       apiBaseUrl: environmentResult.data.NUXT_PUBLIC_API_BASE_URL,
     },
   },
+  routeRules: {
+    '/app/**': { ssr: false },
+  },
   typescript: {
     strict: true,
     typeCheck: true,

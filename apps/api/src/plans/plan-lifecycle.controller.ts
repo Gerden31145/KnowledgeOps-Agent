@@ -34,6 +34,7 @@ import { PlanLifecycleService } from './plan-lifecycle.service.js'
 @Controller()
 export class PlanLifecycleController {
   constructor(
+    @Inject(PlanLifecycleService)
     private readonly lifecycle: PlanLifecycleService,
     @Inject(CURRENT_ACTOR) private readonly currentActor: CurrentActor,
   ) {}

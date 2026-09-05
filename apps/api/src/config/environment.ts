@@ -73,6 +73,7 @@ const apiEnvironmentSchema = z.object({
     .max(30 * 60 * 1_000)
     .default(3 * 60 * 1_000),
   REDIS_URL: z.string().url().startsWith('redis://').default('redis://127.0.0.1:6379'),
+  WEB_ORIGIN: z.string().url().default('http://127.0.0.1:3000'),
 })
 
 export type ApiEnvironment = z.infer<typeof apiEnvironmentSchema>

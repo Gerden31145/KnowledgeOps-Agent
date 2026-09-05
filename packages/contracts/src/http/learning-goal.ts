@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { isoDateSchema } from '../shared/primitives.js'
+import { entityIdSchema, isoDateSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const LEARNING_GOAL_INPUT_LIMITS = {
   title: {
@@ -54,4 +54,20 @@ export function createLearningGoalInputSchema(today: string) {
     .strict()
 }
 
+export const learningGoalResponseSchema = z
+  .object({
+    id: entityIdSchema,
+    title: z.string().trim().min(LEARNING_GOAL_INPUT_LIMITS.title.minLength).max(160),
+    currentLevel: z.string().trim().min(LEARNING_GOAL_INPUT_LIMITS.currentLevel.minLength).max(500),
+    deadline: isoDateSchema,
+    weeklyMinutes: z
+      .number()
+      .int()
+      .min(LEARNING_GOAL_INPUT_LIMITS.weeklyMinutes.min)
+      .max(LEARNING_GOAL_INPUT_LIMITS.weeklyMinutes.max),
+    createdAt: isoDateTimeSchema,
+  })
+  .strict()
+
 export type LearningGoalInput = z.infer<ReturnType<typeof createLearningGoalInputSchema>>
+export type LearningGoalResponse = z.infer<typeof learningGoalResponseSchema>
