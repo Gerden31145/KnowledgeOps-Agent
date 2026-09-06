@@ -17,3 +17,7 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Disposable learning labs; keep only the usage policy.
+/apps/*/playground/*
+!/apps/*/playground/README.md
