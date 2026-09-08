@@ -3,6 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { readWorkerEnvironment } from '../src/config/environment.js'
 
 describe('Worker environment', () => {
+  it('defaults to strict schema output and accepts only an explicit supported method', () => {
+    expect(readWorkerEnvironment({}).PLAN_GENERATION_OUTPUT_METHOD).toBe('jsonSchema')
+    expect(
+      readWorkerEnvironment({ PLAN_GENERATION_OUTPUT_METHOD: 'jsonMode' })
+        .PLAN_GENERATION_OUTPUT_METHOD,
+    ).toBe('jsonMode')
+    expect(() => readWorkerEnvironment({ PLAN_GENERATION_OUTPUT_METHOD: 'text' })).toThrow(
+      'Invalid Worker environment fields: PLAN_GENERATION_OUTPUT_METHOD',
+    )
+  })
+
   it('coerces a bounded concurrency value', () => {
     const environment = readWorkerEnvironment({ WORKER_CONCURRENCY: '4' })
 

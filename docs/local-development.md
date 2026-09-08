@@ -134,7 +134,22 @@ GET /plan-generation-models
 
 `@knowledgeops/agent-core` 定义框架无关的 `PlanGenerationPort`、请求/输出 Schema 和 `generatePlanCandidate()` 边界；`LangChainPlanGenerator` 是当前 OpenAI 适配器，使用 `withStructuredOutput()`，并显式关闭 SDK 内部重试，避免以后与 BullMQ 重试形成调用放大。它没有 Repository 或 Prisma 依赖，因此只能产生候选计划，不能直接创建 Plan 或改变运行状态。
 
-08-08 只完成模型与结构校验层，尚未把适配器接到 Worker；08-09 建立 Outbox/BullMQ，08-10 才由 Worker 读取运行快照、调用该端口并在完整校验后进入原子落库。当前跨任务 ID/依赖引用的 `superRefine` 是每日手写缺口，DAG 环检测仍明确留到 08-10。
+当前 Worker 已接入模型端口、Schema/依赖引用与 DAG 校验，C1 原子落库已完成；真实模型端到端证据由 R03 记录，不再把这些已完成手写视为缺口。
+
+对于 GLM-5.3，使用 Chat Completions 端点与显式 JSON 模式：
+
+```dotenv
+PLAN_GENERATION_PROVIDER=openai
+PLAN_GENERATION_MODELS_JSON=[{"id":"glm-primary","label":"GLM-5.3","model":"glm-5.3"}]
+OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+PLAN_GENERATION_OUTPUT_METHOD=jsonMode
+```
+
+密钥仍单独配置在 `OPENAI_API_KEY`，不要粘贴到日志、截图或提交中。`openai` 在此表示现有兼容协议适配器，不代表模型来自 OpenAI。Responses 端点不能仅替换 Base URL 后混用。
+
+`PLAN_GENERATION_OUTPUT_METHOD` 默认 `jsonSchema`，保留原有严格 Schema 请求；`jsonMode` 发送 `response_format: { type: "json_object" }`，并在系统提示中附上输出 Schema。这符合[智谱 JSON 模式文档](https://docs.bigmodel.cn/cn/guide/capabilities/struct-output)。JSON 语法合法不代表业务结构合法：两种方式都必须通过本地 Schema、数量/日期与 DAG 校验，再进入 Finalizer；没有规则或 Mock 降级。SDK 内部提前抛出的 Zod/JSON 解析错误也归类为 `MODEL_OUTPUT_INVALID`，而不是网络或供应商失败。
+
+目前没有覆盖 `reasoning_effort`；[GLM-5.3 官方文档](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)声明默认 `max` 且始终启用思考。原有 Run deadline 不因此自动延长。变更配置后重启 Worker；具体真实耗时与结果查阅逐日计划，不把单次调用当作性能指标。
 
 ### 5.2 Outbox 与 BullMQ 本地链路
 

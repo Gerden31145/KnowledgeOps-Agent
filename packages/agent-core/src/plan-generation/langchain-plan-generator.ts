@@ -1,6 +1,7 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
+import { z } from 'zod'
 
 import {
   PLAN_GENERATION_OUTPUT_SCHEMA_VERSION,
@@ -41,6 +42,7 @@ export class PlanGenerationModelError extends Error {
 export interface LangChainChatModelConfiguration {
   apiKey?: string
   baseUrl?: string
+  structuredOutputMethod?: 'jsonSchema' | 'jsonMode'
 }
 
 export interface LangChainChatModelFactoryInput {
@@ -84,16 +86,24 @@ export class LangChainPlanGenerator implements PlanGenerationPort {
       modelName: request.model.modelName,
       ...(this.configuration.baseUrl ? { baseUrl: this.configuration.baseUrl } : {}),
     })
+    const method = this.configuration.structuredOutputMethod ?? 'jsonSchema'
     const structuredModel = chatModel.withStructuredOutput(planGenerationOutputSchema, {
       name: 'knowledgeops_plan_generation',
-      strict: true,
+      method,
+      ...(method === 'jsonSchema' ? { strict: true } : {}),
       includeRaw: true,
     })
+    // JSON mode guarantees JSON syntax, not our shape. Send the schema as instructions
+    // and keep the same local validation and downstream DAG/finalization boundaries.
+    const systemPrompt =
+      method === 'jsonMode'
+        ? `${PLAN_GENERATION_SYSTEM_PROMPT}\nReturn JSON matching this JSON Schema exactly:\n${JSON.stringify(z.toJSONSchema(planGenerationOutputSchema))}`
+        : PLAN_GENERATION_SYSTEM_PROMPT
 
     try {
       const response = await structuredModel.invoke(
         [
-          new SystemMessage(PLAN_GENERATION_SYSTEM_PROMPT),
+          new SystemMessage(systemPrompt),
           new HumanMessage({
             content: JSON.stringify({
               goal: request.goal,
@@ -131,6 +141,15 @@ export class LangChainPlanGenerator implements PlanGenerationPort {
         throw new PlanGenerationModelError('MODEL_ABORTED', 'The model call was aborted', {
           cause: error,
         })
+      }
+
+      // The SDK may parse a json_schema response before includeRaw can handle it.
+      if (error instanceof z.core.$ZodError || error instanceof SyntaxError) {
+        throw new PlanGenerationModelError(
+          'MODEL_OUTPUT_INVALID',
+          'The model returned output that could not be parsed by the plan schema',
+          { cause: error },
+        )
       }
 
       throw new PlanGenerationModelError('MODEL_UPSTREAM_ERROR', 'The model call failed', {

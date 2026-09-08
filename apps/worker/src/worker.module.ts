@@ -27,6 +27,7 @@ const planGenerationPortProvider: Provider<PlanGenerationPort> = {
   inject: [WORKER_ENVIRONMENT],
   useFactory: (environment: WorkerEnvironment) =>
     new LangChainPlanGenerator({
+      structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
       ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
       ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
     }),

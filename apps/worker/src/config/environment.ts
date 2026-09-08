@@ -24,6 +24,7 @@ const workerEnvironmentSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     OPENAI_API_KEY: optionalNonEmptyStringSchema,
     OPENAI_BASE_URL: optionalUrlSchema,
+    PLAN_GENERATION_OUTPUT_METHOD: z.enum(['jsonSchema', 'jsonMode']).default('jsonSchema'),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     OUTBOX_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),

@@ -26,8 +26,10 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
 
   constructor(
     @Inject(WORKER_ENVIRONMENT) private readonly environment: WorkerEnvironment,
-    private readonly database: DatabaseService,
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(PlanGenerationJobProcessor)
     private readonly planGenerationProcessor: PlanGenerationJobProcessor,
+    @Inject(PlanGenerationRunRepository)
     private readonly planGenerationRunRepository: PlanGenerationRunRepository,
   ) {}
 
