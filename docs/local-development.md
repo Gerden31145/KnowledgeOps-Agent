@@ -132,7 +132,7 @@ GET /plan-generation-models
 
 响应只包含 `id + label`，不会暴露 provider、真实模型名、Prompt/Schema 版本或密钥。API 接受生成请求时再把稳定 ID 解析为持久化快照。
 
-`@knowledgeops/agent-core` 定义框架无关的 `PlanGenerationPort`、请求/输出 Schema 和 `generatePlanCandidate()` 边界；`LangChainPlanGenerator` 是当前 OpenAI 适配器，使用 `withStructuredOutput()`，并显式关闭 SDK 内部重试，避免以后与 BullMQ 重试形成调用放大。它没有 Repository 或 Prisma 依赖，因此只能产生候选计划，不能直接创建 Plan 或改变运行状态。
+`@knowledgeops/agent-core` 定义框架无关的 `PlanGenerationPort`、请求/输出 Schema 和 `generatePlanCandidate()` 边界；`LangChainPlanGenerator` 是当前 OpenAI 兼容协议适配器，使用 `withStructuredOutput()`，并显式关闭 SDK 内部重试，避免与 BullMQ 重试形成调用放大。它没有 Repository 或 Prisma 依赖，因此只能产生候选计划，不能直接创建 Plan 或改变运行状态。
 
 当前 Worker 已接入模型端口、Schema/依赖引用与 DAG 校验，C1 原子落库已完成；真实模型端到端证据由 R03 记录，不再把这些已完成手写视为缺口。
 
@@ -164,7 +164,8 @@ PlanGenerationRun + OutboxEvent（已提交）
   → 成功：dispatchedAt
   → 暂时失败：availableAt 延后，重启后补扫
   → 永久契约错误：deadLetteredAt
-  → BullMQ Worker 再次校验 Job 并进入处理骨架
+  → BullMQ Worker 校验 Job，领取 Run，调用模型并校验候选
+  → Finalizer 原子保存完整 Plan 图与成功终态；迟到结果跳过
 ```
 
 本地参数均有安全边界，默认值见 `.env.example`。`BULLMQ_JOB_ATTEMPTS` 表示包括首次执行在内的总尝试数；`BULLMQ_JOB_BACKOFF_MS` 是指数退避的基准。Outbox 投递退避与 BullMQ Job 执行退避是两个不同故障层，不能混为一次重试。
@@ -183,6 +184,28 @@ pnpm test:integration:day-08-09
 pnpm test:handwrite:day-08-09-bullmq
 ```
 
+### 5.3 阶段 2 已验收的本地闭环
+
+2026-09-08 已用真实 GLM-5.3 验证以下行为，2026-09-09 完成阶段收尾；具体 Run/Plan ID 与当时观察结果保留在[主计划](KnowledgeOps-Agent-逐日开发计划.md)，不要求反复付费调用模型来查阅证据。
+
+1. 在 `/app/plan` 创建目标，生成请求持久化 Run + Outbox 后返回 202，URL 保存目标与 Run ID。
+2. Worker 异步生成；页面轮询，刷新后查询同一个 Run 的当前快照，不重新提交生成请求。
+3. 失败时保留目标与失败 Run，不创建半份 Plan；用户点击重试后创建关联的新 Run，不修改旧终态。
+4. 成功后展示完整草稿；确认后 Plan 变为 ACTIVE，根任务变为 READY。
+5. 开始任务并确认目标 Markdown 路径后，Task 变为 IN_PROGRESS，刷新后状态与路径仍在。此操作不会在 GitHub 或本地创建笔记文件。
+
+需要复跑数据库验收时，在 PostgreSQL 与迁移就绪后运行：
+
+```powershell
+pnpm test:handwrite:stage-2-finalization
+pnpm test:integration:day-08-10
+pnpm test:integration:day-08-11
+```
+
+复跑前先停止正在运行的产品 Worker，结束后恢复；这些测试使用固定时间夹具，产品超时扫描器可能将夹具按真实时间推进为超时而干扰断言。测试使用固定候选，不调用真实模型。根命令 `pnpm check` 不包含这些独立数据库集成/核心手写验收。
+
+当前 `IdentityModule` 仅提供固定开发身份，并在 production 模式主动拒绝启动；它不是 GitHub 登录或生产鉴权。仓库绑定、Push/Diff Evidence、验收报告与 SSE 尚未交付，不能将任务详情中的未来功能提示当作已实现能力。
+
 ## 6. 启动应用
 
 ```powershell
@@ -192,6 +215,7 @@ pnpm dev
 根命令先构建共享包，再用三个子进程启动 Web、API 与 Worker。预期结果：
 
 - 打开 `http://127.0.0.1:3000` 可看到工程骨架页；
+- 进入 `http://127.0.0.1:3000/app/plan` 使用计划工作台；
 - 请求 `http://127.0.0.1:4000` 返回 API 描述；
 - 终端中出现 Worker ready 日志，并保持独立运行。
 
