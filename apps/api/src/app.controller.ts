@@ -1,6 +1,8 @@
 import { SERVICE_NAMES, type ServiceDescriptor } from '@knowledgeops/contracts'
 import { Controller, Get } from '@nestjs/common'
+import { PublicRoute } from './identity/auth.guard.js'
 
+@PublicRoute()
 @Controller()
 export class AppController {
   @Get()

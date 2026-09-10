@@ -2,6 +2,53 @@ import { createKnowledgeOpsApi, KnowledgeOpsApiError } from '../app/lib/knowledg
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('KnowledgeOps API client', () => {
+  it('uses persisted binding contracts, browser credentials, bounded requests and versioned commands', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ version: 2, repository: null }))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createKnowledgeOpsApi('https://knowledgeops.example/api')
+    expect(await api.getRepositoryBinding()).toEqual({ version: 2, repository: null })
+    const input = { installationId: '10', githubRepositoryId: '20', expectedVersion: 2 }
+    await api.bindRepository(input)
+    const unbind = { repositoryId: '2359b0ab-c51e-40df-ac45-7e52e79c8380', expectedVersion: 3 }
+    await api.unbindRepository(unbind)
+    expect(fetchMock.mock.calls.map(([url]) => url.pathname)).toEqual([
+      '/api/repositories/binding',
+      '/api/repositories/bind',
+      '/api/repositories/unbind',
+    ])
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual(input)
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual(unbind)
+    for (const [, init] of fetchMock.mock.calls)
+      expect(init).toMatchObject({ credentials: 'include', signal: expect.any(AbortSignal) })
+  })
+  it('uses browser credentials for session/logout and preserves an API proxy prefix', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          user: {
+            id: '2359b0ab-c51e-40df-ac45-7e52e79c8380',
+            githubLogin: 'test-user',
+            timezone: 'Asia/Shanghai',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createKnowledgeOpsApi('https://knowledgeops.example/api')
+    await expect(api.getSession()).resolves.toMatchObject({ user: { githubLogin: 'test-user' } })
+    await expect(api.logout()).resolves.toBeNull()
+    expect(fetchMock.mock.calls[0]![0]).toEqual(
+      new URL('https://knowledgeops.example/api/auth/session'),
+    )
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ credentials: 'include' })
+    expect(fetchMock.mock.calls[1]).toEqual([
+      new URL('https://knowledgeops.example/api/auth/logout'),
+      { method: 'POST', credentials: 'include', signal: expect.any(AbortSignal) },
+    ])
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -30,7 +77,7 @@ describe('KnowledgeOps API client', () => {
     ).resolves.toMatchObject({ status: 'RUNNING' })
     expect(fetchMock).toHaveBeenCalledWith(
       new URL('http://127.0.0.1:4000/plan-generation-runs/2359b0ab-c51e-40df-ac45-7e52e79c8380'),
-      { signal: undefined },
+      { signal: undefined, credentials: 'include' },
     )
   })
 

@@ -22,8 +22,18 @@ import {
   type TaskDetailResponse,
   type TodayTasksResponse,
   errorCodeSchema,
+  sessionResponseSchema,
+  type SessionResponse,
+  repositoryBindingResponseSchema,
+  githubInstallationsResponseSchema,
+  repositoryOptionsResponseSchema,
+  type RepositoryBindingResponse,
+  type GitHubInstallationsResponse,
+  type RepositoryOptionsResponse,
+  type BindRepositoryInput,
+  type UnbindRepositoryInput,
 } from '@knowledgeops/contracts'
-import type { ZodType } from 'zod'
+import { z, type ZodType } from 'zod'
 
 export class KnowledgeOpsApiError extends Error {
   override readonly name = 'KnowledgeOpsApiError'
@@ -39,6 +49,16 @@ export class KnowledgeOpsApiError extends Error {
 }
 
 export interface KnowledgeOpsApi {
+  getSession(): Promise<SessionResponse>
+  logout(): Promise<null>
+  getRepositoryBinding(signal?: AbortSignal): Promise<RepositoryBindingResponse>
+  getGitHubInstallations(signal?: AbortSignal): Promise<GitHubInstallationsResponse>
+  getRepositoryOptions(
+    installationId: string,
+    signal?: AbortSignal,
+  ): Promise<RepositoryOptionsResponse>
+  bindRepository(input: BindRepositoryInput): Promise<RepositoryBindingResponse>
+  unbindRepository(input: UnbindRepositoryInput): Promise<RepositoryBindingResponse>
   listModels(signal?: AbortSignal): Promise<PlanGenerationModelCatalogResponse>
   createLearningGoal(input: LearningGoalInput): Promise<LearningGoalResponse>
   startPlanGeneration(
@@ -58,6 +78,40 @@ export interface KnowledgeOpsApi {
 
 export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   return {
+    getRepositoryBinding: (signal) =>
+      request(baseUrl, '/repositories/binding', repositoryBindingResponseSchema, {
+        signal: repositorySignal(signal),
+      }),
+    getGitHubInstallations: (signal) =>
+      request(baseUrl, '/repositories/installations', githubInstallationsResponseSchema, {
+        signal: repositorySignal(signal),
+      }),
+    getRepositoryOptions: (installationId, signal) =>
+      request(
+        baseUrl,
+        `/repositories/installations/${encodeURIComponent(installationId)}`,
+        repositoryOptionsResponseSchema,
+        { signal: repositorySignal(signal) },
+      ),
+    bindRepository: (input) =>
+      request(baseUrl, '/repositories/bind', repositoryBindingResponseSchema, {
+        ...jsonRequest('POST', input),
+        signal: repositorySignal(),
+      }),
+    unbindRepository: (input) =>
+      request(baseUrl, '/repositories/unbind', repositoryBindingResponseSchema, {
+        ...jsonRequest('POST', input),
+        signal: repositorySignal(),
+      }),
+    getSession: () =>
+      request(baseUrl, '/auth/session', sessionResponseSchema, {
+        signal: AbortSignal.timeout(10_000),
+      }),
+    logout: () =>
+      request(baseUrl, '/auth/logout', z.null(), {
+        method: 'POST',
+        signal: AbortSignal.timeout(10_000),
+      }),
     listModels: (signal) =>
       request(baseUrl, '/plan-generation-models', planGenerationModelCatalogResponseSchema, {
         signal,
@@ -102,6 +156,11 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   }
 }
 
+function repositorySignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(30_000)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
+}
+
 function jsonRequest(method: 'POST', body: unknown): RequestInit {
   return {
     body: JSON.stringify(body),
@@ -116,7 +175,7 @@ async function request<T>(
   schema: ZodType<T>,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(new URL(path, ensureTrailingSlash(baseUrl)), init)
+  const response = await fetch(apiUrl(baseUrl, path), { ...init, credentials: 'include' })
   const payload = await readJson(response)
 
   if (!response.ok) {
@@ -164,6 +223,7 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value : `${value}/`
+export function apiUrl(baseUrl: string, path: string): URL {
+  // 保留反向代理的 /api 前缀；业务路径均由客户端代码定义，不接收任意外部 URL。
+  return new URL(path.replace(/^\//, ''), baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`)
 }

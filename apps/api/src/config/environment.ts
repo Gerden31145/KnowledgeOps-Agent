@@ -1,5 +1,6 @@
 import { modelCatalogIdSchema } from '@knowledgeops/contracts'
 import { LOG_LEVELS } from '@knowledgeops/observability'
+import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 
 const configuredModelSchema = z
@@ -45,36 +46,110 @@ const configuredModelsSchema = z
     }
   })
 
-const apiEnvironmentSchema = z.object({
-  API_HOST: z.string().min(1).default('127.0.0.1'),
-  API_PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
-  DATABASE_URL: z
-    .string()
-    .url()
-    .startsWith('postgresql://')
-    .default('postgresql://knowledgeops:knowledgeops_dev@127.0.0.1:5432/knowledgeops'),
-  LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  DEVELOPMENT_USER_ID: z.uuid().default('00000000-0000-4000-8000-000000000001'),
-  DEVELOPMENT_USER_TIMEZONE: z.string().trim().min(1).default('Asia/Shanghai'),
-  PLAN_GENERATION_MODELS_JSON: configuredModelsSchema,
-  PLAN_GENERATION_PROVIDER: z.literal('openai').default('openai'),
-  PLAN_GENERATION_OUTPUT_SCHEMA_VERSION: z
-    .string()
-    .trim()
-    .min(1)
-    .max(64)
-    .default('plan-generation-output-v1'),
-  PLAN_GENERATION_PROMPT_VERSION: z.string().trim().min(1).max(64).default('plan-generation-v1'),
-  PLAN_GENERATION_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .min(10_000)
-    .max(30 * 60 * 1_000)
-    .default(3 * 60 * 1_000),
-  REDIS_URL: z.string().url().startsWith('redis://').default('redis://127.0.0.1:6379'),
-  WEB_ORIGIN: z.string().url().default('http://127.0.0.1:3000'),
-})
+const optionalSetting = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().trim().min(1).optional(),
+)
+
+const apiEnvironmentSchema = z
+  .object({
+    API_HOST: z.string().min(1).default('127.0.0.1'),
+    API_PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
+    DATABASE_URL: z
+      .string()
+      .url()
+      .startsWith('postgresql://')
+      .default('postgresql://knowledgeops:knowledgeops_dev@127.0.0.1:5432/knowledgeops'),
+    LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    DEVELOPMENT_USER_ID: z.uuid().default('00000000-0000-4000-8000-000000000001'),
+    DEVELOPMENT_USER_TIMEZONE: z.string().trim().min(1).default('Asia/Shanghai'),
+    PLAN_GENERATION_MODELS_JSON: configuredModelsSchema,
+    PLAN_GENERATION_PROVIDER: z.literal('openai').default('openai'),
+    PLAN_GENERATION_OUTPUT_SCHEMA_VERSION: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .default('plan-generation-output-v1'),
+    PLAN_GENERATION_PROMPT_VERSION: z.string().trim().min(1).max(64).default('plan-generation-v1'),
+    PLAN_GENERATION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .max(30 * 60 * 1_000)
+      .default(3 * 60 * 1_000),
+    REDIS_URL: z.string().url().startsWith('redis://').default('redis://127.0.0.1:6379'),
+    WEB_ORIGIN: z.string().url().default('http://127.0.0.1:3000'),
+    GITHUB_APP_CLIENT_ID: optionalSetting,
+    GITHUB_APP_CLIENT_SECRET: optionalSetting,
+    // Absolute paths work regardless of whether API starts from the repo or workspace directory.
+    // Kept optional while repository integration is being configured; login does not need it.
+    GITHUB_APP_PRIVATE_KEY_PATH: optionalSetting.refine(
+      (value) => value === undefined || isAbsolute(value),
+      { message: 'must be an absolute filesystem path' },
+    ),
+    GITHUB_APP_CALLBACK_URL: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().url().optional(),
+    ),
+  })
+  .superRefine((environment, context) => {
+    // 字段格式校验已生成 issue；不要在错误输入上 new URL 抛出带原值的异常。
+    if (
+      !z.url().safeParse(environment.WEB_ORIGIN).success ||
+      (environment.GITHUB_APP_CALLBACK_URL &&
+        !z.url().safeParse(environment.GITHUB_APP_CALLBACK_URL).success)
+    )
+      return
+    const web = new URL(environment.WEB_ORIGIN)
+    if (web.origin !== environment.WEB_ORIGIN) {
+      context.addIssue({ code: 'custom', path: ['WEB_ORIGIN'], message: 'must be an origin' })
+    }
+    for (const field of ['WEB_ORIGIN', 'GITHUB_APP_CALLBACK_URL'] as const) {
+      const value = environment[field]
+      if (!value) continue
+      const url = new URL(value)
+      const localHttp =
+        environment.NODE_ENV !== 'production' &&
+        url.protocol === 'http:' &&
+        ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
+      if (
+        (!localHttp && url.protocol !== 'https:') ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'requires HTTPS; local HTTP is loopback-only',
+        })
+      }
+    }
+    if (
+      environment.GITHUB_APP_CALLBACK_URL &&
+      (new URL(environment.GITHUB_APP_CALLBACK_URL).hostname !== web.hostname ||
+        new URL(environment.GITHUB_APP_CALLBACK_URL).protocol !== web.protocol)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['GITHUB_APP_CALLBACK_URL'],
+        message: 'Web and API must share a hostname and scheme for this cookie deployment',
+      })
+    }
+    if (environment.NODE_ENV === 'production') {
+      for (const field of [
+        'GITHUB_APP_CLIENT_ID',
+        'GITHUB_APP_CLIENT_SECRET',
+        'GITHUB_APP_CALLBACK_URL',
+      ] as const) {
+        if (!environment[field])
+          context.addIssue({ code: 'custom', path: [field], message: 'required in production' })
+      }
+    }
+  })
 
 export type ApiEnvironment = z.infer<typeof apiEnvironmentSchema>
 

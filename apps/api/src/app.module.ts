@@ -8,6 +8,7 @@ import { IdentityModule } from './identity/identity.module.js'
 import { LearningGoalsModule } from './learning-goals/learning-goals.module.js'
 import { PlanGenerationModule } from './plan-generation/plan-generation.module.js'
 import { PlansModule } from './plans/plans.module.js'
+import { RepositoriesModule } from './repositories/repositories.module.js'
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PlansModule } from './plans/plans.module.js'
     HealthModule,
     PlanGenerationModule,
     PlansModule,
+    RepositoriesModule,
   ],
   controllers: [AppController],
 })

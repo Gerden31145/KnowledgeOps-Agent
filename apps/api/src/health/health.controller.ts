@@ -2,7 +2,9 @@ import { type LivenessResponse, type ReadinessResponse } from '@knowledgeops/con
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common'
 
 import { HealthService } from './health.service.js'
+import { PublicRoute } from '../identity/auth.guard.js'
 
+@PublicRoute()
 @Controller('health')
 export class HealthController {
   constructor(@Inject(HealthService) private readonly healthService: HealthService) {}

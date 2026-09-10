@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-canvas text-ink">
     <a
-      class="fixed top-3 left-3 z-50 -translate-y-24 rounded-full border border-ink bg-canvas px-6 py-3 font-mono text-caption tracking-label uppercase transition-transform focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+      class="fixed top-3 left-3 z-50 min-h-11 -translate-y-24 rounded-full border border-ink bg-canvas px-6 py-3 font-mono text-caption tracking-label uppercase transition-transform focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
       href="#main-content"
     >
       跳到主要内容
@@ -12,13 +12,13 @@
     >
       <span class="font-mono text-caption tracking-label text-muted uppercase">System</span>
       <NuxtLink
-        class="font-display text-sm font-normal tracking-display uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+        class="inline-flex min-h-11 items-center font-display text-sm font-normal tracking-display uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         to="/"
       >
         KnowledgeOps
       </NuxtLink>
       <span class="text-right font-mono text-caption tracking-label text-muted uppercase"
-        >Phase 02</span
+        >Phase 03</span
       >
     </header>
 

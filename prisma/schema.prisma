@@ -69,16 +69,61 @@ enum AgentRunState {
 }
 
 model User {
-  id               String         @id @default(uuid()) @db.Uuid
-  githubUserId     String?        @unique @map("github_user_id")
-  githubLogin      String?        @map("github_login")
-  timezone         String         @default("Asia/Shanghai")
-  preferredModelId String?        @map("preferred_model_id") @db.VarChar(100)
-  goals            LearningGoal[]
-  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String         @id @default(uuid()) @db.Uuid
+  githubUserId      String?        @unique @map("github_user_id")
+  githubLogin       String?        @map("github_login")
+  timezone          String         @default("Asia/Shanghai")
+  preferredModelId  String?        @map("preferred_model_id") @db.VarChar(100)
+  goals             LearningGoal[]
+  sessions          Session[]
+  repositories      Repository[]
+  repositoryVersion Int            @default(0) @map("repository_version")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("users")
+}
+
+model Session {
+  tokenHash String   @id @map("token_hash") @db.VarChar(64)
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model GitHubInstallation {
+  id           String       @id @db.VarChar(32)
+  accountId    String       @map("account_id") @db.VarChar(32)
+  accountLogin String       @map("account_login") @db.VarChar(100)
+  verifiedAt   DateTime     @map("verified_at") @db.Timestamptz(3)
+  repositories Repository[]
+
+  @@map("github_installations")
+}
+
+model Repository {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @map("user_id") @db.Uuid
+  installationId     String             @map("installation_id") @db.VarChar(32)
+  githubRepositoryId String             @map("github_repository_id") @db.VarChar(32)
+  fullName           String             @map("full_name") @db.VarChar(220)
+  defaultBranch      String             @map("default_branch") @db.VarChar(255)
+  branch             String             @db.VarChar(255)
+  isPrivate          Boolean            @map("is_private")
+  enabled            Boolean            @default(true)
+  boundAt            DateTime           @default(now()) @map("bound_at") @db.Timestamptz(3)
+  unboundAt          DateTime?          @map("unbound_at") @db.Timestamptz(3)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installation       GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
+
+  @@unique([userId], map: "repositories_one_enabled_per_user", where: raw("enabled"))
+  @@index([installationId, githubRepositoryId, enabled])
+  @@map("repositories")
 }
 
 model LearningGoal {

@@ -6,6 +6,10 @@ node_modules/
 .env.*
 !.env.example
 
+# Local GitHub App credentials. Never commit downloaded private keys.
+/.secrets/
+*.pem
+
 .nuxt/
 .output/
 dist/

@@ -130,6 +130,20 @@ export {
   type TodayTasksResponse,
 } from './http/workspace.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
+export { sessionResponseSchema, type SessionResponse } from './http/session.js'
+export {
+  githubIdSchema,
+  repositoryBindingResponseSchema,
+  githubInstallationsResponseSchema,
+  repositoryOptionsResponseSchema,
+  bindRepositoryInputSchema,
+  unbindRepositoryInputSchema,
+  type BindRepositoryInput,
+  type UnbindRepositoryInput,
+  type RepositoryBindingResponse,
+  type GitHubInstallationsResponse,
+  type RepositoryOptionsResponse,
+} from './http/repository.js'
 export {
   MODEL_CATALOG_ID_PATTERN,
   entityIdSchema,

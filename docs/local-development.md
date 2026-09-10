@@ -204,7 +204,158 @@ pnpm test:integration:day-08-11
 
 复跑前先停止正在运行的产品 Worker，结束后恢复；这些测试使用固定时间夹具，产品超时扫描器可能将夹具按真实时间推进为超时而干扰断言。测试使用固定候选，不调用真实模型。根命令 `pnpm check` 不包含这些独立数据库集成/核心手写验收。
 
-当前 `IdentityModule` 仅提供固定开发身份，并在 production 模式主动拒绝启动；它不是 GitHub 登录或生产鉴权。仓库绑定、Push/Diff Evidence、验收报告与 SSE 尚未交付，不能将任务详情中的未来功能提示当作已实现能力。
+R04 已将 `IdentityModule` 改为按请求读取真实会话；不再提供固定开发身份回退。旧开发用户数据保留，但不会自动迁移到 GitHub 用户。仓库绑定、Push/Diff Evidence、验收报告与 SSE 尚未交付，不能将任务详情中的未来功能提示当作已实现能力。
+
+### 5.4 R04：GitHub 产品登录与会话
+
+2026-09-09 入门观察与复述后进入产品登录切片；以下配置现由产品 API 读取。已接入本项目 User、PostgreSQL Session、登录页、退出与私有 API 鉴权；安装、仓库绑定、Webhook 仍未实现。真实产品登录观察与回调测试手写尚待完成，不能把入门成功算作 R04 完成。
+
+先区分两件事：登录回答“当前用户是谁”；安装授权回答“应用可以访问哪些仓库”。同一个 GitHub App 可以承载两者，不需要另建 OAuth App，也不要求粘贴 PAT。第一步只验证用户身份，不申请仓库读取或写入权限。参见 [GitHub 官方登录示例](https://docs.github.com/en/apps/creating-github-apps/writing-code-for-a-github-app/building-a-login-with-github-button-with-a-github-app)。
+
+#### 用户在 GitHub 上完成的准备
+
+如已有本项目专用 GitHub App，核对其设置即可，不重复创建；若它还服务其他应用，不直接改动其回调与权限。
+
+在 GitHub 的 Settings → Developer settings → GitHub Apps → New GitHub App 中注册，注意不是旁边的 OAuth Apps。本地登录阶段使用以下设置，其他权限保持默认不申请：
+
+| 设置 | 本轮填写或选择 |
+| --- | --- |
+| GitHub App name | 自选唯一名称，例如 `knowledgeops-你的用户名-dev`；最长 34 字符 |
+| Homepage URL | 你的 GitHub 个人主页 URL；产品公开后再改为产品地址 |
+| Callback URL | `http://127.0.0.1:4000/auth/github/callback` |
+| Expire user authorization tokens | 保持勾选，不关闭令牌过期 |
+| Request user authorization (OAuth) during installation | 暂不勾选，登录与安装分开接入 |
+| Enable Device Flow | 不勾选，本项目使用浏览器跳转 |
+| Setup URL | 暂留空，后续安装时段再配置 |
+| Webhook / Active | 暂取消勾选，R05 接入签名后再开启 |
+| Permissions | 暂不新增权限；仓库 Contents 只读在后续绑定时段再设置 |
+| Where can this GitHub App be installed? | 本地测试先选 Only on this account；开放给其他用户安装前必须调整并实测，不能宣称当前已支持 |
+
+设置依据为 [GitHub App 注册文档](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)。这里的 Callback URL 是浏览器授权后返回本机 API 的目标地址，不是 GitHub 服务器投递事件的 Webhook URL，本轮不需要先配置公网隧道。不要混用 `localhost` 与 `127.0.0.1`；[官方示例支持本地回调](https://docs.github.com/en/apps/creating-github-apps/writing-code-for-a-github-app/building-a-login-with-github-button-with-a-github-app)。
+
+创建后，在 App 设置页找到 **Client ID**（不是数字 App ID），生成一个 **Client secret**，将以下三项追加到仓库根目录已有的 `.env`，不要覆盖原模型/数据库配置：
+
+```dotenv
+GITHUB_APP_CLIENT_ID=填写你的Client_ID
+GITHUB_APP_CLIENT_SECRET=填写你刚生成的Client_secret
+GITHUB_APP_CALLBACK_URL=http://127.0.0.1:4000/auth/github/callback
+```
+
+Client secret 只保存在本机 `.env`，不发到聊天、不截图、不填进 `.env.example`，也不使用 `NUXT_PUBLIC_` 前缀。此时不用生成 App 私钥、不安装到仓库、不创建 PAT；后续仓库接入按实际需要再配置。`.env` 已由 Git 忽略。
+
+#### 运行与观察（本轮只验证登录）
+
+入门的真实 `github-user`、无参数回调拒绝与用户复述已记录在[主计划](KnowledgeOps-Agent-逐日开发计划.md#r04-真实身份观察成功2026-09-09)。临时源码已清理，产品接入不再运行 Playground 命令。
+
+基础设施恢复后执行 `pnpm db:migrate:deploy`（本次会话表迁移已在本机执行），再按第 6 节启动；若 AI 已启动 Web/API，则直接观察，不重复占用端口：
+
+1. 打开 `http://127.0.0.1:3000/login`，选择 GitHub 登录，由你自行核对并授权。
+2. 回到 `/app/plan` 后应显示自己的 GitHub 用户名，地址不再含 code/state。新用户看不到旧开发用户的计划，这是身份隔离，不是数据丢失。
+3. 刷新工作台，再打开 `http://127.0.0.1:4000/auth/session`，应返回本项目用户摘要，不包含凭据。API 重启后已完成会话仍可从数据库恢复。
+4. 在工作台退出，再访问会话接口应为 401；重新进入工作台转到登录页。直接访问无参数回调会转到带安全错误提示的登录页。
+
+本轮暂不提交模型生成请求，不读取仓库。只报告是否进入工作台、刷新是否保持身份、退出后是否拒绝；不要分享 Cookie、Token、完整回调 URL 或 Network 导出。修改 API 的环境变量后需重启进程。
+
+首轮按顺序看三个入口，不通读新增文件：
+
+- `apps/api/src/identity/auth.controller.ts`：四个 HTTP 入口，以及回调后的 Set-Cookie / 302。
+- `apps/api/src/identity/auth.service.ts`：本轮重点看编号 2 的 User/Session 事务和编号 3 的 `requireUser / lookupUser`；编号 1 和换令牌复用已学 OAuth。
+- `apps/api/src/identity/identity.module.ts`：`CURRENT_ACTOR` 如何按本次请求得到用户，再交给既有业务 Controller。
+
+`auth-http.ts` 只提供随机值、哈希与 Cookie 处理；`AuthGuard` 默认保护接口并检查写请求 Origin；健康检查和显式登录路由公开。Web API 封装带 `credentials: 'include'`，路由中间件在刷新/进入工作台时查会话，身份变化或退出会清理查询缓存。`apps/api/test/github-auth.controller.exercise.ts` 的三个用户手写测试已通过 Review 和专用验收，不纳入常规通过数、不重复布置。
+
+#### 会话与部署边界
+
+- 会话是 32 字节随机凭据；PostgreSQL 仅存 SHA-256 哈希、用户、7 天有效期与创建时间。退出删除服务端会话，重新登录轮换当前浏览器旧凭据；仓库接入后 GitHub 用户 Token 除查身份外，在单 API 进程内存保留最多 10 分钟用于绑定时重新核验权限，不进数据库或浏览器，详见 5.7。
+- Cookie 使用 HttpOnly / SameSite=Lax / Path=/；HTTPS 使用 Secure 和 `__Host-` 名称，仅本地回环 HTTP 允许无 Secure。Web 与 API 必须同主机名、同协议（本地端口可不同）；生产要求 HTTPS 和完整 GitHub 配置，可用同域反向代理 `/api`。生产 Cookie 配置已受测试约束，不代表已部署或完成 HTTPS 浏览器验收。
+- 每个请求单独解析会话，不能把当前用户放入全局单例。User/Session 事务失败不颁发 Cookie；过期会话不允许使用，即使过期行尚未物理清理。同一用户下次登录会清理其已过期会话；当前没有全库清理定时器。
+- OAuth 尝试与登录限流暂为单 API 进程内存：尝试 10 分钟有效、一次消费、最多 200 个；每个直连地址 10 分钟最多发起 10 次。API 重启会让尚未完成的授权失效，重新登录即可；已完成的数据库会话不受影响。尚未支持多实例共享尝试/限流；反向代理下不信任任意 X-Forwarded-For，R07 部署检查时必须核对代理地址与入口限流，不能宣称已通过生产防滥用验收。
+- 写请求必须携带等于 `WEB_ORIGIN` 的 Origin；这与服务端用户级所有权校验一起工作，不能只靠前端路由或 CORS 判断权限。命令行发写请求也须显式提供正确 Origin 和有效会话，不能再沿用匿名 curl 生成计划。
+- 登录失败只重定向到固定 Web 地址和白名单错误类别，不回显上游正文、凭据或完整回调参数。登录页说明身份数据、保留策略及尚未提供的自助删除能力。
+
+验证命令：
+
+```powershell
+pnpm check
+pnpm test:integration:r04
+```
+
+R04 集成使用真实 PostgreSQL、临时 Nest HTTP 端口和合成测试用户；GitHub 上游为夹具，不触发真实授权或模型调用。测试清理只作用于本次创建的精确 UUID，不能冒充用户真实浏览器登录。
+
+### 5.5 R04 安装授权最小观察（登录已验收，绑定尚未实现）
+
+本节标题与步骤保留前期入门边界；用户现已报告单仓库安装，当前产品接入与验收状态见 5.7，不要求重复安装。
+
+本时段预算约 20 至 30 分钟，计入 R04 原预算，不新增手写。先在 GitHub 页面观察安装与仓库选择，再接入产品绑定；不要求重新验证已通过的登录。
+
+| 操作 | 决定什么 | 当前边界 |
+| --- | --- | --- |
+| GitHub 登录 | 当前项目用户是谁 | 产品闭环已由用户确认 |
+| 安装 GitHub App | 应用在某个账号下获得哪些仓库权限 | 本时段由用户选择并授权，结果待确认 |
+| 项目内绑定 | KnowledgeOps 实际处理哪一个仓库 | 尚未实现，不能把安装成功当作绑定完成 |
+
+操作入口：GitHub 个人 Settings → Developer settings → GitHub Apps → 现有 App 的 Edit。
+
+1. 在 Permissions & events 中，将 Repository permissions 的 **Contents** 设为 **Read-only**；保留 GitHub 自动要求的 Metadata 只读，不新增其他权限。保存。如果此前已经安装过，还需要在安装设置中批准新增权限；仅修改 App 注册配置不等于现有安装已获得权限。
+2. 保持既有登录 Callback URL 和 Client 配置；Request user authorization (OAuth) during installation 仍不勾选，Setup URL 仍留空，Webhook / Active 仍关闭。此时不需要启动本机 API、配置公网隧道、生成 App 私钥或创建 PAT。
+3. 进入 Install App，在自己的账号旁选择 Install；仓库范围选择 **Only select repositories**，只选一个由自己管理、用于存放学习 Markdown 且不含敏感资料的仓库。不要选 All repositories；没有合适仓库时可自行新建专用学习仓库，不需要迁移当前应用源码。
+4. 核对授权页仅有预期只读权限，再确认安装。完成后在该安装的 Configure 页面核对 Repository access：仍是选定仓库，列表只有预期的一项。已有安装就检查并更新这项配置，不必卸载重装。
+
+本轮成功现象是 GitHub 显示安装及选定仓库，不是 KnowledgeOps 页面已有绑定，也不证明后台已经能读取文件或接收 Push。若显示权限待批准或安装请求待批准，先记为未完成，不扩大授权范围绕过。向 AI 只报告“已安装，仅授权 owner/repo”或不含凭据的错误提示；不发送 Cookie、Token、私钥、完整回调 URL 或网络导出。
+
+安全边界：选定安装仓库不等于 GitHub 的所有 API 都无法读取其他公开资源；后续产品仍须在服务端验证当前用户、安装关联和绑定仓库。Setup URL 与登录 Callback URL 不同，将来接入时不能直接信任浏览器传来的 installation_id。产品内解绑也不等于在 GitHub 卸载 App；本期必须实现的是停止对已解绑仓库发起后续分析。
+
+依据：[安装自己的 GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app)、[最小权限及变更批准](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)、[Setup URL 的用途与安全边界](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)。Webhook 订阅与签名接收在 R05 接入，本轮不提前开启。
+
+### 5.6 R04 仓库接入凭据准备（产品绑定仍待实现）
+
+本节保留接入前的配置步骤；2026-09-10 用户更正文件后，私钥解析及真实 App 匹配已通过，产品状态见 5.7，不需要重新生成私钥。
+
+完成 5.5 的安装观察后，后端还需要证明自己是这个 GitHub App，才能申请短期安装访问令牌。已有 Client secret 用于用户登录的 code 交换，不能替代 App 私钥。本步骤约 5 至 10 分钟，计入 R04 预算；不新增手写或 JWT 专题。
+
+1. 打开现有 App 的设置页，在 General 页底部的 Private keys 区域点击 Generate a private key，下载 `.pem`。若已有该 App 的可用私钥，可复用，不必重复生成或删除旧密钥。
+2. 将下载的文件保存在本机受保护的位置；本地开发可放在根目录 `.secrets/` 并命名为 `github-app.pem`。不要放到 Web 的 `public/`、Playground、源码或共享网盘目录。`.secrets/` 和 `*.pem` 已加入 Git 忽略；忽略规则只防误提交，不代替文件访问权限控制，生产应使用受保护的密钥挂载。
+   此处放的是 GitHub 下载的原始文件，不是新建一个同名文本文件后填入路径或 Client secret。仅改扩展名不会将普通文本变成私钥；若解析失败，优先核对下载文件与配置目标是否一致，不把文件正文发到聊天。
+3. 在根目录实际 `.env` 追加下行，值为真实文件的绝对路径（这里是当前 Windows 开发路径）；只存路径，不粘贴 PEM 内容，不覆盖现有配置：
+
+   ```dotenv
+   GITHUB_APP_PRIVATE_KEY_PATH=D:/project/agent/.secrets/github-app.pem
+   ```
+
+4. 保留原 `GITHUB_APP_CLIENT_ID`、Client secret 和 Callback URL。GitHub 支持使用 Client ID 作为应用认证的 issuer，不需要再配置另一个 App ID。Setup URL 与 Webhook 仍按 5.5 保持未接入状态。
+
+完成后只反馈“私钥路径已配置”，不要发送私钥内容或 Token。AI 下一步检查时只能输出文件可读/格式有效等结果，不打印原文或签名令牌；配置解析通过不代表文件存在、密钥与 App 匹配或仓库访问成功。本次只补了路径配置和安全忽略规则，尚未添加密钥加载、GitHub 仓库 API 或绑定业务；先不重启现有登录服务，产品接入后统一重启验证。
+
+依据：[GitHub App 私钥管理](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)、[应用认证及 Client ID 支持](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)。
+
+### 5.7 R04 产品仓库绑定（真实仓库观察已确认）
+
+2026-09-10 用户已完成真实仓库列表、绑定、刷新恢复、解绑及再次刷新观察；以下步骤保留用于复现，不要求重复学习验收。Webhook 与后台分析尚未接入。
+
+本轮只观察“选择授权仓库 → 绑定 → 刷新恢复 → 解绑”，预计用户观察/导读 45 至 60 分钟计入 R04 原预算，不新增手写。Web/API 已单独启动时直接使用，不重复启动根 dev；不需要 Worker。
+
+1. 打开 `http://127.0.0.1:3000/app/repository`。未登录会回到登录页；完成既有 GitHub 登录后，从工作台导航进入“仓库接入”。
+2. 点击“加载 GitHub 已授权仓库”。若显示“通过 GitHub 重新核验”，点击并完成授权，再从导航返回本页重新加载；这用于取得当前用户的短期仓库权限证明，不是重新验收登录。现有 Session 与已保存的绑定不会因这份权限证明过期而自动失效。
+3. 核对安装账号与实际学习仓库，分支留空使用默认分支；自定义分支须已存在。安装必须未暂停、选定仓库模式且 Contents 只读；没有选项时通过页面链接管理授权、批准新权限后刷新，不改成所有仓库或增加写权限绕过。
+4. 阅读并确认隐私说明，点击“绑定这个仓库”。后端重新验证用户与 App 共同可访问的安装/仓库，仅申请所选仓库的只读安装 Token，再事务保存绑定。上游失败或当前绑定版本变化不会悄悄覆盖已有绑定。
+5. 刷新页面，仓库名与分支仍应显示。点击“解除绑定”并确认，页面回到未绑定；需要继续后续 Push 单元时可以再次绑定同一仓库。重绑产生新的绑定 ID，旧解绑请求不会关掉新绑定。
+
+只报告上述真实观察与不含凭据的错误提示，不发送完整回调 URL、Cookie、Token、私钥或网络导出。`owner/repo` 不是需要原样填写的配置；仓库名由 GitHub 的真实列表返回，不由 AI 写死。
+
+首轮只读两个入口：
+
+- `apps/api/src/repositories/repository-binding.service.ts`：current 从数据库恢复；bind 外部权限核验后锁用户、校验版本、保存唯一活动绑定；unbind 停用指定绑定并增加版本，旧命令不复活旧状态。
+- `apps/web/app/pages/app/repository.vue`：绑定快照查询、安装/仓库选项查询、两个 mutation；成功后取消旧快照请求并更新缓存。模板样式按需查，不要求逐行阅读。
+
+辅助文件职责与边界：Controller 复用会话 Guard/Origin 和 Zod 输入输出；`github-repositories.ts` 固定 GitHub 主机、只读权限与所选仓库，操作限时 20 秒，每个列表最多 10 页，达到上限明确失败而不返回不完整列表。App 私钥只加载到服务端并用于 RS256 签名，安装 Token 为本次调用临时值；GitHubInstallation 行只是上次核验快照，不能作为后续永久授权证明。
+
+GitHub 用户 Token 以项目会话哈希为键仅保存在 API 内存，最多 200 条、访问有效期不超过 10 分钟，按访问/新增清理过期项；退出或当前会话轮换清除对应旧项。重启/到期/容量淘汰需要重新核验才能新绑定；读取和解除已有绑定只依赖 PostgreSQL Session，不依赖此 Token。当前仍是单 API 进程部署边界，不宣称支持多实例共享授权。
+
+数据库 `Repository.enabled` 与用户版本构成后续处理入口约束；解绑保留历史、不中断 GitHub 侧安装、不删除旧计划。R05/R06 尚未实现，必须在接收/执行时检查当前 enabled 绑定与绑定 ID，不能提前宣称已跑通 Push 或停止后台分析。默认分支当前存于绑定，计划/Push 匹配在后续单元接入。绑定及学习数据当前不自动清理，尚无自助数据删除入口。
+
+验证命令：`pnpm check`、`pnpm test:integration:r04`、`pnpm test:handwrite:r04-auth-callback`、`pnpm --filter @knowledgeops/web build`。2026-09-10 分别通过 179 项常规测试、18 项真实数据库/模拟 GitHub 集成、3 项既有手写及 Web 构建。真实 App 凭据检查通过；隔离 UI 网络夹具只证明界面状态与请求编排，不代替本节真实仓库操作。完整证据和首次验证问题见主计划。
+
+授权依据：[用户可访问的安装与交集仓库](https://docs.github.com/en/rest/apps/installations)、[按仓库及权限收窄安装访问令牌](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)。
 
 ## 6. 启动应用
 

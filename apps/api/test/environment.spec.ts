@@ -1,8 +1,58 @@
 import { describe, expect, it } from 'vitest'
+import { resolve } from 'node:path'
 
 import { readApiEnvironment } from '../src/config/environment.js'
 
 describe('API environment', () => {
+  it('accepts an optional absolute private key path without loading or exposing the key', () => {
+    expect(readApiEnvironment({}).GITHUB_APP_PRIVATE_KEY_PATH).toBeUndefined()
+    expect(
+      readApiEnvironment({ GITHUB_APP_PRIVATE_KEY_PATH: '' }).GITHUB_APP_PRIVATE_KEY_PATH,
+    ).toBeUndefined()
+    const keyPath = resolve('.secrets', 'github-app.pem')
+    expect(
+      readApiEnvironment({ GITHUB_APP_PRIVATE_KEY_PATH: keyPath }).GITHUB_APP_PRIVATE_KEY_PATH,
+    ).toBe(keyPath)
+    expect(() =>
+      readApiEnvironment({ GITHUB_APP_PRIVATE_KEY_PATH: '.secrets/fixture-only-private-key.pem' }),
+    ).toThrow('Invalid API environment fields: GITHUB_APP_PRIVATE_KEY_PATH')
+  })
+
+  it('reports invalid URL field names instead of throwing with the raw configured value', () => {
+    expect(() => readApiEnvironment({ WEB_ORIGIN: 'invalid-secret-url' })).toThrow(
+      'Invalid API environment fields: WEB_ORIGIN',
+    )
+    expect(() => readApiEnvironment({ GITHUB_APP_CALLBACK_URL: 'invalid-secret-url' })).toThrow(
+      'Invalid API environment fields: GITHUB_APP_CALLBACK_URL',
+    )
+  })
+  it('requires credentials and HTTPS in production without including secrets in errors', () => {
+    expect(() => readApiEnvironment({ NODE_ENV: 'production' })).toThrow('WEB_ORIGIN')
+    expect(() =>
+      readApiEnvironment({ NODE_ENV: 'production', WEB_ORIGIN: 'https://knowledgeops.example' }),
+    ).toThrow('GITHUB_APP_CLIENT_ID')
+    const configured = {
+      NODE_ENV: 'production',
+      WEB_ORIGIN: 'https://knowledgeops.example',
+      GITHUB_APP_CLIENT_ID: 'client',
+      GITHUB_APP_CLIENT_SECRET: 'secret',
+      GITHUB_APP_CALLBACK_URL: 'https://knowledgeops.example/api/auth/github/callback',
+    }
+    expect(readApiEnvironment(configured).NODE_ENV).toBe('production')
+    expect(() =>
+      readApiEnvironment({
+        ...configured,
+        GITHUB_APP_CALLBACK_URL: 'http://knowledgeops.example/auth/github/callback',
+      }),
+    ).toThrow('GITHUB_APP_CALLBACK_URL')
+    expect(() => readApiEnvironment({ WEB_ORIGIN: 'http://remote.example' })).toThrow('WEB_ORIGIN')
+    expect(() =>
+      readApiEnvironment({
+        WEB_ORIGIN: 'http://localhost:3000',
+        GITHUB_APP_CALLBACK_URL: 'http://127.0.0.1:4000/auth/github/callback',
+      }),
+    ).toThrow('GITHUB_APP_CALLBACK_URL')
+  })
   it('coerces the API port and preserves explicit connection URLs', () => {
     const environment = readApiEnvironment({
       API_PORT: '4100',

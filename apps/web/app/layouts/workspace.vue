@@ -1,5 +1,30 @@
 <script setup lang="ts">
 import { useHead } from '#imports'
+import { ref } from 'vue'
+import { useQueryClient } from '@tanstack/vue-query'
+import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
+import { useSessionUser } from '../composables/use-session-user'
+
+const user = useSessionUser()
+const api = useKnowledgeOpsApi()
+const queryClient = useQueryClient()
+const loggingOut = ref(false)
+const logoutError = ref('')
+
+async function logout() {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  logoutError.value = ''
+  try {
+    await api.logout()
+    queryClient.clear()
+    user.value = null
+    window.location.assign('/login')
+  } catch {
+    logoutError.value = '退出未完成，请检查网络后重试。'
+    loggingOut.value = false
+  }
+}
 
 useHead({
   meta: [{ name: 'robots', content: 'noindex,nofollow' }],
@@ -8,13 +33,14 @@ useHead({
 const navigation = [
   { label: '今日学习', to: '/app/today' },
   { label: '学习计划', to: '/app/plan' },
+  { label: '仓库接入', to: '/app/repository' },
 ]
 </script>
 
 <template>
   <div class="min-h-screen bg-canvas text-ink">
     <a
-      class="fixed top-3 left-3 z-50 -translate-y-24 rounded-full border border-ink bg-canvas px-6 py-3 font-mono text-caption tracking-label uppercase transition-transform focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+      class="fixed top-3 left-3 z-50 min-h-11 -translate-y-24 rounded-full border border-ink bg-canvas px-6 py-3 font-mono text-caption tracking-label uppercase transition-transform focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
       href="#workspace-content"
     >
       跳到主要内容
@@ -25,7 +51,7 @@ const navigation = [
         class="mx-auto flex min-h-16 max-w-7xl flex-col justify-center gap-3 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-10"
       >
         <NuxtLink
-          class="font-display text-sm font-normal tracking-display uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          class="inline-flex min-h-11 items-center font-display text-sm font-normal tracking-display uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
           to="/"
         >
           KnowledgeOps
@@ -42,7 +68,25 @@ const navigation = [
             </li>
           </ul>
         </nav>
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="max-w-48 truncate text-sm text-muted">{{ user?.githubLogin }}</span>
+          <button
+            type="button"
+            :disabled="loggingOut"
+            class="min-h-11 rounded-full border border-ink px-5 font-mono text-caption tracking-label disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+            @click="logout"
+          >
+            {{ loggingOut ? '正在退出…' : '退出登录' }}
+          </button>
+        </div>
       </div>
+      <p
+        v-if="logoutError"
+        role="alert"
+        class="mx-auto max-w-7xl px-4 pb-4 text-warning sm:px-6 lg:px-10"
+      >
+        {{ logoutError }}
+      </p>
     </header>
 
     <main
