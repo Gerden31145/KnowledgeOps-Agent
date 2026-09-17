@@ -170,6 +170,7 @@ export class PlanGenerationRepository {
       select: {
         id: true,
         goalId: true,
+        version: true,
         status: true,
         queuedAt: true,
         startedAt: true,
@@ -192,6 +193,7 @@ export class PlanGenerationRepository {
     return planGenerationRunStatusResponseSchema.parse({
       generationRunId: run.id,
       goalId: run.goalId,
+      version: run.version,
       status: run.status,
       queuedAt: run.queuedAt.toISOString(),
       startedAt: run.startedAt?.toISOString() ?? null,

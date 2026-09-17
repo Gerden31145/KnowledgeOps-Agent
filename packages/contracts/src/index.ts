@@ -102,11 +102,13 @@ export {
   planGenerationModelCatalogResponseSchema,
   planGenerationModelOptionSchema,
   planGenerationRunStatusResponseSchema,
+  planGenerationStreamErrorSchema,
   startPlanGenerationInputSchema,
   type PlanGenerationAcceptedResponse,
   type PlanGenerationModelCatalogResponse,
   type PlanGenerationModelOption,
   type PlanGenerationRunStatusResponse,
+  type PlanGenerationStreamError,
   type StartPlanGenerationInput,
 } from './http/plan-generation.js'
 export {

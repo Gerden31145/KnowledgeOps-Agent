@@ -186,6 +186,11 @@ export class AuthService {
     return request.sessionUser
   }
 
+  // 长连接不能一直复用建连时的 Promise；每轮读取前重新检查数据库会话。
+  revalidateUser(request: AuthRequest): Promise<AuthUser> {
+    return this.lookupUser(request)
+  }
+
   async logout(request: AuthRequest): Promise<void> {
     const token = readCookie(request, this.sessionCookieName)
     if (token)

@@ -61,6 +61,7 @@ describe('KnowledgeOps API client', () => {
           goalId: 'fedfb2e2-8f0e-4830-8240-f198cecabd95',
           status: 'RUNNING',
           queuedAt: '2026-09-04T08:00:00.000Z',
+          version: 1,
           startedAt: '2026-09-04T08:00:01.000Z',
           finishedAt: null,
           error: null,

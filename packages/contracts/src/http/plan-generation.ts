@@ -35,6 +35,7 @@ export const planGenerationRunStatusResponseSchema = z
   .object({
     generationRunId: entityIdSchema,
     goalId: entityIdSchema,
+    version: z.number().int().nonnegative(),
     status: planGenerationRunStateSchema,
     queuedAt: isoDateTimeSchema,
     startedAt: isoDateTimeSchema.nullable(),
@@ -63,3 +64,11 @@ export type PlanGenerationModelCatalogResponse = z.infer<
   typeof planGenerationModelCatalogResponseSchema
 >
 export type PlanGenerationRunStatusResponse = z.infer<typeof planGenerationRunStatusResponseSchema>
+
+// 与 Run 的业务失败分开：这里只描述状态订阅本身失败，不改写 Run.status。
+export const planGenerationStreamErrorSchema = z
+  .object({
+    code: z.enum(['UNAUTHENTICATED', 'RESOURCE_NOT_FOUND', 'STREAM_UNAVAILABLE']),
+  })
+  .strict()
+export type PlanGenerationStreamError = z.infer<typeof planGenerationStreamErrorSchema>

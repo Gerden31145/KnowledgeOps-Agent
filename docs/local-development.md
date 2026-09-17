@@ -357,6 +357,37 @@ GitHub 用户 Token 以项目会话哈希为键仅保存在 API 内存，最多 
 
 授权依据：[用户可访问的安装与交集仓库](https://docs.github.com/en/rest/apps/installations)、[按仓库及权限收窄安装访问令牌](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)。
 
+### 5.8 R13：真实 Run 的 SSE 传输入口（页面恢复待 C2）
+
+2026-09-17 R13 最小观察、两入口导读与短复述已由用户完成，累计实际投入约 35 分钟；4103 临时服务与两份练习源码已清理。现在读真实 PostgreSQL 中的 PlanGenerationRun；没有模型逐字流、事件历史或 cursor 重放。页面仍用原轮询，下面的入口尚未接入页面缓存，不能提前称为“前端 SSE 恢复已完成”。
+
+可观察结果：已有登录 Cookie 且拥有该 Run 时，打开 `http://127.0.0.1:4000/plan-generation-runs/<runId>/events` 可收到 `snapshot`。`runId` 取已有计划页 URL 的 `run` 参数，不用创建新目标；终态只发一次快照便结束响应。若没有现存 Run，先看集成验证即可，真实生成/断网恢复统一在 C2 完成后观察，不为本轮额外调用模型。未登录返回 401；他人的 Run 与不存在的 Run 都返回 404。不要分享 Cookie 或完整网络导出。
+
+```powershell
+pnpm test:integration:r13
+```
+
+该命令需要 PostgreSQL，不需要 Redis、Worker 或模型；创建 UUID 隔离的合成用户/会话/Run，经真实 Nest HTTP 和独立数据库连接验证更新、终态重连、权限、会话撤销/过期和连接释放，结束仅清理本次测试用户及其关联数据。这不是用户真实登录、模型生成或生产代理验收。
+
+首轮只读两个入口（其他改动按职责查阅）：
+
+1. `apps/api/src/plan-generation/plan-generation-stream.service.ts`：从 `open → read → publish` 看第一次完整快照，再看 `poll` 与 `stop`。Controller 只是把已鉴权用户、Run ID、request/response 转交进来；先完成归属查询，才发送 SSE 的 200 响应头。
+2. `apps/web/app/lib/plan-generation-stream.ts`：`subscribePlanGenerationRun` 用实际 API base URL 和 `withCredentials` 创建 EventSource，校验消息后调用回调，返回 `close()`。不修改 Query 缓存、不决定版本大小或是否启动轮询；这些留给 C2。
+
+| 协议 | 内容与用途 |
+| --- | --- |
+| HTTP `GET /plan-generation-runs/:id` | 完整快照，新增数据库 Run `version`；其余字段不变 |
+| SSE `GET /plan-generation-runs/:id/events` 的 `snapshot` | 与 HTTP 相同的完整快照；包含 Run ID/version/status/plan 引用，不含模型凭据 |
+| SSE `stream-error` | 安全代码 `UNAUTHENTICATED` / `RESOURCE_NOT_FOUND` / `STREAM_UNAVAILABLE`，随后结束连接；不改写 Run.status |
+
+API 每 2 秒串行重新验证数据库会话并查询持久化状态，有变化才发快照；无变化约 16 秒发一次注释心跳（15 秒阈值按 2 秒检查粒度触发）。这允许读取独立 Worker 的写入，但服务端仍在轮询数据库，不能宣称消除了轮询成本或已测得性能提升。初次建连/每次重连都读取最新状态，不依赖 API 进程内 emitter；不发送事件 id，也不使用 Last-Event-ID 补历史。
+
+连接限制是每 API 进程最多 100 条、每用户最多 3 条（不是分布式全局限流）；超过返回 429。断开、终态、慢客户端或应用关闭会清理连接和计时器；查询串行，断开后已发出的数据库查询可能继续完成，但结果不会再发送或启动下一轮。会话在下一轮读取前重验，退出/过期不继续沿用初始请求缓存。
+
+故障分两层：开始前用正常 HTTP 401/404/429/503；开始后不能再改变 200，改发安全的 `stream-error` 后关闭。前端传输层收到明确服务端错误或非法消息会关闭；原生 `error` 不提供 HTTP 状态，C2 必须通过 HTTP 校准判别失效会话、处理重连与兜底，不能把所有连接失败记成生成 FAILED。终态、切换 Run、卸载和退出时由 C2 调用 `close()`；仅服务端 end 不等于浏览器主动 close。
+
+响应设为 `text/event-stream`、`no-store, no-transform` 和 `X-Accel-Buffering: no`，沿用精确 Web Origin + credentials CORS。后续 R07/R17 仍须在部署代理上实测缓冲、空闲超时及断线，不以本机 Header 验证冒充已上线。R14/C2、真实浏览器恢复、轮询兜底和生产链路尚未验收。
+
 ## 6. 启动应用
 
 ```powershell
