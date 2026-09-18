@@ -1,0 +1,1481 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <meta content="dark" name="color-scheme" />
+    <meta
+      content="KnowledgeOps Agent 本轮模拟面试复盘、真实回答与完整口述答案；单文件离线手机阅读版。"
+      name="description"
+    />
+    <title>KnowledgeOps Agent · 面试复盘 · 2026-09-18</title>
+    <style>
+      /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+      @layer properties;
+      :root,
+      :host {
+        --color-canvas: #000000;
+        --color-ink: #ffffff;
+        --color-body: #cccccc;
+        --color-muted: #999999;
+        --color-hairline-strong: #3a3a3a;
+        --color-link: #c3d9f3;
+        --font-sans:
+          system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+        --spacing: 0.25rem;
+        --container-3xl: 48rem;
+        --text-sm: 0.875rem;
+        --text-base: 1rem;
+        --text-lg: 1.125rem;
+        --text-xl: 1.25rem;
+        --text-2xl: 1.5rem;
+        --text-3xl: 2rem;
+        --font-weight-semibold: 600;
+        --leading-normal: 1.5;
+        --leading-relaxed: 1.75;
+        --leading-loose: 2;
+      }
+      @layer base {
+        *,
+        ::before,
+        ::after {
+          box-sizing: border-box;
+          border-style: solid;
+          border-width: 0;
+        }
+        html {
+          font-size: 100%;
+          -webkit-text-size-adjust: 100%;
+        }
+        body,
+        h1,
+        h2,
+        p,
+        blockquote,
+        pre,
+        ul,
+        ol {
+          margin: 0;
+        }
+        body {
+          line-height: 1.75;
+        }
+        a {
+          color: inherit;
+        }
+        summary {
+          list-style-position: inside;
+        }
+        pre,
+        code {
+          tab-size: 2;
+        }
+      }
+      .sticky {
+        position: sticky;
+      }
+      .top-0 {
+        top: 0px;
+      }
+      .z-10 {
+        z-index: 10;
+      }
+      .mx-auto {
+        margin-inline: auto;
+      }
+      .my-0 {
+        margin-block: 0px;
+      }
+      .my-2 {
+        margin-block: calc(var(--spacing) * 2);
+      }
+      .my-3 {
+        margin-block: calc(var(--spacing) * 3);
+      }
+      .my-4 {
+        margin-block: calc(var(--spacing) * 4);
+      }
+      .my-6 {
+        margin-block: calc(var(--spacing) * 6);
+      }
+      .my-8 {
+        margin-block: calc(var(--spacing) * 8);
+      }
+      .mt-8 {
+        margin-top: calc(var(--spacing) * 8);
+      }
+      .mt-12 {
+        margin-top: calc(var(--spacing) * 12);
+      }
+      .mb-6 {
+        margin-bottom: calc(var(--spacing) * 6);
+      }
+      .block {
+        display: block;
+      }
+      .flex {
+        display: flex;
+      }
+      .inline-flex {
+        display: inline-flex;
+      }
+      .min-h-11 {
+        min-height: calc(var(--spacing) * 11);
+      }
+      .max-w-3xl {
+        max-width: var(--container-3xl);
+      }
+      .cursor-pointer {
+        cursor: pointer;
+      }
+      .scroll-mt-20 {
+        scroll-margin-top: calc(var(--spacing) * 20);
+      }
+      .list-decimal {
+        list-style-type: decimal;
+      }
+      .list-disc {
+        list-style-type: disc;
+      }
+      .list-none {
+        list-style-type: none;
+      }
+      .flex-wrap {
+        flex-wrap: wrap;
+      }
+      .items-center {
+        align-items: center;
+      }
+      .gap-6 {
+        gap: calc(var(--spacing) * 6);
+      }
+      .border-y {
+        border-block-style: var(--tw-border-style);
+        border-block-width: 1px;
+      }
+      .border-t {
+        border-top-style: var(--tw-border-style);
+        border-top-width: 1px;
+      }
+      .border-b {
+        border-bottom-style: var(--tw-border-style);
+        border-bottom-width: 1px;
+      }
+      .border-l-2 {
+        border-left-style: var(--tw-border-style);
+        border-left-width: 2px;
+      }
+      .border-hairline-strong {
+        border-color: var(--color-hairline-strong);
+      }
+      .border-link {
+        border-color: var(--color-link);
+      }
+      .bg-canvas {
+        background-color: var(--color-canvas);
+      }
+      .px-4 {
+        padding-inline: calc(var(--spacing) * 4);
+      }
+      .py-2 {
+        padding-block: calc(var(--spacing) * 2);
+      }
+      .py-4 {
+        padding-block: calc(var(--spacing) * 4);
+      }
+      .py-8 {
+        padding-block: calc(var(--spacing) * 8);
+      }
+      .pt-8 {
+        padding-top: calc(var(--spacing) * 8);
+      }
+      .pb-12 {
+        padding-bottom: calc(var(--spacing) * 12);
+      }
+      .pl-0 {
+        padding-left: 0px;
+      }
+      .pl-4 {
+        padding-left: calc(var(--spacing) * 4);
+      }
+      .pl-6 {
+        padding-left: calc(var(--spacing) * 6);
+      }
+      .font-mono {
+        font-family: var(--font-mono);
+      }
+      .font-sans {
+        font-family: var(--font-sans);
+      }
+      .text-2xl {
+        font-size: var(--text-2xl);
+      }
+      .text-base {
+        font-size: var(--text-base);
+      }
+      .text-lg {
+        font-size: var(--text-lg);
+      }
+      .text-sm {
+        font-size: var(--text-sm);
+      }
+      .text-xl {
+        font-size: var(--text-xl);
+      }
+      .leading-loose {
+        --tw-leading: var(--leading-loose);
+        line-height: var(--leading-loose);
+      }
+      .leading-normal {
+        --tw-leading: var(--leading-normal);
+        line-height: var(--leading-normal);
+      }
+      .leading-relaxed {
+        --tw-leading: var(--leading-relaxed);
+        line-height: var(--leading-relaxed);
+      }
+      .font-semibold {
+        --tw-font-weight: var(--font-weight-semibold);
+        font-weight: var(--font-weight-semibold);
+      }
+      .\[overflow-wrap\:anywhere\] {
+        overflow-wrap: anywhere;
+      }
+      .whitespace-pre-wrap {
+        white-space: pre-wrap;
+      }
+      .text-body {
+        color: var(--color-body);
+      }
+      .text-ink {
+        color: var(--color-ink);
+      }
+      .text-link {
+        color: var(--color-link);
+      }
+      .text-muted {
+        color: var(--color-muted);
+      }
+      .underline {
+        text-decoration-line: underline;
+      }
+      .underline-offset-4 {
+        text-underline-offset: 4px;
+      }
+      .focus-visible\:outline-2:focus-visible {
+        outline-style: var(--tw-outline-style);
+        outline-width: 2px;
+      }
+      .focus-visible\:outline-offset-4:focus-visible {
+        outline-offset: 4px;
+      }
+      .focus-visible\:outline-link:focus-visible {
+        outline-color: var(--color-link);
+      }
+      @media (width >= 40rem) {
+        .sm\:px-6 {
+          padding-inline: calc(var(--spacing) * 6);
+        }
+        .sm\:text-3xl {
+          font-size: var(--text-3xl);
+        }
+      }
+      @media print {
+        .print\:hidden {
+          display: none;
+        }
+        :root {
+          --color-canvas: #ffffff;
+          --color-ink: #000000;
+          --color-body: #000000;
+          --color-muted: #3a3a3a;
+          --color-link: #000000;
+        }
+        body {
+          font-size: 12pt;
+        }
+        h1,
+        h2 {
+          break-after: avoid;
+        }
+        p,
+        li {
+          orphans: 3;
+          widows: 3;
+        }
+      }
+      @property --tw-border-style {
+        syntax: '*';
+        inherits: false;
+        initial-value: solid;
+      }
+      @property --tw-leading {
+        syntax: '*';
+        inherits: false;
+      }
+      @property --tw-font-weight {
+        syntax: '*';
+        inherits: false;
+      }
+      @property --tw-outline-style {
+        syntax: '*';
+        inherits: false;
+        initial-value: solid;
+      }
+      @layer properties {
+        @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or
+          ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
+          *,
+          ::before,
+          ::after,
+          ::backdrop {
+            --tw-border-style: solid;
+            --tw-leading: initial;
+            --tw-font-weight: initial;
+            --tw-outline-style: solid;
+          }
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-canvas text-body font-sans text-lg [overflow-wrap:anywhere]" id="top">
+    <nav
+      aria-label="阅读导航"
+      class="sticky top-0 z-10 border-b border-hairline-strong bg-canvas print:hidden"
+    >
+      <div class="mx-auto flex max-w-3xl flex-wrap gap-6 px-4 sm:px-6">
+        <a
+          class="inline-flex min-h-11 items-center text-base text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4"
+          href="#contents"
+          >章节目录</a
+        ><a
+          class="inline-flex min-h-11 items-center text-base text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4"
+          href="#review"
+          >复习自查</a
+        ><a
+          class="inline-flex min-h-11 items-center text-base text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4"
+          href="#top"
+          >回到开头</a
+        >
+      </div>
+    </nav>
+    <main class="mx-auto max-w-3xl px-4 pb-12 sm:px-6" id="main">
+      <h1 class="mt-8 mb-6 text-2xl sm:text-3xl leading-normal font-semibold text-ink">
+        KnowledgeOps Agent：模拟面试复盘与完整口述答案
+      </h1>
+      <p class="my-4 leading-loose">2026-09-18 · 文远知行全栈实习方向 · 手机阅读版原稿</p>
+      <p class="my-4 leading-loose">
+        本文依据本轮实际问答及当前工作区代码整理。每题的“本轮表现”记录真实回答；“完整表述”是复盘后的参考答案，不能当作已经独立答出的成绩。没有重新运行产品测试，也没有新增性能或可靠性指标。
+      </p>
+      <p class="my-4 leading-loose">
+        阅读方式：先看速记，再选择薄弱题朗读完整表述。手机阅读版 HTML
+        可离线打开；代码路径集中在文末，回到电脑后再核对，不需要手机上来回翻代码。
+      </p>
+      <details class="my-8 border-y border-hairline-strong py-2">
+        <summary
+          class="min-h-11 cursor-pointer py-2 text-ink scroll-mt-20 text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4"
+          id="contents"
+        >
+          章节目录（点击展开）
+        </summary>
+        <ul class="my-2 list-none pl-0">
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#overview"
+              >本轮结论与一分钟速记</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#outbox"
+              >01 为什么需要 Outbox</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#finalization"
+              >02 重复执行为什么不会保存两份 Plan</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#transaction"
+              >03 为什么 Plan 与 Run 成功状态必须同事务提交</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#timeout"
+              >04 为什么超时后的旧结果不能覆盖终态</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#testing"
+              >05 怎样验证并发落库</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#promise"
+              >06 await、并发与 Promise 的失败处理</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#refresh"
+              >07 页面刷新怎样恢复同一次 Run</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#errors"
+              >08 网络故障、业务失败和 401 如何区分</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#epoch"
+              >09 切换 Run 后怎样隔离旧回调</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#snapshot"
+              >10 怎样协调 HTTP、SSE 和不同版本的快照</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#validation"
+              >11 Zod 能检查什么，为什么还需要图校验</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#dag"
+              >12 怎样用拓扑排序检测依赖环</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#ownership"
+              >13 AI 辅助开发中的个人贡献与 LangChain 选型</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#review"
+              >复习顺序与自查题</a
+            >
+          </li>
+          <li class="my-0">
+            <a
+              class="text-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-link focus-visible:outline-offset-4 block min-h-11 py-2"
+              href="#evidence"
+              >代码证据与当前完成边界</a
+            >
+          </li>
+        </ul>
+      </details>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="overview"
+      >
+        本轮结论与一分钟速记
+      </h2>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">本轮评价：9/16。</strong> 正确性 2、代码依据
+        2、工程深度 2、表达 3。这个分数只反映本次回答，不代表录用概率。
+      </p>
+      <p class="my-4 leading-loose">
+        主要问题是：能理解业务目的，但遇到具体失败窗口、异步时序和代码位置时，容易凭合理猜测回答。提示后可以恢复部分知识，仍需通过脱离提示的复述确认掌握。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">三个优先补齐的缺口</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          Outbox 的投递边界，以及事务、行锁、版本、唯一约束分别解决什么问题。
+        </li>
+        <li class="my-3 leading-relaxed">异步任务何时启动，以及并发测试应该验证什么。</li>
+        <li class="my-3 leading-relaxed">
+          实际代码细节：锁内检查的是版本，前端还有本地订阅批次 epoch，网络恢复不要求业务版本变化。
+        </li>
+      </ul>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">三个相对较强的方面</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          DAG 的业务意义和判环条件；“后继入度归零才入队”在追问后完成修正。
+        </li>
+        <li class="my-3 leading-relaxed">
+          能区分网络故障与业务失败，也知道 401 属于身份验证问题。
+        </li>
+        <li class="my-3 leading-relaxed">
+          能解释旧快照不能覆盖新快照，以及网络恢复后相同版本仍可清除错误提示。
+        </li>
+      </ul>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">一分钟速记</strong></p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          Outbox 持久化的是待投递事件；<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >dispatchedAt</code
+          >
+          不是业务完成时间。
+        </li>
+        <li class="my-3 leading-relaxed">已提交事务不能再次回滚；后续修正属于补偿操作。</li>
+        <li class="my-3 leading-relaxed">
+          Redis 的入队操作不属于 PostgreSQL 事务，重投窗口仍然存在。
+        </li>
+        <li class="my-3 leading-relaxed">行锁让同一 Run 的提交依次检查，版本检查拒绝旧结果。</li>
+        <li class="my-3 leading-relaxed">
+          Plan 图与 Run 成功状态要一起提交；唯一约束负责最后一道防重复保护。
+        </li>
+        <li class="my-3 leading-relaxed">
+          <code class="font-mono text-base [overflow-wrap:anywhere]">call()</code>
+          启动函数执行，<code class="font-mono text-base [overflow-wrap:anywhere]">await</code>
+          等待结果。
+        </li>
+        <li class="my-3 leading-relaxed">
+          <code class="font-mono text-base [overflow-wrap:anywhere]">Promise.all()</code>
+          提前拒绝不会自动取消其他任务。
+        </li>
+        <li class="my-3 leading-relaxed">网络异常改变同步状态，不擅自改 Run 的业务状态。</li>
+        <li class="my-3 leading-relaxed">
+          runId 区分任务，epoch 区分本地订阅批次，version 区分业务快照的新旧。
+        </li>
+        <li class="my-3 leading-relaxed">相同版本保留快照，但成功同步后应清除网络错误。</li>
+        <li class="my-3 leading-relaxed">
+          Zod 的自定义校验可以检查业务规则；跨任务环检测由项目的拓扑排序承担。
+        </li>
+        <li class="my-3 leading-relaxed">个人贡献要落到具体决策、实现和验证，不只说“负责架构”。</li>
+      </ul>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="outbox"
+      >
+        01 为什么需要 Outbox
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        为什么不在数据库创建 Run 后直接调用
+        <code class="font-mono text-base [overflow-wrap:anywhere]">queue.add()</code>？Outbox
+        解决了什么故障窗口？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        最初认为 Outbox 保存队列任务状态，Redis 丢数据后可以扫描恢复；还认为
+        <code class="font-mono text-base [overflow-wrap:anywhere]">finishedAt</code>
+        决定是否继续扫描。随后正确说出了 Run 与 Outbox
+        同事务写入，但把直接入队方案的恢复描述为“回滚已经提交的记录”。这些边界需要重点复习。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我引入 Outbox，主要是为了处理数据库写入与消息入队之间无法直接原子提交的问题。
+        </p>
+        <p class="my-4 leading-loose">
+          如果先保存 Run，再调用 Redis
+          入队，进程可能在数据库提交后、入队前崩溃。这样数据库里有生成任务，但队列不知道它的存在。已经提交的数据库事务不会因为进程崩溃自动回滚。
+        </p>
+        <p class="my-4 leading-loose">
+          当前实现把 Run 和待投递的 Outbox 事件放在同一个 PostgreSQL 事务里提交。API
+          在提交完成后返回 202 和 Run ID。后台 Dispatcher 再扫描未投递的事件，调用 BullMQ
+          入队，并记录投递结果。
+        </p>
+        <p class="my-4 leading-loose">
+          这样，入队前崩溃时，数据库仍保留待处理事件，恢复后能够继续尝试投递。不过这不等于业务恰好执行一次，也不能覆盖所有
+          Redis 数据丢失场景，因此还需要消费端的幂等落库。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink"
+          >追问：已经投递成功，后来 Redis 丢了 Job，也能恢复吗？</strong
+        >
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          当前不能依靠这个 Dispatcher 自动恢复。它只扫描
+          <code class="font-mono text-base [overflow-wrap:anywhere]">dispatchedAt</code>
+          为空、未进入死信且已到可投递时间的事件。已经标记投递成功的记录不会因为 Run
+          尚未完成而自动重新入队。长期未完成的 Run 可以由超时机制收束，但超时收束不等于恢复丢失的
+          Job。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">追问：入队成功，写入投递标记前崩溃呢？</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          Redis 可能已经保存 Job，但数据库尚未确认投递。PostgreSQL 事务回滚不能撤销 Redis
+          的写入，因此恢复后会再次尝试投递。项目使用稳定 Job ID
+          降低重复入队，并在最终落库处继续保证业务幂等，不能只依赖队列去重。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">记住两个事务</strong></p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">接受事务：Run 与 Outbox 一起创建。</li>
+        <li class="my-3 leading-relaxed">
+          分发事务：领取
+          Outbox，尝试外部入队，再更新投递标记。数据库事务只控制数据库中的写入，不会把 Redis
+          变成同一个事务的一部分。
+        </li>
+      </ul>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="finalization"
+      >
+        02 重复执行为什么不会保存两份 Plan
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        如果同一个 Run 的结果被两个调用者并发提交，怎样避免各写入一份 Plan？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        首次回答“忘记了”。讲解后能正确解释：事务外读取之后，到拿到锁之前，Run
+        可能已经被其他事务修改，因此拿锁后还要重新检查。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我的目标是保证同一个 Run 最多成功保存一份 Plan，而不是假设队列任务绝不重复执行。
+        </p>
+        <p class="my-4 leading-loose">
+          成功落库时，先检查 Run 的归属、状态、截止时间和预期版本，再进入数据库事务，对对应 Run 执行
+          <code class="font-mono text-base [overflow-wrap:anywhere]">SELECT … FOR UPDATE</code
+          >。取得行锁后，再读取并比较当前版本与本次执行携带的预期版本。
+        </p>
+        <p class="my-4 leading-loose">
+          假设两个提交都携带版本 1。A 先拿到锁，创建完整计划图，把 Run 更新为成功并递增到版本
+          2，然后一起提交。B 随后拿锁，读到版本 2，发现自己的版本已过时，就返回
+          <code class="font-mono text-base [overflow-wrap:anywhere]">SKIPPED</code
+          >，不会再创建计划。
+        </p>
+        <p class="my-4 leading-loose">
+          数据库还为
+          <code class="font-mono text-base [overflow-wrap:anywhere]">Plan.generationRunId</code>
+          设置了唯一约束，限制同一个 Run 只能关联一份
+          Plan。正常的重复提交应该被状态或版本检查识别，而不是主要依靠唯一约束报错。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">四个机制分别负责什么</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">行锁：让同一行的竞争修改按锁的顺序执行。</li>
+        <li class="my-3 leading-relaxed">版本：判断当前执行结果是否仍然有效。</li>
+        <li class="my-3 leading-relaxed">事务：让完整计划图和 Run 的成功状态一起提交或回滚。</li>
+        <li class="my-3 leading-relaxed">唯一约束：从数据库层禁止同一个 Run 对应两份 Plan。</li>
+      </ul>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">追问：事务外已经检查过，为什么锁内还要检查？</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          事务外检查只是预检查。检查通过以后，别人仍可能先完成或终止这个
+          Run。拿锁后必须基于最新版本重新判断，不能使用之前读取的旧值直接写入。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">实现边界</strong></p>
+      <p class="my-4 leading-loose">
+        这里演示的是两个提交都携带同一预期版本的情况。真实执行领取也会递增版本；如果后续执行取得了新版本，更旧的结果同样会被挡住。不要把“重复投递”说成“一定同时出现两个有效
+        Worker”。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="transaction"
+      >
+        03 为什么 Plan 与 Run 成功状态必须同事务提交
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        如果 Plan 已保存，但更新 Run 为
+        <code class="font-mono text-base [overflow-wrap:anywhere]">SUCCEEDED</code> 失败，会怎样？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        正确识别 Plan 已存在、Run 未成功的中间状态，但最初认为再次写入会覆盖旧
+        Plan。经追问修正为唯一约束阻止插入，又把后果说成“Run 无法进入终态”。实际还可能进入失败终态。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          对我这个业务来说，完整 Plan 存在与 Run
+          成功应该作为一个整体提交。如果分成两个事务，可能出现计划已经保存，Run
+          却仍在处理中，导致查询、重试和页面展示相互矛盾。
+        </p>
+        <p class="my-4 leading-loose">
+          如果后来又执行到创建 Plan，当前代码调用的是
+          <code class="font-mono text-base [overflow-wrap:anywhere]">create</code>，不会覆盖原来的
+          Plan。同一个 Run 的唯一约束会拒绝第二次插入。Processor
+          捕获落库异常后，在状态和版本仍匹配时还可能将 Run 标记为
+          <code class="font-mono text-base [overflow-wrap:anywhere]">FAILED</code
+          >，于是形成“计划存在，但生成记录显示失败”的不一致。
+        </p>
+        <p class="my-4 leading-loose">
+          所以当前把 Plan、阶段、任务、验收标准、依赖关系，以及 Run
+          的成功状态放在同一个事务内。任意一步失败都回滚，不留下半份计划或只有一边成功的结果。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">两个容易混淆的点</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          Run 尚未终态，不等于 BullMQ 必然自动重试；队列有自己的任务状态和重试机制。
+        </li>
+        <li class="my-3 leading-relaxed">
+          数据库唯一约束可以拒绝重复写入，但不能独自修复“Plan 与 Run 状态不同步”的设计。
+        </li>
+      </ul>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="timeout"
+      >
+        04 为什么超时后的旧结果不能覆盖终态
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        Run 已被标记 <code class="font-mono text-base [overflow-wrap:anywhere]">TIMED_OUT</code>，旧
+        Worker 后来返回了有效模型结果，能否改成成功？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        正确回答不能，但先只提截止时间；进一步追问时，把锁内保护记成
+        <code class="font-mono text-base [overflow-wrap:anywhere]">RUNNING</code>
+        状态检查。核对代码后确认，锁内实际依赖版本检查。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          不能接受这个旧结果。同一个 Run
+          一旦进入终态，就不应该被迟到执行改回成功，否则用户已经看到的超时结论和后续重试关系都会变得不可靠。
+        </p>
+        <p class="my-4 leading-loose">
+          当前落库函数在事务外检查状态、截止时间和版本。为了处理检查之后发生的竞态，超时扫描在把 Run
+          改成
+          <code class="font-mono text-base [overflow-wrap:anywhere]">TIMED_OUT</code>
+          时，还会同步递增版本。
+        </p>
+        <p class="my-4 leading-loose">
+          例如旧 Worker 携带版本 1，即使它先通过了事务外检查，只要超时扫描先提交了
+          <code class="font-mono text-base [overflow-wrap:anywhere]">TIMED_OUT / version = 2</code
+          >，它后来拿到锁就会发现版本不匹配，返回
+          <code class="font-mono text-base [overflow-wrap:anywhere]">SKIPPED</code>，不保存旧结果。
+        </p>
+        <p class="my-4 leading-loose">
+          这条防线依赖一个重要约定：使旧执行失效的状态变更必须同时更新版本。当前锁内没有再次显式检查
+          <code class="font-mono text-base [overflow-wrap:anywhere]">RUNNING</code
+          >，因此不能把没有写出来的检查说成已有实现。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">追问：新增超时路径忘了递增版本，会怎样？</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          如果旧 Worker
+          已经通过事务外检查，拿锁后看到的版本仍与自己一致，当前锁内检查就可能放行，造成旧结果覆盖终态。需要维护状态与版本同步更新的不变量。
+        </p>
+      </blockquote>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="testing"
+      >
+        05 怎样验证并发落库
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        怎样用自动化测试证明同一个 Run 并发提交两次，最终只有一份 Plan？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        最初写成两次连续
+        <code class="font-mono text-base [overflow-wrap:anywhere]">await call()</code
+        >，实际是串行重复提交；用
+        <code class="font-mono text-base [overflow-wrap:anywhere]"
+          >expect(result1 === result2)</code
+        >
+        比较返回值，也没有真正完成断言。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我会先准备同一个处于
+          <code class="font-mono text-base [overflow-wrap:anywhere]">RUNNING</code> 的
+          Run，让两个落库调用携带相同的预期版本，在等待任何一个完成之前就先发起两个调用。
+        </p>
+        <p class="my-4 leading-loose">
+          项目已有的验收用
+          <code class="font-mono text-base [overflow-wrap:anywhere]">Promise.allSettled()</code>
+          等待两个调用结束。结果应当是一个
+          <code class="font-mono text-base [overflow-wrap:anywhere]">FINALIZED</code>，另一个
+          <code class="font-mono text-base [overflow-wrap:anywhere]">SKIPPED</code
+          >，而不是预先指定第一个调用一定获胜。两者应指向同一份 Plan。
+        </p>
+        <p class="my-4 leading-loose">
+          除了返回值，还要查数据库：这个 Run 只有一份 Plan，Run 为
+          <code class="font-mono text-base [overflow-wrap:anywhere]">SUCCEEDED</code
+          >，版本只因这次成功提交增加一次。最后等两个调用都结束，再删除测试数据。
+        </p>
+        <p class="my-4 leading-loose">
+          这能验证并发调用下的业务结果。不过仅仅同时启动两个
+          Promise，还不能保证每次测试都卡在完全相同的数据库竞争窗口；如果要精确复现某个交错时序，需要额外的同步控制。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">口述时可写的简化代码</strong>
+      </p>
+      <pre
+        class="my-6 whitespace-pre-wrap border-y border-hairline-strong py-4 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]"
+      ><code class="font-mono text-sm">// 两次调用使用同一个 Run 与预期版本。
+const settled = await Promise.allSettled([
+  finalizer.execute(command),
+  finalizer.execute(command),
+])
+
+// 再检查返回状态、planId、数据库记录数与 Run 版本。
+// 两个调用均结束后才清理数据。
+</code></pre>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">断言纠错</strong></p>
+      <p class="my-4 leading-loose">
+        <code class="font-mono text-base [overflow-wrap:anywhere]">result1 === result2</code>
+        对对象比较的是引用，不是业务字段；两个调用的返回状态本来就可以不同。<code
+          class="font-mono text-base [overflow-wrap:anywhere]"
+          >expect(...)</code
+        >
+        后还需要 <code class="font-mono text-base [overflow-wrap:anywhere]">.toBe(...)</code>、<code
+          class="font-mono text-base [overflow-wrap:anywhere]"
+          >.toEqual(...)</code
+        >
+        等匹配器。
+      </p>
+      <p class="my-4 leading-loose">
+        已有测试代码是可核对的证据。本轮面试没有重新执行它，不能把“测试存在”说成“刚刚运行通过”。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="promise"
+      >
+        06 await、并发与 Promise 的失败处理
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">先创建两个 Promise，再依次 await，它们是串行还是并发？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        最初认为第二个 await 晚执行，所以任务串行；追问“第二次 call
+        是否已经启动”后完成修正。独立答对
+        <code class="font-mono text-base [overflow-wrap:anywhere]">Promise.all()</code>
+        拒绝不会自动停止另一个任务，也能识别测试清理与未结束写入的竞态。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          要区分任务启动和等待结果。对于这里返回 Promise 的异步函数，调用
+          <code class="font-mono text-base [overflow-wrap:anywhere]">call()</code>
+          时函数就开始执行，同步部分会执行到挂起点；<code
+            class="font-mono text-base [overflow-wrap:anywhere]"
+            >await</code
+          >
+          用来等待结果，不负责启动它。
+        </p>
+        <p class="my-4 leading-loose">
+          如果先调用两次
+          <code class="font-mono text-base [overflow-wrap:anywhere]">call()</code>，再依次 await
+          两个结果，两个操作可以重叠执行。相反，如果先 await
+          第一次调用，完成后才写第二次调用，任务才是串行的。并发不要求同时开始，也不等于 JavaScript
+          在两个线程并行执行。
+        </p>
+        <p class="my-4 leading-loose">
+          <code class="font-mono text-base [overflow-wrap:anywhere]">Promise.all()</code>
+          在一个输入拒绝时会提前拒绝，但不会自动取消其他已启动操作。需要等待所有操作结束再做清理时，可以使用
+          <code class="font-mono text-base [overflow-wrap:anywhere]">Promise.allSettled()</code
+          >，并逐项检查成功和失败结果。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">串行</strong></p>
+      <pre
+        class="my-6 whitespace-pre-wrap border-y border-hairline-strong py-4 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]"
+      ><code class="font-mono text-sm">const r1 = await call(command)
+const r2 = await call(command)
+</code></pre>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">先启动两个操作，再等待</strong>
+      </p>
+      <pre
+        class="my-6 whitespace-pre-wrap border-y border-hairline-strong py-4 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]"
+      ><code class="font-mono text-sm">const p1 = call(command)
+const p2 = call(command)
+const results = await Promise.allSettled([p1, p2])
+</code></pre>
+      <p class="my-4 leading-loose">
+        先创建 <code class="font-mono text-base [overflow-wrap:anywhere]">p1</code>、<code
+          class="font-mono text-base [overflow-wrap:anywhere]"
+          >p2</code
+        >
+        再依次 await，也不会把已经启动的任务变成串行；不过独立拒绝的处理需要额外注意。测试中集中使用
+        <code class="font-mono text-base [overflow-wrap:anywhere]">allSettled</code> 更清楚。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">追问：为什么清理前要等两个操作都结束？</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          否则第一个失败后可能立即进入 finally
+          清理，而第二个还在写数据库。结果可能是晚写入数据未被清理，也可能是父记录被删除后发生外键错误，具体取决于表关系和执行顺序。测试结果会被这场清理竞态干扰。
+        </p>
+      </blockquote>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="refresh"
+      >
+        07 页面刷新怎样恢复同一次 Run
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">用户生成过程中刷新页面，怎样找回原来的任务？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        能够独立说出 URL 保存 Run ID、刷新后解析 ID 并查询最新状态。还需要补充当前的 HTTP 与 SSE
+        协调，以及内存缓存不是持久化真相源。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          创建生成任务成功后，页面会把服务端返回的 Run ID 写到 URL 查询参数
+          <code class="font-mono text-base [overflow-wrap:anywhere]">run</code>。刷新时从 URL
+          重新读取这个 ID，在用户身份有效的前提下，恢复对同一个 Run 的查询与订阅。
+        </p>
+        <p class="my-4 leading-loose">
+          当前页面通过统一的恢复入口发起 HTTP 快照读取，并建立 SSE 订阅；连接建立或重连时还会触发
+          HTTP 校准。HTTP 与 SSE 的结果都经过同一套批次和版本归并，再更新页面与 Query 缓存。
+        </p>
+        <p class="my-4 leading-loose">
+          刷新恢复只读取原 Run，不重新发送创建生成任务的请求。后台 Worker
+          独立执行，数据库保存实际状态。缓存可以帮助页面展示，但完整刷新后内存缓存可能不存在，因此真正的恢复依据是
+          URL 中的 Run ID 和服务端持久化快照。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">边界</strong></p>
+      <p class="my-4 leading-loose">
+        HTTP 返回与 SSE
+        通知没有固定先后顺序，因此不能依赖“先查一次，再永远接受后来的事件”。当前是状态快照恢复，不是完整历史事件重放，也不是模型逐字流。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="errors"
+      >
+        08 网络故障、业务失败和 401 如何区分
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">状态查询失败时，页面能否把 Run 显示为 FAILED？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        独立答对不能将网络错误当业务失败，但忘记具体页面行为；随后主动追问“如果只保留缓存、不提示错误，体验是否不好”。401
+        的身份验证含义回答正确。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我把 Run 的业务状态和页面的同步状态分开处理。HTTP
+          请求失败只能说明现在读不到最新结果，不能推断后台模型生成失败。
+        </p>
+        <p class="my-4 leading-loose">
+          如果已有快照，就保留最后一次已知进度，同时明确提示同步异常，告诉用户显示的内容可能不是最新的。如果完全没有快照，就显示暂时无法读取运行，并提供重新读取按钮，不假装知道任务进度。
+        </p>
+        <p class="my-4 leading-loose">
+          当前普通 HTTP 错误会进入轮询，每次请求结束后间隔 2 秒再次查询同一个 Run。SSE
+          暂时断开时先尝试重连和 HTTP 校准，持续连接不上则在 10 秒后转为轮询。只有服务端快照明确返回
+          FAILED 或 TIMED_OUT，才展示业务失败并允许创建关联重试。
+        </p>
+        <p class="my-4 leading-loose">
+          401 则表示身份验证失败，可能是未登录或登录过期。当前实现会停止同步、清除快照和 Query
+          缓存、清空用户状态并跳转登录，不能继续按普通断网处理。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">页面实际提示</strong></p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          暂时无法同步状态，正在通过 HTTP 重试。已保留上次读取的进度；连接问题不代表生成失败。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">这不是静默展示缓存：旧进度、错误提示与恢复请求同时存在。</p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">别把旧方案说成当前方案</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        当前 C2 恢复驱动使用请求结束后间隔 2
+        秒的轮询，不是旧简历快照中的递增间隔轮询。代码已接入页面，但真实用户观察与单元收尾仍以计划记录为准。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="epoch"
+      >
+        09 切换 Run 后怎样隔离旧回调
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">切到 B 后，A 的响应才返回，怎样防止覆盖？如果 A → B → A 呢？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        能独立说明比较 Run ID；A → B → A 的情况忘记实现，猜测需要类似版本号。经讲解确认实际使用本地
+        epoch，也能指出资源清理的消耗问题。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我同时使用 Run ID 和本地订阅批次 epoch。Run ID 区分不同任务，但用户可能从 A 切到 B，再切回
+          A，这时旧 A 与新 A 的 Run ID 相同，仅靠 ID 不够。
+        </p>
+        <p class="my-4 leading-loose">
+          每次选择 Run 或停止当前生命周期，都递增 epoch。请求和订阅回调携带发起时的
+          epoch，只有与当前批次一致的回调才有资格影响页面。
+        </p>
+        <p class="my-4 leading-loose">
+          比如第一次 A 是批次 1，B 是批次 2，再回 A 是批次 3。第一次 A 的迟到响应仍带批次
+          1，所以会被忽略，即使 Run ID 相同。
+        </p>
+        <p class="my-4 leading-loose">
+          切换时还会取消旧 HTTP 请求、关闭 SSE
+          和清理定时器，以停止无用工作。取消无法保证所有已产生回调立即消失，因此 epoch
+          继续承担最后的状态隔离。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">三个标识不要混用</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">runId：这是哪一个业务任务？</li>
+        <li class="my-3 leading-relaxed">epoch：这是当前页面的哪一轮请求和订阅？</li>
+        <li class="my-3 leading-relaxed">Run.version：这份业务快照比已知状态新还是旧？</li>
+      </ul>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="snapshot"
+      >
+        10 怎样协调 HTTP、SSE 和不同版本的快照
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        SSE 先返回版本 3，HTTP 后返回版本 2，怎么办？断网恢复后仍是版本 3 呢？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        独立答对保留版本
+        3，但把旧版本称为非法内容；追问后理解更高版本的正常更新。相同版本恢复时，先回答保留缓存，再补充正确说明应清除错误提示。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          HTTP 和 SSE 的完成顺序不可靠，所以页面不采用“最后到达的响应覆盖一切”。先确认结果属于当前
+          Run 和当前 epoch，再与当前已接受快照的版本比较。
+        </p>
+        <p class="my-4 leading-loose">
+          没有快照时接受第一份有效快照；版本更高时更新快照并同步缓存；版本更低时忽略，避免页面倒退。这里的比较基准会随着新快照不断更新，不是固定的首次版本。
+        </p>
+        <p class="my-4 leading-loose">
+          相同版本不需要替换快照或重复写缓存，但如果这次读取成功，应该清除之前的同步错误。业务没有变化和网络已经恢复，是两个独立事实。
+        </p>
+        <p class="my-4 leading-loose">
+          接受到成功、失败或超时终态后，恢复入口会停止订阅、轮询和未完成请求，忽略后续回调。同一个
+          Run 的终态不再变化，重新生成会创建新的 Run。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">三个例子</strong></p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          当前 v3，收到 v2：保留 v3。v2 是过期快照，不一定是非法数据。
+        </li>
+        <li class="my-3 leading-relaxed">
+          当前 v3 且有网络错误，成功收到 v3：保留快照引用，清除同步错误。
+        </li>
+        <li class="my-3 leading-relaxed">
+          当前 v3/RUNNING，收到 v4/SUCCEEDED：更新为 v4，随后停止同步。
+        </li>
+      </ul>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">追问：终态后收到更高版本呢？</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          当前前端进入 stopped 后会忽略后续回调。这个处理依赖同一 Run
+          终态稳定的业务规则，不能把更高版本视为推翻终态的通行证。
+        </p>
+      </blockquote>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="validation"
+      >
+        11 Zod 能检查什么，为什么还需要图校验
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">计划通过 Zod 校验后，是否就能直接落库？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        正确指出仍要检查 DAG，但“Zod 只能检查值，无法检查逻辑”的表述过于绝对。项目已经用
+        <code class="font-mono text-base [overflow-wrap:anywhere]">superRefine</code> 编写业务校验。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          通过结构校验还不足以证明计划可以执行。我的基础 Schema
+          检查字段类型、长度、数量等约束，再通过 superRefine 检查任务 ID 全局唯一、依赖 ID
+          存在，以及任务不能依赖自己。
+        </p>
+        <p class="my-4 leading-loose">
+          这些规则仍不足以排除跨任务的循环，比如 A 依赖 B、B 又依赖 A。它们引用的 ID
+          都存在，也不是直接依赖自己，但无法开始执行，因此还要对整张任务图做环检测。
+        </p>
+        <p class="my-4 leading-loose">
+          这不是 Zod 原理上不能表达业务逻辑，而是当前项目把通用结构和引用校验放在
+          Schema，把图算法作为独立校验步骤。所有校验通过后，候选计划才进入成功落库流程。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">记住“校验通过”的具体范围</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        格式正确、引用正确、图无环和业务结果正确，不是同一个层次。结构化输出降低格式处理成本，也不能代替本地业务校验。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="dag"
+      >
+        12 怎样用拓扑排序检测依赖环
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">怎样检测 A、B 互相依赖？如果图中一部分正常、一部分有环呢？</p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        能说明入度为零的节点先入队，也能判断 A、B
+        互相依赖时无法开始。最初漏掉“处理前驱后递减入度，归零才入队”；修正后独立答对处理节点数与总数比较。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          我使用 Kahn
+          拓扑排序。把每个任务作为节点，边从前置任务指向依赖它的后续任务；入度表示这个任务还剩多少个前置任务没有在本次拓扑处理中被处理。
+        </p>
+        <p class="my-4 leading-loose">
+          先把所有入度为零的节点放入队列。每处理一个节点，就遍历它的后继，将后继入度减一；只有减到零，才能把该后继加入队列。
+        </p>
+        <p class="my-4 leading-loose">
+          队列耗尽后，比较处理节点数与总节点数。如果相等，所有节点都能排进拓扑序；如果小于总数，说明还有节点被循环依赖阻塞。
+        </p>
+        <p class="my-4 leading-loose">
+          比如 C 同时依赖 A 和 B，处理 A 后 C 仍有一个前置任务，不能入队。对于 A、B 正常而 C、D
+          互相依赖的图，即使能先处理
+          A、B，最终处理数仍小于总数，也能判出环。当前检查跨越所有阶段，不只检查单个阶段内部。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        这里的“处理”是图算法中的访问，不代表用户已经实际完成学习任务。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">补充追问准备：复杂度</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        每个节点进入处理队列一次，每条边用于递减入度一次，时间复杂度为
+        <code class="font-mono text-base [overflow-wrap:anywhere]">O(V + E)</code>，空间复杂度为
+        <code class="font-mono text-base [overflow-wrap:anywhere]">O(V + E)</code
+        >。这项复杂度分析是复盘补充，本轮没有实际提问，不计入已答对内容。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="ownership"
+      >
+        13 AI 辅助开发中的个人贡献与 LangChain 选型
+      </h2>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">面试问题</strong></p>
+      <p class="my-4 leading-loose">
+        项目用了 AI，你的核心贡献是什么？LangChain 实际替代了什么工作？
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">本轮表现</strong></p>
+      <p class="my-4 leading-loose">
+        你说明项目想法和架构由自己设计，负责纠正不合理设计、控制目标，并举出选择 LangChain
+        的例子。追问后能指出统一模型调用与结构化输出能力。代码可以核实这些能力的使用，但不能单独证明全部设计归属或节省的开发成本。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">完整表述 · 约 60～90 秒</strong>
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          项目的想法和技术路线由我推动，AI
+          参与实现。我主要负责明确业务目标、控制范围和判断技术取舍，同时亲自完成关键逻辑，而不只是接受生成结果。
+        </p>
+        <p class="my-4 leading-loose">
+          一个具体选择是模型接入。我希望把精力放在可恢复的学习计划生成上，因此选择复用 LangChain
+          的通用模型接口和结构化输出能力，减少自己处理模型接入通用细节的工作。
+        </p>
+        <p class="my-4 leading-loose">
+          当前实现使用 ChatOpenAI、withStructuredOutput 和
+          invoke，同时保留项目自己的生成端口和适配器。LangChain
+          返回候选数据以后，仍由项目检查任务引用与依赖图，再通过自己的事务、版本和终态规则落库。
+        </p>
+        <p class="my-4 leading-loose">
+          我亲自完成过 DAG 环检测、C1 原子成功落库，以及 C2 的前端恢复协调，并通过代码 Review
+          和验收检查。C2
+          目前还在页面观察和收尾阶段，我会区分已经完成的代码与尚未完成的产品验收。开发成本没有做量化对比，所以不会声称节省了多少时间。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose">
+        上面的个人职责依据你的本轮陈述和既有手写记录；应按真实经历表达。不要为了显得主导而扩大到自己没有参与的工作。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink"
+          >追问：直接用模型供应商 SDK 也能做，为什么用 LangChain？</strong
+        >
+      </p>
+      <blockquote class="my-6 border-l-2 border-link pl-4 text-ink">
+        <p class="my-4 leading-loose">
+          能做，结构化输出也不是 LangChain
+          独有。我选择它主要是复用统一的调用和结构化输出接口，让业务侧依赖项目自己的生成端口。不过这会增加依赖和框架适配成本，当前也没有完成多供应商对比或迁移验证，因此不能把将来的扩展收益说成已经测量过的事实。
+        </p>
+      </blockquote>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">表达边界</strong></p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          不说“引入 LangChain 后不再需要封装”：项目仍有自己的适配器。
+        </li>
+        <li class="my-3 leading-relaxed">
+          不说“LangChain 保证任务可靠执行”：队列、状态、超时、幂等和事务属于项目自己的机制。
+        </li>
+        <li class="my-3 leading-relaxed">
+          不把当前的模型与结构化输出适配，扩写成已经落地了完整开放式 Agent 编排。
+        </li>
+      </ul>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="review"
+      >
+        复习顺序与自查题
+      </h2>
+      <p class="my-4 leading-loose">
+        按需选择，不要求一次读完，也不新增学习单元或重新验收已完成手写。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">第一优先级：投递与落库</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        先复习第 01～04 题。合上答案，用一个 Run
+        讲清三个故障时间点：入队前崩溃；入队后标记前崩溃；超时提交后旧结果到达。每次说明
+        PostgreSQL、Redis 和前端各自知道什么。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">第二优先级：异步与测试</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        复习第 05～06
+        题。自己写出串行与并发的两段代码，逐行说明哪个操作已经启动。再列出并发验收的返回值断言和数据库断言。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">第三优先级：页面恢复</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        复习第 07～10 题。用 runId、epoch、version 三个数字走通 A → B →
+        A，再解释网络恢复后版本不变为何仍要更新错误提示。
+      </p>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">最后巩固：校验与个人贡献</strong>
+      </p>
+      <p class="my-4 leading-loose">
+        复习第 11～13 题。口述 DAG
+        算法时必须说出“递减入度、归零入队、比较处理数”；个人贡献用一个具体选型加一项亲自完成的实现支撑。
+      </p>
+      <p class="my-4 leading-loose"><strong class="font-semibold text-ink">不看答案自查</strong></p>
+      <ol class="my-4 list-decimal pl-6">
+        <li class="my-3 leading-relaxed">
+          <code class="font-mono text-base [overflow-wrap:anywhere]">dispatchedAt</code>
+          已存在的事件，当前 Dispatcher 还会重投吗？
+        </li>
+        <li class="my-3 leading-relaxed">为什么拿到锁后还要比较版本？</li>
+        <li class="my-3 leading-relaxed">超时只改状态、不递增版本，会破坏哪条防线？</li>
+        <li class="my-3 leading-relaxed">两个 Promise 都启动了，依次 await 会让它们串行吗？</li>
+        <li class="my-3 leading-relaxed">为什么并发测试的 finally 清理前要等待所有调用结束？</li>
+        <li class="my-3 leading-relaxed">断网恢复但版本没变化，哪些数据保留，哪些提示清除？</li>
+        <li class="my-3 leading-relaxed">A → B → A 为什么不能只比较 runId？</li>
+        <li class="my-3 leading-relaxed">Zod 已检查依赖 ID 存在，为什么还需要拓扑排序？</li>
+      </ol>
+      <p class="my-4 leading-loose">
+        能脱离提示说清机制、一个失败场景和实际代码位置，再记录为复习通过。仅看懂参考答案不自动等于掌握。
+      </p>
+      <p class="my-4 leading-loose">
+        下一次建议使用
+        <strong class="font-semibold text-ink">Answer clinic（答案打磨）</strong>，先练 Outbox
+        和原子落库两段口述，不继续扩展新考点。
+      </p>
+
+      <h2
+        class="mt-12 mb-6 border-t border-hairline-strong pt-8 text-xl leading-normal font-semibold text-ink scroll-mt-20"
+        id="evidence"
+      >
+        代码证据与当前完成边界
+      </h2>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">已核实的当前实现</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          Run 与 Outbox 同事务写入：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/api/src/plan-generation/plan-generation.repository.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          分发筛选与投递标记：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/worker/src/outbox/outbox-dispatcher.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          固定 Job ID、重试配置与 Job 保留：<code
+            class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/worker/src/queue/bullmq-plan-generation-queue.exercise.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          行锁、版本检查、计划图与成功状态同事务：<code
+            class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/worker/src/plan-generation/finalize-plan-generation-run.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          执行领取、失败记录与超时递增版本：<code
+            class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/worker/src/plan-generation/plan-generation-run.repository.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          Plan 与 Run 的唯一关系：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >prisma/schema.prisma</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          并发落库验收代码：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/worker/test/finalize-plan-generation-run.acceptance.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          URL、错误提示与页面状态：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/web/app/pages/app/plan.vue</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          epoch 与快照版本归并：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/web/app/lib/plan-run-recovery.exercise.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          HTTP、SSE、超时兜底与资源清理：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/web/app/lib/plan-run-recovery-driver.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          Query 缓存、用户状态及登录跳转：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >apps/web/app/composables/use-plan-run-recovery.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          Zod 与跨任务引用校验：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >packages/agent-core/src/plan-generation/plan-generation.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          Kahn 环检测：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >packages/agent-core/src/plan-generation/plan-dependency-graph.exercise.ts</code
+          >。
+        </li>
+        <li class="my-3 leading-relaxed">
+          LangChain 适配：<code class="font-mono text-base [overflow-wrap:anywhere]"
+            >packages/agent-core/src/plan-generation/langchain-plan-generator.ts</code
+          >。
+        </li>
+      </ul>
+      <p class="my-4 leading-loose">
+        <strong class="font-semibold text-ink">陈述与证据要分开</strong>
+      </p>
+      <ul class="my-4 list-disc pl-6">
+        <li class="my-3 leading-relaxed">
+          “项目想法与架构由我主导”是你的个人经历陈述，代码本身不能独立证明设计归属。
+        </li>
+        <li class="my-3 leading-relaxed">
+          “采用 LangChain 降低维护成本”是选型动机，没有本轮测量的成本对照数据。
+        </li>
+        <li class="my-3 leading-relaxed">
+          并发测试代码已核实；本轮没有重新执行产品测试，不新增通过次数。
+        </li>
+        <li class="my-3 leading-relaxed">
+          C1 已有完成记录；C2 手写 Review 与页面接入已有记录，但当前仍为
+          <code class="font-mono text-base [overflow-wrap:anywhere]">WALKTHROUGH</code
+          >，真实用户观察、短复述与独立提交尚未完成。
+        </li>
+        <li class="my-3 leading-relaxed">
+          本次只是专项模拟面试和材料整理，不视为 W2，也不推进 R14 或其他产品单元状态。
+        </li>
+        <li class="my-3 leading-relaxed">
+          文档描述的是 2026-09-18 当前工作区，其中部分 C2
+          代码尚未提交。后续实现变化后，应重新核对相关口述。
+        </li>
+      </ul>
+    </main>
+    <footer
+      class="mx-auto max-w-3xl border-t border-hairline-strong px-4 py-8 text-base text-muted sm:px-6"
+    >
+      离线阅读版 · 无需登录或联网 · 2026-09-18 · 内容以同名 Markdown 原稿为准
+    </footer>
+  </body>
+</html>
