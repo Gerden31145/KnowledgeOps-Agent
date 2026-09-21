@@ -10,7 +10,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { definePageMeta, useHead, useRoute, useRouter } from '#imports'
 
 import { useKnowledgeOpsApi } from '../../composables/use-knowledge-ops-api'
-import { usePlanGenerationPolling } from '../../composables/use-plan-generation-polling.exercise'
+import { usePlanRunRecovery } from '../../composables/use-plan-run-recovery'
 import { useModelCatalogQuery, usePlanQuery } from '../../composables/use-workspace-queries'
 import { KnowledgeOpsApiError } from '../../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../../lib/query-keys'
@@ -27,13 +27,27 @@ const modelCatalog = useModelCatalogQuery()
 const runId = computed(() => readQueryValue(route.query.run))
 const persistedGoalId = computed(() => readQueryValue(route.query.goal))
 const routePlanId = computed(() => readQueryValue(route.query.plan))
-const generationRun = usePlanGenerationPolling(runId)
+const generationRun = usePlanRunRecovery(runId)
 const planId = computed(() => {
   const run = generationRun.data.value
-  if (run?.status === 'SUCCEEDED') return run.plan?.id ?? null
+  if (runId.value) return run?.status === 'SUCCEEDED' ? (run.plan?.id ?? null) : null
   return routePlanId.value
 })
 const plan = usePlanQuery(planId)
+const syncLabel = computed(() => {
+  switch (generationRun.mode.value) {
+    case 'connecting':
+      return '正在连接实时状态'
+    case 'streaming':
+      return '实时状态已连接'
+    case 'polling':
+      return '正在使用 HTTP 轮询同步'
+    case 'stopped':
+      return generationRun.error.value ? '状态同步已停止' : '运行已结束，已停止同步'
+    default:
+      return ''
+  }
+})
 
 const form = reactive({
   title: '',
@@ -207,6 +221,19 @@ function errorMessage(error: unknown): string {
       </p>
     </header>
 
+    <div
+      v-if="runId && syncLabel"
+      class="mb-8 border-l border-hairline-strong pl-4 text-sm leading-6 text-body"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <p>{{ syncLabel }}</p>
+      <p v-if="generationRun.data.value && generationRun.error.value" class="mt-2 text-warning">
+        {{ generationRun.error.value.message }} 已保留上次读取的进度；连接问题不代表生成失败。
+      </p>
+    </div>
+
     <section v-if="!runId && !routePlanId && !persistedGoalId" aria-labelledby="goal-form-title">
       <div class="grid gap-12 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <form class="space-y-8" novalidate @submit.prevent="submitGoal">
@@ -375,18 +402,26 @@ function errorMessage(error: unknown): string {
 
     <AsyncStatePanel
       v-else-if="runId && generationRun.isError.value"
-      title="暂时无法读取运行"
+      :title="generationRun.mode.value === 'stopped' ? '无法访问该运行' : '暂时无法读取运行'"
       :description="generationRun.error.value?.message ?? '请检查网络或 API 服务后重试。'"
       tone="warning"
     >
       <template #actions>
         <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase"
+          v-if="generationRun.canRefresh.value"
+          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
           type="button"
           @click="generationRun.refetch()"
         >
           重新读取
         </button>
+        <NuxtLink
+          v-else
+          class="inline-flex min-h-11 items-center rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          to="/app/plan"
+        >
+          返回表单
+        </NuxtLink>
       </template>
     </AsyncStatePanel>
 
@@ -398,7 +433,7 @@ function errorMessage(error: unknown): string {
     >
       <template #actions>
         <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase"
+          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
           type="button"
           @click="generationRun.refetch()"
         >

@@ -357,9 +357,9 @@ GitHub 用户 Token 以项目会话哈希为键仅保存在 API 内存，最多 
 
 授权依据：[用户可访问的安装与交集仓库](https://docs.github.com/en/rest/apps/installations)、[按仓库及权限收窄安装访问令牌](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)。
 
-### 5.8 R13：真实 Run 的 SSE 传输入口（页面恢复待 C2）
+### 5.8 R13：真实 Run 的 SSE 传输入口
 
-2026-09-17 R13 最小观察、两入口导读与短复述已由用户完成，累计实际投入约 35 分钟；4103 临时服务与两份练习源码已清理。现在读真实 PostgreSQL 中的 PlanGenerationRun；没有模型逐字流、事件历史或 cursor 重放。页面仍用原轮询，下面的入口尚未接入页面缓存，不能提前称为“前端 SSE 恢复已完成”。
+2026-09-17 R13 最小观察、两入口导读与短复述已由用户完成，累计实际投入约 35 分钟；4103 临时服务与两份练习源码已清理。接口读取真实 PostgreSQL 中的 PlanGenerationRun；没有模型逐字流、事件历史或 cursor 重放。R13 收尾时页面仍用原轮询；2026-09-18 已接入 C2，页面验证边界见下一节。
 
 可观察结果：已有登录 Cookie 且拥有该 Run 时，打开 `http://127.0.0.1:4000/plan-generation-runs/<runId>/events` 可收到 `snapshot`。`runId` 取已有计划页 URL 的 `run` 参数，不用创建新目标；终态只发一次快照便结束响应。若没有现存 Run，先看集成验证即可，真实生成/断网恢复统一在 C2 完成后观察，不为本轮额外调用模型。未登录返回 401；他人的 Run 与不存在的 Run 都返回 404。不要分享 Cookie 或完整网络导出。
 
@@ -386,7 +386,24 @@ API 每 2 秒串行重新验证数据库会话并查询持久化状态，有变�
 
 故障分两层：开始前用正常 HTTP 401/404/429/503；开始后不能再改变 200，改发安全的 `stream-error` 后关闭。前端传输层收到明确服务端错误或非法消息会关闭；原生 `error` 不提供 HTTP 状态，C2 必须通过 HTTP 校准判别失效会话、处理重连与兜底，不能把所有连接失败记成生成 FAILED。终态、切换 Run、卸载和退出时由 C2 调用 `close()`；仅服务端 end 不等于浏览器主动 close。
 
-响应设为 `text/event-stream`、`no-store, no-transform` 和 `X-Accel-Buffering: no`，沿用精确 Web Origin + credentials CORS。后续 R07/R17 仍须在部署代理上实测缓冲、空闲超时及断线，不以本机 Header 验证冒充已上线。R14/C2、真实浏览器恢复、轮询兜底和生产链路尚未验收。
+响应设为 `text/event-stream`、`no-store, no-transform` 和 `X-Accel-Buffering: no`，沿用精确 Web Origin + credentials CORS。后续 R07/R17 仍须在部署代理上实测缓冲、空闲超时及断线，不以本机 Header 验证冒充已上线。C2 工程验收已通过，用户真实生成观察与生产链路尚未验收。
+
+### 5.9 R14/C2：页面恢复接入
+
+`plan.vue` 现在只调用 `usePlanRunRecovery(runId)`，不同时运行旧轮询 composable；旧手写文件保留，终态错误文案助手继续复用。数据流是：URL/身份 → composable 选择 Run → driver 发起 HTTP/SSE → 用户 reducer 归并 → 同一份状态驱动页面与 Query 缓存 → driver 按状态清理/重连/兜底。Run 成功后才用它的 planId 加载完整计划；存在 run 参数时不回退到另一个 URL plan 参数，避免访问失败后展示无关计划。
+
+新增阅读仅两处：`apps/web/app/pages/app/plan.vue` 的 composable 调用、同步提示和错误出口；`apps/web/app/composables/use-plan-run-recovery.ts` 的 watch、cache、changed 与 onScopeDispose。无需重新逐行读已通过的 reducer 或整份 driver。连接出错时仍展示已有运行状态，并额外显示通道错误；访问不存在/无权 Run 时停止并清空，不显示一个点击后无作用的刷新按钮。状态提示使用现有 Tailwind 令牌与 polite live region，不引入新视觉体系。
+
+本地观察步骤（9/21 用户已反馈“已观察”；未附逐项现象或具体 Run 记录，不扩写为额外真实模型证据）：
+
+1. 在 `http://127.0.0.1:3000/app/plan` 使用自己的 GitHub 登录。先打开自己已有 Run 的 URL 并刷新，确认结果恢复且不新建任务；不要使用浏览器测试中的合成 UUID。
+2. 如需观察生成中的长连接，正常提交一个真实目标。Network 筛选 `plan-generation-runs`：应有 `/events` 和初次/open 校准 GET，但连接稳定时没有持续的周期 GET；完成后 `/events` 被主动关闭。已有终态 Run 可能来不及显示“实时已连接”，直接恢复结果是正确的。
+3. 在仍生成时通过 DevTools 将该标签页 Network 切为 Offline（不是断开电脑网络），让本机 Worker 的上游连接继续工作。页面保留已有进度，显示连接/HTTP 问题；恢复 No throttling 后应读到最新状态或结果，不重复创建任务。若 HTTP 也失败会直接降级；仅 SSE 不通而 HTTP 可用时，连接等待上限 10 秒后兜底。进入 polling 后本轮不自动升级 SSE，刷新页面才重建。
+4. 离开计划页面或退出登录，确认订阅结束、不继续查询；退出后访问工作台应回登录页。完成后恢复浏览器网络设置。只有确实观察到的行为才记为通过，不能将测试夹具当成本人模型生成记录。
+
+2026-09-18 工程证据：专用手写 10 项、Web 回归 19 项（含 5 项真实 Vue scope/QueryClient + 模拟网络端口测试）、`pnpm check` 207 项常规测试、`pnpm test:integration:r13` 6 项真实 PostgreSQL/HTTP 测试、Web 生产构建均通过。浏览器隔离夹具验证桌面 1440px/手机 390px、连接/加载/空表单/错误/终态、断线降级后读到成功、刷新恢复、旧 Run 通知隔离与鉴权失效跳转；确认无横向溢出，相关操作 44px 高、焦点可见。提示正文 #ccc/黑底、警告 #d4a017/黑底沿用现有高对比令牌。夹具已从浏览器移除，未写业务数据库、未调用模型，也不代表原生网络重连或真实模型观察完成。
+
+真实 SSE 集成测试按既有清理逻辑移除了自己创建的 UUID 测试用户/会话/Run，未删除用户数据。9/21 已恢复 PostgreSQL、Redis 与 Web/API/Worker，readiness 通过；API/Worker 当前以编译后的 start 运行，后端改动需重新构建/重启，Web 保持开发模式。未修改环境文件或凭据。用户观察反馈、接入理解确认与短复述已完成，9/21 复跑手写验收 10/10、Web 回归 19/19 及完整 `pnpm check`（207 项）通过，R14 随本次独立提交记为 DONE；生产代理验证仍属于后续范围。
 
 ## 6. 启动应用
 
