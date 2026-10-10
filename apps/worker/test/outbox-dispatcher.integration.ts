@@ -77,6 +77,35 @@ describe('OutboxDispatcher against PostgreSQL', () => {
     await database.$disconnect()
   })
 
+  it('leaves the R05 intake intent pending for its future consumer', async () => {
+    const eventId = randomUUID()
+    const publish = vi.fn<OutboxPublisher['publish']>()
+    const dispatcher = new OutboxDispatcher(database, { publish }, RETRY_POLICY, () => INITIAL_NOW)
+    await database.outboxEvent.create({
+      data: {
+        id: eventId,
+        type: 'GITHUB_PUSH_RECEIVED',
+        aggregateId: randomUUID(),
+        deduplicationKey: `r05-fixture-${eventId}`,
+        payload: {},
+        availableAt: INITIAL_NOW,
+      },
+    })
+    try {
+      await expect(dispatcher.dispatchEvent(eventId)).resolves.toEqual({ status: 'EMPTY' })
+      expect(publish).not.toHaveBeenCalled()
+      expect(
+        await database.outboxEvent.findUniqueOrThrow({ where: { id: eventId } }),
+      ).toMatchObject({
+        dispatchedAt: null,
+        deadLetteredAt: null,
+        dispatchAttemptCount: 0,
+      })
+    } finally {
+      await database.outboxEvent.deleteMany({ where: { id: eventId } })
+    }
+  })
+
   it('marks an event dispatched only after the publisher acknowledges it', async () => {
     const fixture = await createPendingEvent()
     const publish = vi.fn<OutboxPublisher['publish']>(async ({ payload }) => ({

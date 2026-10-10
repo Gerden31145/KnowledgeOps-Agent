@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { entityIdSchema } from '../shared/primitives.js'
 
-export const OUTBOX_EVENT_TYPES = ['PLAN_GENERATION_REQUESTED'] as const
+export const OUTBOX_EVENT_TYPES = ['PLAN_GENERATION_REQUESTED', 'GITHUB_PUSH_RECEIVED'] as const
 
 export const PLAN_GENERATION_QUEUE_NAME = 'plan-generation'
 export const PLAN_GENERATION_JOB_NAME = 'generate-plan'

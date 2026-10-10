@@ -4,7 +4,7 @@ import type {
   RepositoryBindingResponse,
   UnbindRepositoryInput,
 } from '@knowledgeops/contracts'
-import type { Prisma } from '@knowledgeops/database'
+import { Prisma } from '@knowledgeops/database'
 import type { DatabaseService } from '../database/database.service.js'
 import { GitHubRepositories } from './github-repositories.js'
 
@@ -15,6 +15,11 @@ const conflict = () =>
   })
 const missing = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: '找不到当前用户的仓库绑定。' })
+const repositoryConflict = () =>
+  new ConflictException({
+    code: 'CONFLICT',
+    message: '该仓库当前无法绑定，请刷新状态或选择其他仓库；已有活动绑定需先解除。',
+  })
 
 export class RepositoryBindingService {
   constructor(
@@ -52,23 +57,37 @@ export class RepositoryBindingService {
         return current
       if (current.version !== input.expectedVersion || existing) throw conflict()
 
-      // 3. 每用户串行 + 数据库唯一索引：一次只能有一个 enabled 绑定。
+      // 3. GitHub 权限已核验后再检查占用；不向调用方泄露绑定者身份。
+      const occupied = await tx.repository.findFirst({
+        where: { githubRepositoryId: verified.githubRepositoryId, enabled: true },
+        select: { id: true },
+      })
+      if (occupied) throw repositoryConflict()
+
+      // User 锁约束同一用户；跨用户抢占同一仓库由数据库部分唯一索引兜底。
       await tx.gitHubInstallation.upsert({
         where: { id: verified.installation.id },
         create: { ...verified.installation, verifiedAt: new Date() },
         update: { ...verified.installation, verifiedAt: new Date() },
       })
-      await tx.repository.create({
-        data: {
-          userId,
-          installationId: verified.installation.id,
-          githubRepositoryId: verified.githubRepositoryId,
-          fullName: verified.fullName,
-          defaultBranch: verified.defaultBranch,
-          branch: verified.branch,
-          isPrivate: verified.isPrivate,
-        },
-      })
+      try {
+        await tx.repository.create({
+          data: {
+            userId,
+            installationId: verified.installation.id,
+            githubRepositoryId: verified.githubRepositoryId,
+            fullName: verified.fullName,
+            defaultBranch: verified.defaultBranch,
+            branch: verified.branch,
+            isPrivate: verified.isPrivate,
+          },
+        })
+      } catch (error: unknown) {
+        // 查占用后仍可能被另一用户抢先绑定；抛出安全 409，让整个事务回滚。
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+          throw repositoryConflict()
+        throw error
+      }
       await tx.user.update({ where: { id: userId }, data: { repositoryVersion: { increment: 1 } } })
       return this.snapshot(tx, userId)
     })

@@ -110,7 +110,7 @@ pnpm db:generate
 
 Prisma Client 生成到 `packages/database/src/generated/prisma`，由 `@knowledgeops/database` 统一创建连接并供 API、Worker 复用；生成目录不提交 Git，`build:packages`、`typecheck`、`test` 和 `build` 都会先重新生成。
 
-当前迁移已经建立两条独立运行关系：`LearningGoal → PlanGenerationRun → Plan` 负责计划生成，`Task → AgentRun` 负责笔记或回答验收。`PlanGenerationRun + OutboxEvent` 是阶段 2 的持久化异步入口；Webhook、Submission、Evidence、Report 与 RunEvent 仍在对应阶段按真实链路加入。
+当前迁移已经建立两条独立运行关系：`LearningGoal → PlanGenerationRun → Plan` 负责计划生成，`Task → AgentRun` 负责笔记或回答验收。`PlanGenerationRun + OutboxEvent` 是阶段 2 的持久化异步入口；R05 已加入 `WebhookDelivery + OutboxEvent` 接收意图，Submission、Evidence、Report 与完整 RunEvent 仍在对应范围按真实链路加入。
 
 08-07 的 PostgreSQL 事务专用测试需要本地基础设施和迁移已经就绪：
 
@@ -227,7 +227,7 @@ R04 已将 `IdentityModule` 改为按请求读取真实会话；不再提供固�
 | Request user authorization (OAuth) during installation | 暂不勾选，登录与安装分开接入 |
 | Enable Device Flow | 不勾选，本项目使用浏览器跳转 |
 | Setup URL | 暂留空，后续安装时段再配置 |
-| Webhook / Active | 暂取消勾选，R05 接入签名后再开启 |
+| Webhook / Active | 暂取消勾选；R05 仅完成可信接收，待后续消费与受控联调准备好后再开启 |
 | Permissions | 暂不新增权限；仓库 Contents 只读在后续绑定时段再设置 |
 | Where can this GitHub App be installed? | 本地测试先选 Only on this account；开放给其他用户安装前必须调整并实测，不能宣称当前已支持 |
 
@@ -332,6 +332,8 @@ R04 集成使用真实 PostgreSQL、临时 Nest HTTP 端口和合成测试用户
 
 2026-09-10 用户已完成真实仓库列表、绑定、刷新恢复、解绑及再次刷新观察；以下步骤保留用于复现，不要求重复学习验收。Webhook 与后台分析尚未接入。
 
+2026-10-09 范围补充：保留“一名用户一个活动仓库”，同时限制“一个 GitHub 仓库一个活动用户”。占用按 GitHub 仓库 ID 判断，换分支/安装仍不能重复绑定；已授权但被占用时返回安全的 409，页面沿用现有错误提示。解绑后其他有权限用户可新建绑定，旧记录与学习进度不转移。本补充已通过数据库/API 集成，不要求重开 R04，也不表示重新完成了真实页面观察。Webhook 接收主体的新边界见 5.10，后台分析尚未接入。
+
 本轮只观察“选择授权仓库 → 绑定 → 刷新恢复 → 解绑”，预计用户观察/导读 45 至 60 分钟计入 R04 原预算，不新增手写。Web/API 已单独启动时直接使用，不重复启动根 dev；不需要 Worker。
 
 1. 打开 `http://127.0.0.1:3000/app/repository`。未登录会回到登录页；完成既有 GitHub 登录后，从工作台导航进入“仓库接入”。
@@ -351,7 +353,7 @@ R04 集成使用真实 PostgreSQL、临时 Nest HTTP 端口和合成测试用户
 
 GitHub 用户 Token 以项目会话哈希为键仅保存在 API 内存，最多 200 条、访问有效期不超过 10 分钟，按访问/新增清理过期项；退出或当前会话轮换清除对应旧项。重启/到期/容量淘汰需要重新核验才能新绑定；读取和解除已有绑定只依赖 PostgreSQL Session，不依赖此 Token。当前仍是单 API 进程部署边界，不宣称支持多实例共享授权。
 
-数据库 `Repository.enabled` 与用户版本构成后续处理入口约束；解绑保留历史、不中断 GitHub 侧安装、不删除旧计划。R05/R06 尚未实现，必须在接收/执行时检查当前 enabled 绑定与绑定 ID，不能提前宣称已跑通 Push 或停止后台分析。默认分支当前存于绑定，计划/Push 匹配在后续单元接入。绑定及学习数据当前不自动清理，尚无自助数据删除入口。
+数据库 `Repository.enabled` 与用户版本构成后续处理入口约束；解绑保留历史、不中断 GitHub 侧安装、不删除旧计划。10/10 的 R05 接收主体与签名已通过验证，按绑定分支检查当前 enabled 绑定与绑定 ID；R06 后台执行及其再次核验尚未完成，不能提前宣称已跑通真实 Push 或停止后台分析。默认分支存于绑定，后续仍须补齐任务/计划关联。绑定及学习数据当前不自动清理，尚无自助数据删除入口。
 
 验证命令：`pnpm check`、`pnpm test:integration:r04`、`pnpm test:handwrite:r04-auth-callback`、`pnpm --filter @knowledgeops/web build`。2026-09-10 分别通过 179 项常规测试、18 项真实数据库/模拟 GitHub 集成、3 项既有手写及 Web 构建。真实 App 凭据检查通过；隔离 UI 网络夹具只证明界面状态与请求编排，不代替本节真实仓库操作。完整证据和首次验证问题见主计划。
 
@@ -404,6 +406,77 @@ API 每 2 秒串行重新验证数据库会话并查询持久化状态，有变�
 2026-09-18 工程证据：专用手写 10 项、Web 回归 19 项（含 5 项真实 Vue scope/QueryClient + 模拟网络端口测试）、`pnpm check` 207 项常规测试、`pnpm test:integration:r13` 6 项真实 PostgreSQL/HTTP 测试、Web 生产构建均通过。浏览器隔离夹具验证桌面 1440px/手机 390px、连接/加载/空表单/错误/终态、断线降级后读到成功、刷新恢复、旧 Run 通知隔离与鉴权失效跳转；确认无横向溢出，相关操作 44px 高、焦点可见。提示正文 #ccc/黑底、警告 #d4a017/黑底沿用现有高对比令牌。夹具已从浏览器移除，未写业务数据库、未调用模型，也不代表原生网络重连或真实模型观察完成。
 
 真实 SSE 集成测试按既有清理逻辑移除了自己创建的 UUID 测试用户/会话/Run，未删除用户数据。9/21 已恢复 PostgreSQL、Redis 与 Web/API/Worker，readiness 通过；API/Worker 当前以编译后的 start 运行，后端改动需重新构建/重启，Web 保持开发模式。未修改环境文件或凭据。用户观察反馈、接入理解确认与短复述已完成，9/21 复跑手写验收 10/10、Web 回归 19/19 及完整 `pnpm check`（207 项）通过，R14 随本次独立提交记为 DONE；生产代理验证仍属于后续范围。
+
+### 5.10 R05：Webhook 接收主体（签名 Review 通过，尚未接入真实 Webhook）
+
+2026-10-09 入门观察及“验签不负责去重”的理解确认完成，产品接收主体已接入。10/10 主体与本题业务上下文均已由用户复述并确认；用户完成 HMAC 主线，最后的字符集正则由 AI 经明确授权补充，含新增反例的 5 组验收与 Review 已通过。用户在校准后已确认 Delivery/Outbox 回滚使重投可以重新处理，短复述完成；后续消费未完成，仍不要启用 GitHub App 的真实 Webhook、暴露本机端口或使用生产数据。
+
+先看可复现的接收现象，在仓库根目录运行：
+
+```powershell
+pnpm test:integration:r05
+```
+
+需要 PostgreSQL 与已应用的迁移；不需要 Redis、Worker、模型或真实 GitHub 凭据。测试通过随机本地端口调用完整 AppModule，使用真实数据库与合成用户/仓库：HTTP 成功路径以合成 Secret 签名，经过真实全局守卫、Controller 和 HMAC；其他直接调用 Service 的事务场景使用明确的验签结果替身。观察用例名称：接收成功后有一份 Delivery/Outbox；并发重复和重建 Service 后重投仍各一份；Outbox 写入异常整笔回滚；活动绑定独占；解绑或换人重绑发生在接收过程中则忽略；旧 Delivery 重投不转给新绑定者。只清理测试自身 UUID 记录。共 15 项，包含既有计划 Dispatcher 回归及“新类型不误消费”；不代表真实 GitHub 已投递。
+
+本轮首读仅两个入口：
+
+1. `apps/api/src/webhooks/github-webhook.controller.ts`：接收的是 GitHub 服务器 POST，不依赖浏览器 Cookie；把请求原始 Buffer、签名头、Delivery ID 和事件类型传给 Service。签名不是登录 Token，正文也不能重建为另一个 JSON 字符串替代。
+2. `apps/api/src/webhooks/github-webhook.service.ts` 的 `receive()`：前置校验 → 事务插入唯一 Delivery → 按 installation/repository/branch 找到至多一条绑定 `matched` → 锁 User 后复查原绑定得到 `binding` → 接收 Outbox → 提交后 202。同 ID 同正文重投不再执行；同 ID 内容冲突 409；写入异常回滚，不提前承诺 202。
+
+辅助改动无需逐行阅读：`main.ts` 开启 Nest 原始体保留并沿用 100 KiB JSON 上限、拒绝压缩；Module 负责装配数据库与独立 `GITHUB_WEBHOOK_SECRET`；Prisma 新增接收表和 Outbox 类型；现有 Dispatcher 增加类型筛选。超限 413，不截断后继续验签；非 JSON/压缩体 415；无效输入 400；未配置 Secret 为 503。Secret 后续用 32–256 字符独立随机值配置，不使用 OAuth Client secret/私钥、不贴入聊天或源码。
+
+收尾修正的入口边界：Webhook 接收方法使用 `SignedWebhookRoute` 标记，让全局 AuthGuard 仅跳过该入口的浏览器 Origin/会话检查；标记不等于验签通过，Service 仍须先验签再读写数据库。普通 PublicRoute（包括退出登录）的写请求仍检查 Origin，受保护页面 API 仍检查会话。带完整 AppModule 的正反回归已覆盖该区分，避免仅在不带全局守卫的 Controller 夹具中通过。
+
+记录中的 `ACCEPTED/IGNORED` 是**通知接收状态**，不代表任务通过。Delivery 的 body hash 用于辨别同 ID 内容冲突，不替代 HMAC；绑定来自数据库而非 sender。10/9 已收窄为仓库活动绑定独占，由数据库部分唯一索引保证最多一条，而非从多名用户中任取一人。解绑与接收共享 User 行锁，锁后仅复查原绑定身份和条件；中途换人重绑不能将当前通知转交新人。Outbox 暂保留 `schemaVersion=1` 的 `bindings` 数组格式以兼容既有记录，新事件固定一个元素，不代表仍支持多人接收。旧意图不重写、不改归属；执行前的授权、绑定身份和版本检查留待 R06。
+
+本切片只落库接收意图；新的 `GITHUB_PUSH_RECEIVED` 暂不被计划 Dispatcher 领取。没有创建 Submission/AgentRun、读取 Diff 或调用模型，不能把 202 表述为“验收运行已启动”。R06 须补齐 PRD 12.3 的关联事务、消费与重复 Push 业务幂等，本中间态不作为完整上线版本。
+
+迁移：`pnpm db:migrate:deploy` 追加 `webhook_deliveries` 表和枚举值，以及 `20261009130000_repository_exclusive_binding` 的活动仓库唯一索引，10/9 均已应用本机；新环境先执行共享包构建/生成客户端并应用迁移，再启动依赖独占约束的新版 API。迁移前本地重复活动仓库数量检查为 0；其他环境若有重复，索引创建会失败，须明确决定冲突处理，不能自动解绑/删除旧记录。索引仅约束 `enabled = true`，不清理停用历史。不使用 reset/drop 回退。若停止此切片，关闭 Webhook 接入、保留表与待处理事件，并保留 Dispatcher 类型过滤；直接退回会消费所有类型的旧 Worker 可能误标新事件为死信。没有生产迁移或回滚演练证据。
+
+工程验证：10/9 收窄后 `pnpm check` 212 项常规测试、R05 15 项集成、R04 23 项集成通过；同日 R13 6 项证据保留。10/10 签名修正后专用验收 5/5 与完整工程检查通过；收尾发现全局守卫遗漏后，新增的 AppModule 用例先复现 2 failed / 6 passed，修正后 Webhook 常规回归 8/8、带签名 HTTP 的 R05 集成 15/15、R04 集成 23/23、R13 集成 6/6 通过。最终完整 `pnpm check` 通过（44 文件 / 215 项常规测试，含新增 3 项），状态随本地提交生效，见主计划。所有凭据/仓库为测试合成数据，不以本地验收冒充真实 GitHub 投递或上线。
+
+依据：[Nest 原始请求体](https://docs.nestjs.com/faq/raw-body)、[GitHub 签名校验与公开测试向量](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Delivery ID 与重投](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks#use-the-x-github-delivery-header)。
+
+#### R05 HMAC 小手写
+
+2026-10-10 已完成业务上下文导读与理解确认；目标编码 25 至 35 分钟，不新增另一份练习。唯一实现位置：[github-webhook-signature.exercise.ts](../apps/api/src/webhooks/github-webhook-signature.exercise.ts)。配套测试、Controller、Service、事务和 Outbox 不需要修改。
+
+背景与接口：外部可提交伪造的 Push JSON，Service 在解析正文、写数据库前调用 `verifyGitHubWebhookSignature(input: GitHubSignatureInput): boolean`。`rawBody: Buffer` 是原始字节，`signature: string | undefined` 是 Controller 提取的签名头，`secret: string` 来自服务端配置；不是整个 request，也不从本次请求取 Secret。函数只判断签名是否可信，返回 false 由 Service 统一转 401，返回 true 才继续业务校验。重复的真实通知仍可验签通过，Delivery 去重由既有事务负责。
+
+不变量与完成边界：
+
+- 使用标准 HMAC-SHA256；只对传入的原始字节验证，不解析 JSON、不重新序列化、不修改 Buffer，也不自行拼接密钥代替 HMAC。
+- 签名格式是 `sha256=` 后恰好 64 个十六进制字符；缺失、错误算法、逗号拼接的多值、空白/换行、多余字符或非十六进制内容均拒绝。不裁剪或修复畸形签名后放行。
+- 空 Secret、签名不匹配返回 false；这些预期的无效输入不能使函数抛出异常。线上 Secret 长度门槛属于配置层，本纯函数不重复施加 32 字符限制，官方公开测试密钥不代表生产配置。
+- 摘要比较使用 `node:crypto` 的 `timingSafeEqual`，不使用普通字符串相等或自行逐字符比较。该 API 接受字节数据且要求等长，否则会抛错；Review 会检查这个安全前提，不只看测试是否全绿。
+- 不访问数据库、队列、会话、环境变量或网络，不打印 Secret、正文或签名，不添加去重缓存。
+
+既有 [5 组黑盒验收](../apps/api/test/github-webhook-signature.acceptance.ts)：合法公开签名通过且正文不被修改；正文变化（含空白/中文）被拒绝；错误/空密钥被拒绝；缺失或畸形签名被拒绝且不抛错；格式合法但内容错误的签名被拒绝。测试使用 `Hello, World!` 是为了单独验证字节签名，不代表它是合法 Push JSON；不要把 Service 的 JSON 校验搬进本函数。
+
+在仓库根目录运行，不需要 WSL、数据库、Redis、模型或真实凭据：
+
+```powershell
+pnpm test:handwrite:r05-signature
+```
+
+10/10 交付基线为 1 failed / 4 passed：占位函数始终返回 false，拒绝类用例因此通过，并非已经完成 80%。用户写完后再 Review 与关联回归，不修改测试绕过失败。
+
+10/10 初版 Review：HMAC 计算与等长安全比较的方向正确，但前缀截取残留等号导致合法输入失败；还需补齐完整签名格式检查及明确拒绝空 Secret。三项均沿用本题既有要求，由用户修正；测试没有新增或放宽，当前尚未通过 Review。不要将初版的四项通过当作所有拒绝边界已验证。
+
+10/10 第二次 Review：前缀与空 Secret 已修正，原 5/5 全绿；只读复现将公开签名中的摘要字符 `7` 换成 `\u0137`（总长度不变）后，用户函数仍返回 true。本机 hex 解码可能接受这种非 ASCII 字符，故“长度正确”不等于“所有字符属于十六进制”。需在解码前落实既有字符集要求，不新增业务或要求重写主线；原验收文件与用户代码未被 AI 修改，仍待本边界修正后复审。
+
+10/10 最终辅助修正：用户明确授权 AI 补正则，新增解码前的 ASCII 十六进制格式检查，HMAC 与安全比较主线保留。先将上述反例加入原畸形输入组，确认能复现失败，再修正至 5/5 通过；合法组同时检查大写摘要可用。Review 无剩余 blocking，工程检查通过；进入 R05 短复述，尚未提交或记为 DONE。该正则及新增回归为 AI 辅助，不记作用户独立手写。
+
+10/10 收尾复述：初次将 Delivery 当作可独立保留的请求记录，经说明“保留去重凭据会让重投直接返回”后，用户确认回滚后表中无该记录，因此可以重新处理。短复述通过，已报告本单元累计约 1.5 小时（含手写约 45 分钟）；不追加练习，完成状态与本地提交以主计划为准。
+
+按需看分层提示，不要求现在全部展开：
+
+- 提示 1（职责）：本题不需要识别事件类型或仓库；测试正文可以不是 JSON。原始体已经是 Buffer，不必重建。
+- 提示 2（API）：不要求手写密码学算法；查 Node 的 [createHmac](https://nodejs.org/docs/latest-v24.x/api/crypto.html#cryptocreatehmacalgorithm-key-options) 与 `Hmac.update` / `Hmac.digest` 的参数和返回类型即可。
+- 提示 3（格式与安全）：十六进制文本和它表示的字节不是同一种数据；查 [timingSafeEqual](https://nodejs.org/docs/latest-v24.x/api/crypto.html#cryptotimingsafeequala-b) 的输入类型及等长要求。它不代替签名头格式校验；针对具体卡点再提问，不靠逐个 failed 猜业务。
+
+25 至 35 分钟目标内卡住可以直接报告位置；预计超过 45 分钟先停下来缩小机械工作，不继续盲试。本题不需要先启动真实 Webhook，完成后反馈“写完了”、验收结果和大致耗时即可。
 
 ## 6. 启动应用
 

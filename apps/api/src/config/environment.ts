@@ -83,6 +83,11 @@ const apiEnvironmentSchema = z
     WEB_ORIGIN: z.string().url().default('http://127.0.0.1:3000'),
     GITHUB_APP_CLIENT_ID: optionalSetting,
     GITHUB_APP_CLIENT_SECRET: optionalSetting,
+    // 未配置时仅 Webhook 入口返回 503，不影响已有登录/计划功能。
+    GITHUB_WEBHOOK_SECRET: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(32).max(256).optional(),
+    ),
     // Absolute paths work regardless of whether API starts from the repo or workspace directory.
     // Kept optional while repository integration is being configured; login does not need it.
     GITHUB_APP_PRIVATE_KEY_PATH: optionalSetting.refine(

@@ -51,6 +51,7 @@ enum PlanGenerationRunState {
 
 enum OutboxEventType {
   PLAN_GENERATION_REQUESTED
+  GITHUB_PUSH_RECEIVED
 }
 
 enum AgentRunKind {
@@ -122,6 +123,7 @@ model Repository {
   installation       GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
 
   @@unique([userId], map: "repositories_one_enabled_per_user", where: raw("enabled"))
+  @@unique([githubRepositoryId], map: "repositories_one_enabled_per_github_repository", where: raw("enabled"))
   @@index([installationId, githubRepositoryId, enabled])
   @@map("repositories")
 }
@@ -279,6 +281,19 @@ model PlanGenerationRun {
   @@index([goalId, queuedAt])
   @@index([status, deadlineAt])
   @@map("plan_generation_runs")
+}
+
+// R05 接收记录；任务/Submission/AgentRun 关联在 R06 补齐，不把接收成功当作验收成功。
+model WebhookDelivery {
+  id           String   @id @db.Uuid
+  eventType    String   @map("event_type") @db.VarChar(64)
+  payloadHash  String   @map("payload_hash") @db.VarChar(64)
+  status       String   @db.VarChar(16)
+  ignoreReason String?  @map("ignore_reason") @db.VarChar(64)
+  payload      Json     @db.JsonB
+  receivedAt   DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@map("webhook_deliveries")
 }
 
 model OutboxEvent {

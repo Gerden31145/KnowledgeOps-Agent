@@ -9,6 +9,7 @@ import { LearningGoalsModule } from './learning-goals/learning-goals.module.js'
 import { PlanGenerationModule } from './plan-generation/plan-generation.module.js'
 import { PlansModule } from './plans/plans.module.js'
 import { RepositoriesModule } from './repositories/repositories.module.js'
+import { GitHubWebhookModule } from './webhooks/github-webhook.module.js'
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RepositoriesModule } from './repositories/repositories.module.js'
     PlanGenerationModule,
     PlansModule,
     RepositoriesModule,
+    GitHubWebhookModule,
   ],
   controllers: [AppController],
 })

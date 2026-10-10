@@ -96,6 +96,8 @@ export class OutboxDispatcher {
               "dispatch_attempt_count" AS "dispatchAttemptCount"
             FROM "outbox_events"
             WHERE "dispatched_at" IS NULL
+              -- R05 的接收意图保留待 R06 接入；计划处理器不能认领其他业务类型。
+              AND "type" = 'PLAN_GENERATION_REQUESTED'
               AND "dead_lettered_at" IS NULL
               AND "available_at" <= ${now}
               ${eventId ? Prisma.sql`AND "id" = ${eventId}::uuid` : Prisma.empty}

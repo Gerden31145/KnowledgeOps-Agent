@@ -151,9 +151,11 @@ flowchart LR
 - 使用 GitHub 完成用户登录。
 - 用户安装 GitHub App，并只授权选中的仓库。
 - 一个用户在 MVP 中只能绑定一个活动仓库。
+- 2026-10-09 收窄：一个 GitHub 仓库同时最多由一个项目用户活动绑定，按 `githubRepositoryId` 独占，换安装或分支不能绕过；不支持多人共享仓库来分别推进学习。GitHub 访问授权与本项目绑定归属仍是两层检查，不要求绑定者一定是 GitHub 仓库所有者。
 - 一个活动计划只监听一个配置分支，默认使用仓库默认分支。
 - GitHub App 只申请读取仓库内容和接收 Push 所需的最小权限。
 - 用户可以解除仓库绑定并停止后续分析。
+- 解绑释放仓库的活动占用，其他具备权限的用户才可重新绑定；旧绑定、学习进度和已保存记录仍归原用户，不随仓库重绑转移。
 
 #### 6.1.2 学习目标与计划
 
@@ -716,6 +718,8 @@ knowledgeops-agent/
 
 关键约束：
 
+- `Repository` 分别以 `userId`、`githubRepositoryId` 建立仅限 `enabled = true` 的唯一约束，保证一人一个活动仓库、一仓库一个活动用户；停用的历史绑定不受活动唯一性限制，也不自动删除。
+- Webhook 接收与后续执行须校验绑定 ID、用户与绑定版本；解绑/重绑不能让旧接收意图或旧证据被转给新的绑定者。
 - `WebhookDelivery.deliveryId` 唯一。
 - 九月后实现完整事件方案时，`RunEvent(runId, sequence)` 唯一；不是当前精简 SSE 的迁移任务。
 - 同一 LearningGoal 同时最多存在一个 `QUEUED` 或 `RUNNING` 的 `PlanGenerationRun`。
