@@ -5,6 +5,8 @@ import { ConfigModule, WORKER_ENVIRONMENT } from './config/config.module.js'
 import type { WorkerEnvironment } from './config/environment.js'
 import { DatabaseModule } from './database/database.module.js'
 import { DatabaseService } from './database/database.service.js'
+import { BoundCommitEvidenceReader } from './github/read-bound-commit-evidence.js'
+import { GitHubEvidenceJobProcessor } from './github/github-evidence-job-processor.js'
 import {
   FinalizePlanGenerationRun,
   PLAN_GENERATION_SUCCESS_FINALIZER,
@@ -49,6 +51,16 @@ const planGenerationJobProcessorProvider: Provider<PlanGenerationJobProcessor> =
   ) => new PlanGenerationJobProcessor(repository, port, finalizer),
 }
 
+const gitHubEvidenceProcessorProvider: Provider<GitHubEvidenceJobProcessor> = {
+  provide: GitHubEvidenceJobProcessor,
+  inject: [DatabaseService, WORKER_ENVIRONMENT],
+  useFactory: (database: DatabaseService, environment: WorkerEnvironment) =>
+    new GitHubEvidenceJobProcessor(
+      database.client,
+      new BoundCommitEvidenceReader(database.client, environment),
+    ),
+}
+
 @Module({
   imports: [ConfigModule, DatabaseModule],
   providers: [
@@ -56,6 +68,7 @@ const planGenerationJobProcessorProvider: Provider<PlanGenerationJobProcessor> =
     planGenerationPortProvider,
     planGenerationFinalizerProvider,
     planGenerationJobProcessorProvider,
+    gitHubEvidenceProcessorProvider,
     WorkerRuntimeService,
   ],
 })

@@ -6,6 +6,11 @@ import {
   repositoryBindingResponseSchema,
   repositoryOptionsResponseSchema,
   githubInstallationsResponseSchema,
+  entityIdSchema,
+  repositoryEvidenceResponseSchema,
+  retryRepositoryEvidenceInputSchema,
+  retryRepositoryEvidenceResponseSchema,
+  type RetryRepositoryEvidenceInput,
   type BindRepositoryInput,
   type UnbindRepositoryInput,
 } from '@knowledgeops/contracts'
@@ -14,6 +19,8 @@ import { AuthService } from '../identity/auth.service.js'
 import type { AuthRequest } from '../identity/auth-http.js'
 import { GitHubRepositories } from './github-repositories.js'
 import { RepositoryBindingService } from './repository-binding.service.js'
+import { RepositoryEvidenceService } from './repository-evidence.service.js'
+import { RepositoryEvidenceRetryService } from './repository-evidence-retry.service.js'
 
 @Controller('repositories')
 export class RepositoriesController {
@@ -21,6 +28,9 @@ export class RepositoriesController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(GitHubRepositories) private readonly github: GitHubRepositories,
     @Inject(RepositoryBindingService) private readonly bindings: RepositoryBindingService,
+    @Inject(RepositoryEvidenceService) private readonly evidence: RepositoryEvidenceService,
+    @Inject(RepositoryEvidenceRetryService)
+    private readonly evidenceRetry: RepositoryEvidenceRetryService,
   ) {}
 
   @Get('binding')
@@ -34,6 +44,54 @@ export class RepositoriesController {
   async installations(@Req() request: AuthRequest) {
     return githubInstallationsResponseSchema.parse(
       await this.github.installations(await this.auth.requireGitHubToken(request)),
+    )
+  }
+
+  @Get(':repositoryId/evidence-deliveries')
+  async evidenceDeliveries(
+    @Req() request: AuthRequest,
+    @Param('repositoryId', new ZodValidationPipe(entityIdSchema)) repositoryId: string,
+  ) {
+    return repositoryEvidenceResponseSchema.parse(
+      await this.evidence.list((await this.auth.requireUser(request)).id, repositoryId),
+    )
+  }
+
+  @Post(':repositoryId/evidence-deliveries/:deliveryId/retry')
+  @HttpCode(202)
+  async retryEvidence(
+    @Req() request: AuthRequest,
+    @Param('repositoryId', new ZodValidationPipe(entityIdSchema)) repositoryId: string,
+    @Param('deliveryId', new ZodValidationPipe(entityIdSchema)) deliveryId: string,
+    @Body(new ZodValidationPipe(retryRepositoryEvidenceInputSchema))
+    input: RetryRepositoryEvidenceInput,
+  ) {
+    return retryRepositoryEvidenceResponseSchema.parse(
+      await this.evidenceRetry.retry(
+        (await this.auth.requireUser(request)).id,
+        repositoryId,
+        deliveryId,
+        input,
+      ),
+    )
+  }
+
+  @Post(':repositoryId/evidence-deliveries/:deliveryId/resync')
+  @HttpCode(202)
+  async resyncEvidence(
+    @Req() request: AuthRequest,
+    @Param('repositoryId', new ZodValidationPipe(entityIdSchema)) repositoryId: string,
+    @Param('deliveryId', new ZodValidationPipe(entityIdSchema)) deliveryId: string,
+    @Body(new ZodValidationPipe(retryRepositoryEvidenceInputSchema))
+    input: RetryRepositoryEvidenceInput,
+  ) {
+    return retryRepositoryEvidenceResponseSchema.parse(
+      await this.evidenceRetry.resync(
+        (await this.auth.requireUser(request)).id,
+        repositoryId,
+        deliveryId,
+        input,
+      ),
     )
   }
 

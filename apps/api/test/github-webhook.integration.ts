@@ -1,5 +1,6 @@
 import 'reflect-metadata'
 import { createHmac, randomInt, randomUUID } from 'node:crypto'
+import { CURRENT_TASK_STATES, githubPushReceivedEventPayloadSchema } from '@knowledgeops/contracts'
 import { createDatabaseClient, Prisma, type DatabaseClient } from '@knowledgeops/database'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { Test } from '@nestjs/testing'
@@ -11,11 +12,27 @@ import { readApiEnvironment } from '../src/config/environment.js'
 import { DatabaseService } from '../src/database/database.service.js'
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required for R05 integration tests')
-const database = createDatabaseClient(process.env.DATABASE_URL)
+// 合成接收待办不应被另一终端运行的开发 Worker 领取；不影响真实用户的 Outbox。
+const database = createDatabaseClient(process.env.DATABASE_URL).$extends({
+  query: {
+    outboxEvent: {
+      create({ args, query }) {
+        return query({
+          ...args,
+          data: { ...args.data, availableAt: new Date('2099-01-01T00:00:00Z') },
+        })
+      },
+    },
+  },
+}) as unknown as DatabaseClient
 const secret = 'synthetic-r05-webhook-secret-only-32'
 
-describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for transaction cases', () => {
+describe('R05/R06 intake: real PostgreSQL and signed HTTP; signature fixtures for transaction cases', () => {
   const userIds = [randomUUID(), randomUUID()]
+  const planIds = [randomUUID(), randomUUID()]
+  const stageIds = [randomUUID(), randomUUID()]
+  const taskIds = [randomUUID(), randomUUID()]
+  const targetPath = 'notes/vue.md'
   const repositoryId = randomUUID()
   const installationId = String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
   const githubRepositoryId = String(randomInt(2_000_000_000_000, 3_000_000_000_000))
@@ -49,6 +66,43 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
 
   beforeAll(async () => {
     await database.user.createMany({ data: userIds.map((id) => ({ id, repositoryVersion: 7 })) })
+    for (const [index, userId] of userIds.entries()) {
+      await database.learningGoal.create({
+        data: {
+          userId,
+          title: 'synthetic-r06-intake',
+          currentLevel: 'fixture',
+          deadline: new Date('2026-12-31'),
+          weeklyMinutes: 300,
+          plans: {
+            create: {
+              id: planIds[index]!,
+              status: 'ACTIVE',
+              confirmedAt: new Date(),
+              stages: {
+                create: {
+                  id: stageIds[index]!,
+                  title: 'fixture stage',
+                  position: 1,
+                  tasks: {
+                    create: {
+                      id: taskIds[index]!,
+                      title: 'fixture task',
+                      description: 'not real learning data',
+                      position: 1,
+                      estimatedMinutes: 30,
+                      targetPath,
+                      state: 'IN_PROGRESS',
+                      version: 3,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    }
     await database.gitHubInstallation.create({
       data: {
         id: installationId,
@@ -93,6 +147,11 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
       where: { id: { in: userIds } },
       data: { repositoryVersion: 7 },
     })
+    await database.plan.updateMany({ where: { id: { in: planIds } }, data: { status: 'ACTIVE' } })
+    await database.task.updateMany({
+      where: { id: { in: taskIds } },
+      data: { state: 'IN_PROGRESS', version: 3, targetPath },
+    })
   })
 
   afterEach(async () => {
@@ -100,6 +159,9 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
     await database.outboxEvent.deleteMany({ where: { aggregateId: { in: deliveryIds } } })
     await database.webhookDelivery.deleteMany({ where: { id: { in: deliveryIds } } })
     await database.repository.deleteMany({ where: { userId: userIds[1]! } })
+    await database.task.deleteMany({
+      where: { stageId: { in: stageIds }, id: { notIn: taskIds } },
+    })
     deliveryIds.length = 0
   })
 
@@ -127,20 +189,27 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
     const delivery = await database.webhookDelivery.findUniqueOrThrow({
       where: { id: command.deliveryId },
     })
-    expect(delivery).toMatchObject({ status: 'ACCEPTED', ignoreReason: null })
+    expect(delivery).toMatchObject({
+      status: 'ACCEPTED',
+      ignoreReason: null,
+      receivedRepositoryId: repositoryId,
+    })
     expect(delivery.payload).not.toHaveProperty('sender')
     expect(delivery.payload).not.toHaveProperty('commits')
     expect(await outbox(command.deliveryId)).toMatchObject([
       {
         type: 'GITHUB_PUSH_RECEIVED',
+        schemaVersion: 2,
         dispatchedAt: null,
         dispatchAttemptCount: 0,
         payload: {
           deliveryId: command.deliveryId,
-          bindings: [{ repositoryId, userId: userIds[0], repositoryVersion: 7 }],
+          binding: { repositoryId, userId: userIds[0], repositoryVersion: 7 },
+          task: { taskId: taskIds[0], taskVersion: 3, targetPath },
         },
       },
     ])
+    expect(await database.agentRun.count({ where: { taskId: { in: taskIds } } })).toBe(0)
   })
 
   it('rejects a signature failure before persistence', async () => {
@@ -191,7 +260,7 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
         event: 'push',
         reason: 'BRANCH_DELETED',
       },
-      { body: { ...push(), ref: 'refs/heads/other' }, event: 'push', reason: 'NO_ACTIVE_BINDING' },
+      { body: { ...push(), ref: 'refs/heads/other' }, event: 'push', reason: 'BRANCH_NOT_TRACKED' },
       {
         body: { ...push(), installation: { id: '1' } },
         event: 'push',
@@ -232,7 +301,8 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
     const [event] = await outbox(command.deliveryId)
     expect(event?.payload).toEqual({
       deliveryId: command.deliveryId,
-      bindings: [{ repositoryId, userId: userIds[0], repositoryVersion: 7 }],
+      binding: { repositoryId, userId: userIds[0], repositoryVersion: 7 },
+      task: { taskId: taskIds[0], taskVersion: 3, targetPath },
     })
   })
 
@@ -265,7 +335,8 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
     await service.receive(next)
     expect((await outbox(next.deliveryId))[0]?.payload).toEqual({
       deliveryId: next.deliveryId,
-      bindings: [{ repositoryId: replacement.id, userId: userIds[1], repositoryVersion: 8 }],
+      binding: { repositoryId: replacement.id, userId: userIds[1], repositoryVersion: 8 },
+      task: { taskId: taskIds[1], taskVersion: 3, targetPath },
     })
   })
 
@@ -356,7 +427,177 @@ describe('R05 intake: real PostgreSQL and signed HTTP; signature fixtures for tr
       expect(await outbox(command.deliveryId)).toEqual([])
       expect(
         await database.webhookDelivery.findUniqueOrThrow({ where: { id: command.deliveryId } }),
-      ).toMatchObject({ status: 'IGNORED', ignoreReason: 'NO_ACTIVE_BINDING' })
+      ).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'NO_ACTIVE_BINDING',
+        receivedRepositoryId: null,
+      })
     },
   )
+
+  it.each(CURRENT_TASK_STATES)(
+    'freezes the current task in %s without starting verification',
+    async (state) => {
+      await database.task.update({ where: { id: taskIds[0]! }, data: { state } })
+      const command = input({ ...push(), taskId: taskIds[1], targetPath: 'forged.md' })
+      // Service has no reason to fetch GitHub in this phase; fail loudly if one is introduced.
+      const network = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('unexpected-network'))
+      try {
+        await expect(service.receive(command)).resolves.toEqual({ received: true })
+        expect(network).not.toHaveBeenCalled()
+      } finally {
+        network.mockRestore()
+      }
+      const [event] = await outbox(command.deliveryId)
+      expect(githubPushReceivedEventPayloadSchema.parse(event?.payload)).toEqual({
+        deliveryId: command.deliveryId,
+        binding: { repositoryId, userId: userIds[0], repositoryVersion: 7 },
+        task: { taskId: taskIds[0], taskVersion: 3, targetPath },
+      })
+      expect(await database.task.findUniqueOrThrow({ where: { id: taskIds[0]! } })).toMatchObject({
+        state,
+        version: 3,
+        targetPath,
+      })
+      expect(await database.agentRun.count({ where: { taskId: { in: taskIds } } })).toBe(0)
+    },
+  )
+
+  const expectIgnored = async (reason: string) => {
+    const command = input()
+    await expect(service.receive(command)).resolves.toEqual({ received: true })
+    expect(
+      await database.webhookDelivery.findUniqueOrThrow({ where: { id: command.deliveryId } }),
+    ).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: reason,
+      receivedRepositoryId: repositoryId,
+    })
+    expect(await outbox(command.deliveryId)).toEqual([])
+    expect(await database.agentRun.count({ where: { taskId: { in: taskIds } } })).toBe(0)
+    return command
+  }
+
+  it.each(['BLOCKED', 'READY', 'PASSED'] as const)(
+    "does not choose a %s task or another user's task",
+    async (state) => {
+      await database.task.update({ where: { id: taskIds[0]! }, data: { state } })
+      await expectIgnored('NO_CURRENT_TASK')
+    },
+  )
+
+  it.each(['DRAFT', 'PAUSED', 'COMPLETED', 'ARCHIVED'] as const)(
+    'does not choose a task in a %s plan',
+    async (status) => {
+      await database.plan.update({ where: { id: planIds[0]! }, data: { status } })
+      await expectIgnored('NO_CURRENT_TASK')
+    },
+  )
+
+  it.each([null, '../notes.md', 'notes.txt', ' notes.md '])(
+    'records an unusable target path (%s) without scheduling',
+    async (path) => {
+      await database.task.update({ where: { id: taskIds[0]! }, data: { targetPath: path } })
+      await expectIgnored('INVALID_TARGET_PATH')
+    },
+  )
+
+  it('does not choose arbitrarily when two current tasks exist, even if one lacks a path', async () => {
+    await database.task.create({
+      data: {
+        stageId: stageIds[0]!,
+        title: 'ambiguous fixture',
+        description: 'fixture',
+        position: 2,
+        estimatedMinutes: 30,
+        state: 'NEEDS_REVISION',
+        targetPath: null,
+      },
+    })
+    await expectIgnored('AMBIGUOUS_CURRENT_TASK')
+  })
+
+  it('holds the shared User row lock while selecting the receipt task snapshot', async () => {
+    let checked = false
+    const inspectedDatabase = database.$extends({
+      query: {
+        task: {
+          async findMany({ args, query }) {
+            const tasks = await query(args)
+            // A separate transaction must not be able to take the actor lock until receipt commits.
+            await expect(
+              database.$transaction((tx) =>
+                tx.$queryRaw(
+                  Prisma.sql`SELECT id FROM users WHERE id = ${userIds[0]}::uuid FOR UPDATE NOWAIT`,
+                ),
+              ),
+            ).rejects.toThrow(/could not obtain lock/)
+            checked = true
+            return tasks
+          },
+        },
+      },
+    }) as unknown as DatabaseClient
+    await new GitHubWebhookService(inspectedDatabase, secret, () => true).receive(input())
+    expect(checked).toBe(true)
+  })
+
+  it('keeps an ignored delivery ignored when a task is started later', async () => {
+    await database.task.update({ where: { id: taskIds[0]! }, data: { state: 'READY' } })
+    const command = await expectIgnored('NO_CURRENT_TASK')
+    await database.task.update({ where: { id: taskIds[0]! }, data: { state: 'IN_PROGRESS' } })
+    await service.receive(command)
+    expect(await outbox(command.deliveryId)).toEqual([])
+    expect(
+      await database.webhookDelivery.findUniqueOrThrow({ where: { id: command.deliveryId } }),
+    ).toMatchObject({ status: 'IGNORED', ignoreReason: 'NO_CURRENT_TASK' })
+  })
+
+  it('does not replace a saved task/path/version with a task started after receipt', async () => {
+    const command = input()
+    await service.receive(command)
+    const original = await outbox(command.deliveryId)
+    await database.task.update({
+      where: { id: taskIds[0]! },
+      data: { state: 'PASSED', version: 4 },
+    })
+    const replacement = await database.task.create({
+      data: {
+        stageId: stageIds[0]!,
+        title: 'next fixture',
+        description: 'fixture',
+        position: 2,
+        estimatedMinutes: 30,
+        state: 'IN_PROGRESS',
+        targetPath: 'notes/next.md',
+      },
+    })
+    await service.receive(command)
+    expect(await outbox(command.deliveryId)).toEqual(original)
+    const next = input()
+    await service.receive(next)
+    expect((await outbox(next.deliveryId))[0]?.payload).toMatchObject({
+      task: { taskId: replacement.id, taskVersion: 0, targetPath: 'notes/next.md' },
+    })
+  })
+
+  it('does not upgrade a historical v1 intent using the current task on redelivery', async () => {
+    const command = input()
+    await service.receive(command)
+    const [event] = await outbox(command.deliveryId)
+    const legacy = await database.outboxEvent.update({
+      where: { id: event!.id },
+      data: {
+        schemaVersion: 1,
+        payload: {
+          deliveryId: command.deliveryId,
+          bindings: [{ repositoryId, userId: userIds[0]!, repositoryVersion: 7 }],
+        },
+      },
+    })
+    await service.receive(command)
+    expect(await outbox(command.deliveryId)).toEqual([legacy])
+  })
 })

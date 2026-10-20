@@ -353,7 +353,7 @@ R04 集成使用真实 PostgreSQL、临时 Nest HTTP 端口和合成测试用户
 
 GitHub 用户 Token 以项目会话哈希为键仅保存在 API 内存，最多 200 条、访问有效期不超过 10 分钟，按访问/新增清理过期项；退出或当前会话轮换清除对应旧项。重启/到期/容量淘汰需要重新核验才能新绑定；读取和解除已有绑定只依赖 PostgreSQL Session，不依赖此 Token。当前仍是单 API 进程部署边界，不宣称支持多实例共享授权。
 
-数据库 `Repository.enabled` 与用户版本构成后续处理入口约束；解绑保留历史、不中断 GitHub 侧安装、不删除旧计划。10/10 的 R05 接收主体与签名已通过验证，按绑定分支检查当前 enabled 绑定与绑定 ID；R06 后台执行及其再次核验尚未完成，不能提前宣称已跑通真实 Push 或停止后台分析。默认分支存于绑定，后续仍须补齐任务/计划关联。绑定及学习数据当前不自动清理，尚无自助数据删除入口。
+数据库 `Repository.enabled` 与用户版本构成后续处理入口约束；解绑保留历史、不中断 GitHub 侧安装、不删除旧计划。10/10 的 R05 接收主体与签名已通过验证，按绑定分支检查当前 enabled 绑定与绑定 ID；10/14 的 R06 任务关联、后台读取/落库再次核验及队列接入见 5.13 至 5.15，已通过隔离工程验证，不代表真实 Push 已验证。绑定及学习数据当前不自动清理，尚无自助数据删除入口。
 
 验证命令：`pnpm check`、`pnpm test:integration:r04`、`pnpm test:handwrite:r04-auth-callback`、`pnpm --filter @knowledgeops/web build`。2026-09-10 分别通过 179 项常规测试、18 项真实数据库/模拟 GitHub 集成、3 项既有手写及 Web 构建。真实 App 凭据检查通过；隔离 UI 网络夹具只证明界面状态与请求编排，不代替本节真实仓库操作。完整证据和首次验证问题见主计划。
 
@@ -428,9 +428,9 @@ pnpm test:integration:r05
 
 收尾修正的入口边界：Webhook 接收方法使用 `SignedWebhookRoute` 标记，让全局 AuthGuard 仅跳过该入口的浏览器 Origin/会话检查；标记不等于验签通过，Service 仍须先验签再读写数据库。普通 PublicRoute（包括退出登录）的写请求仍检查 Origin，受保护页面 API 仍检查会话。带完整 AppModule 的正反回归已覆盖该区分，避免仅在不带全局守卫的 Controller 夹具中通过。
 
-记录中的 `ACCEPTED/IGNORED` 是**通知接收状态**，不代表任务通过。Delivery 的 body hash 用于辨别同 ID 内容冲突，不替代 HMAC；绑定来自数据库而非 sender。10/9 已收窄为仓库活动绑定独占，由数据库部分唯一索引保证最多一条，而非从多名用户中任取一人。解绑与接收共享 User 行锁，锁后仅复查原绑定身份和条件；中途换人重绑不能将当前通知转交新人。Outbox 暂保留 `schemaVersion=1` 的 `bindings` 数组格式以兼容既有记录，新事件固定一个元素，不代表仍支持多人接收。旧意图不重写、不改归属；执行前的授权、绑定身份和版本检查留待 R06。
+记录中的 `ACCEPTED/IGNORED` 是**通知接收状态**，不代表任务通过。Delivery 的 body hash 用于辨别同 ID 内容冲突，不替代 HMAC；绑定来自数据库而非 sender。10/9 已收窄为仓库活动绑定独占，由数据库部分唯一索引保证最多一条，而非从多名用户中任取一人。解绑与接收共享 User 行锁，锁后仅复查原绑定身份和条件；中途换人重绑不能将当前通知转交新人。R05 使用 `schemaVersion=1` 的单元素 `bindings` 数组；10/13 R06 新事件升级为 v2，增加接收时的任务快照，见 5.13。历史意图不重写、不按现在的任务补齐归属；绑定重验读取器与消费者接线见 5.12、5.15。
 
-本切片只落库接收意图；新的 `GITHUB_PUSH_RECEIVED` 暂不被计划 Dispatcher 领取。没有创建 Submission/AgentRun、读取 Diff 或调用模型，不能把 202 表述为“验收运行已启动”。R06 须补齐 PRD 12.3 的关联事务、消费与重复 Push 业务幂等，本中间态不作为完整上线版本。
+本切片只落库接收意图；`GITHUB_PUSH_RECEIVED` 暂不被计划 Dispatcher 领取。没有创建 Submission/AgentRun、读取 Diff 或调用模型，不能把 202 表述为“验收运行已启动”。按 10/13 已确认的 PRD 12.3，接收只保存上下文与取证待办，后续确认目标变更才原子保存证据与验收处理意图；消费与重复 Push 业务幂等仍需补齐，本中间态不作为完整上线版本。
 
 迁移：`pnpm db:migrate:deploy` 追加 `webhook_deliveries` 表和枚举值，以及 `20261009130000_repository_exclusive_binding` 的活动仓库唯一索引，10/9 均已应用本机；新环境先执行共享包构建/生成客户端并应用迁移，再启动依赖独占约束的新版 API。迁移前本地重复活动仓库数量检查为 0；其他环境若有重复，索引创建会失败，须明确决定冲突处理，不能自动解绑/删除旧记录。索引仅约束 `enabled = true`，不清理停用历史。不使用 reset/drop 回退。若停止此切片，关闭 Webhook 接入、保留表与待处理事件，并保留 Dispatcher 类型过滤；直接退回会消费所有类型的旧 Worker 可能误标新事件为死信。没有生产迁移或回滚演练证据。
 
@@ -477,6 +477,422 @@ pnpm test:handwrite:r05-signature
 - 提示 3（格式与安全）：十六进制文本和它表示的字节不是同一种数据；查 [timingSafeEqual](https://nodejs.org/docs/latest-v24.x/api/crypto.html#cryptotimingsafeequala-b) 的输入类型及等长要求。它不代替签名头格式校验；针对具体卡点再提问，不靠逐个 failed 猜业务。
 
 25 至 35 分钟目标内卡住可以直接报告位置；预计超过 45 分钟先停下来缩小机械工作，不继续盲试。本题不需要先启动真实 Webhook，完成后反馈“写完了”、验收结果和大致耗时即可。
+
+### 5.11 R06：固定提交证据读取器（首段导读）
+
+10/12 在用户理解固定 Commit SHA 后，先交付 `apps/worker/src/github/read-commit-evidence.ts`。不新增手写，仍计入 R06 原约 4 小时、分时段预算。首轮只读 `readCommitEvidence` 的输入/返回类型及函数内四段业务注释，不要求逐行阅读配套防护和测试。
+
+用途：拿到一个已选仓库和目标路径，收集**指定提交**的 Markdown 证据，为后续验收提供可追溯输入。输入为 `githubRepositoryId`、`beforeCommitSha`、`afterCommitSha`、`targetPath`；另由服务端调用方提供限仓库的安装 Token。消费者负责从持久化 Webhook/任务取输入并复查绑定；本函数不查询用户、创建 Run、写库、改 Task 状态或调用模型。10/14 正式消费者已装配（见 5.15）；隔离测试与临时公开 smoke 是额外观察入口。
+
+函数四段：根据绑定的仓库 ID 获取规范名称；比较固定 before/after 并检查目标路径；正常文件按 after 读取，删除文件按 before 读取并标记 removed；返回来源 SHA、完整正文、原字节 SHA-256、行数和 Diff。普通 `.md` 路径精确匹配，未改目标/没有 Markdown 返回 IGNORED，目标移走返回 TARGET_RENAMED；不会擅自修改用户选择的目标路径。
+
+历史观察证据见 [Worker Playground](../apps/worker/playground/README.md)。两个临时源码已于 10/20 单元收尾时清理；公开样本真实 API smoke 曾返回 COLLECTED / README.md / added / 9 行 / 799 个 Diff 字符，不接数据库或队列。COLLECTED **不是**任务验收通过，也不是已保存 Evidence。该 smoke 明确移除认证头访问公开资源，不验证安装授权；正式函数没有自动匿名回退，当前可重复验证使用下方正式测试。
+
+可重复的工程验证无需凭据或基础设施：
+
+```powershell
+pnpm exec vitest run apps/worker/test/read-commit-evidence.spec.ts --reporter=verbose
+```
+
+43 项上游替身测试覆盖分支推进后仍读固定 SHA、删除前证据、未匹配/重命名、完整性与超限、路径编码、来源不一致、404 不回退到 main，以及错误不包含 Token/上游原文。配套 `github-evidence-http.ts` 只负责固定主机请求、总 20 秒超时、拒绝重定向、逐块限制响应为 2 MiB 和安全错误；不重复实现 GitHub 登录或安装授权。
+
+读取器默认限制改动文件 100 个、Markdown 文件 20 个、目标文件 64 KiB、返回 Diff 总量 128,000 字符，可由服务端调用选项收紧/调整；文件数硬上限小于 Compare 的 300 个返回上限，避免将截断当成“目标未改变”。缺失或增删计数不完整的目标 patch 明确失败，不以空 Diff 冒充成功。GitHub Blob SHA 用于核对上游返回的文件身份，不等同于提交 SHA 或本项目保存的 SHA-256 内容哈希。接口依据：[Compare](https://docs.github.com/en/rest/commits/commits#compare-two-commits)、[Contents ref](https://docs.github.com/en/rest/repos/contents#get-repository-content)。
+
+后续已补：10/13 按需安装 Token 与绑定重验见 5.12，10/14 Submission/Evidence/Run/Outbox 原子落库见 5.14，队列/消费者装配见 5.15。10/15 分叉/回退历史改为两端快照直接比较，见 5.16，不再将 merge-base 不同本身作为 UNSUPPORTED_COMPARISON 拒绝理由。全零基准或必需快照不可读时要求 RESYNC_REQUIRED；完整失败展示、真实 Push 仍未验证，不将这些暂时边界视为用户已同意裁剪、R06 完成或生产能力。
+
+### 5.12 R06：后台取证授权与绑定重验
+
+10/13 用户已复述并确认 5.11 读取器理解。本轮只学习“谁有权读取这次证据”，不新增手写，不另加预算。首轮入口按顺序为：
+
+1. `apps/worker/src/github/read-bound-commit-evidence.ts` 的 `BoundCommitEvidenceReader.read`：本项目的绑定是否还有效，以及取证结果是否还能继续使用。
+2. `packages/github/src/app-auth.ts` 的 `createGitHubRepositoryAccess`：用 App 身份核对安装并向 GitHub 申请单仓库只读 Token。JWT 签名细节沿用 R04，不要求重读。
+
+输入上下文：消费者从已持久化接收记录取得 `repositoryId / userId / repositoryVersion` 和 Push 的安装、GitHub 仓库、分支、before/after；v2 接收上下文已保存 taskId/任务版本/targetPath，见 5.13。repositoryId 是本项目的绑定 UUID，githubRepositoryId 是 GitHub 仓库 ID；repositoryVersion 是 User 上的绑定版本。不是浏览器随意传入这些值即可读取。10/14 Dispatcher/Job 与该读取入口的 Runtime 装配见 5.15。
+
+一次正常调用：复核数据库绑定 → App 私钥签发短期 JWT → GitHub 核对安装并签发限仓只读 Token → 再查绑定 → 已有读取器按固定 SHA 取正文/Diff → 返回前再查绑定 → COLLECTED 或读取器原有 IGNORED。App JWT 表示应用身份，安装 Token 才用于后续仓库读取；它们都不是用户的登录 Cookie，不需要用户一直在线，也不依赖 API 内存中的用户 OAuth Token。安装 Token 按需签发、不缓存到数据库；同一个 `@knowledgeops/github` 包也供 API 的 R04 绑定流程复用，避免两套签名/授权规则。
+
+关键失败场景：接收时绑定 A 版本 3，排队时用户解绑或重绑为 B，旧命令仍指向 A/3，返回 IGNORED/BINDING_CHANGED，不将任务转给 B；若解绑发生在申请 Token 时，不继续读取仓库；发生在取正文时，丢弃已读结果，不返回 Evidence。安装失效、Token 签发失败或响应不可信时安全报错，不扩权限、不用用户 Token/PAT 或匿名读取兜底。
+
+边界：网络期间不持有数据库事务/锁，不能撤回已经发出的 GitHub 请求。这些前后复查只保护读取结果，**后续落库事务仍须锁 User 并再次核对绑定身份/版本**，否则返回后到写库前仍有竞态。COLLECTED 不等于数据库已保存、不等于验收通过。
+
+先观察无需服务/真实凭据的合成场景（27 项）：
+
+```powershell
+pnpm exec vitest run apps/worker/test/read-bound-commit-evidence.spec.ts --reporter=verbose
+```
+
+关注前三类现象：有效绑定返回 COLLECTED；开始前已解绑不加载私钥、不请求 GitHub；签发/取证途中解绑不返回有效证据。测试执行真实授权、HTTP 适配及固定 SHA 读取函数，只有数据库、GitHub 响应和私钥输入是替身，不是产品页面或真实私有仓库观察。
+
+真实集成验证（授权保护 12 项、5.13 接收 30 项、5.14 原子落库 36 项及 5.15 队列消费 14 项，共 92 项；全套需要 PostgreSQL 和 Redis，不需要真实 GitHub 凭据）：
+
+```powershell
+pnpm test:integration:r06
+```
+
+该套只创建并清理自己的随机标识用户/绑定/任务，检查实际 Prisma 查询能拦住身份、版本、安装、仓库、分支不符以及同仓库重绑；GitHub 仍为合成上游。10/13 上述验证通过，R04 23 项集成的前次证据保留，不据此宣称真实安装权限/生产投递已验证。
+
+配置复用 `GITHUB_APP_CLIENT_ID` 与绝对路径 `GITHUB_APP_PRIVATE_KEY_PATH`；Worker 不需要 OAuth Client Secret。两字段保持可选，未配置时已有计划生成不受影响，主动取证才安全失败；根目录开发命令会给 API/Worker 加载同一 `.env`。本地消费者已装配；部署私钥挂载和真实推送仍待验证，不修改任何真实凭据。接口依据：[安装 Token 与限仓权限](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app)、[App JWT](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)。
+
+### 5.13 R06：接收时固化当前任务（两段式方案的第一段）
+
+10/13 用户明确批准新方案：先可靠接收，后台比较后再创建验收运行。本轮仅交付接收端，不新增手写；导读计入 R06 原预算。两个入口按阅读顺序为：
+
+1. `apps/api/src/webhooks/github-webhook.service.ts` 的第 4 段：锁定绑定用户后，从其 ACTIVE 计划查找唯一当前任务，保存任务 ID/版本/目标路径；没有任务、任务不唯一或路径无效时，只记录明确原因。先前的验签、Delivery 去重和绑定复查无需重新逐行阅读。
+2. `packages/contracts/src/events/github-push.ts`：取证 Outbox 的 v2 数据格式，`binding` 来自原绑定，`task` 来自本地任务；Webhook 中伪造的 taskId/targetPath 不会覆盖它们。schemaVersion 是事件格式版本，repositoryVersion 和 taskVersion 分别是绑定、任务的业务版本，不能混用。
+
+“当前任务”复用开始任务时占用单一学习位置的四个状态：IN_PROGRESS、VERIFYING、NEEDS_REVISION、NEEDS_EVIDENCE；抽成共享常量，未改变开始任务的规则。接收时不推任务状态、不创建 Submission/AgentRun、不发起 GitHub 请求。GitHub 原始最小 Push 信息仍在 Delivery，任务/绑定上下文在同事务的 Outbox payload；后续消费者将读取这两者，而非重新寻找当时不存在的“当前任务”。
+
+运行 `pnpm test:integration:r06` 可观察：合成签名 HTTP 返回 202 后，Delivery 和 v2 Outbox 已在真实 PostgreSQL 中、任务快照已固定、AgentRun 数量仍为 0；重复 Delivery 在用户换任务后仍保持第一次上下文；写 Outbox 失败则回滚新 Delivery。R06 共 42 项通过，其中接收 30 项、后台授权保护 12 项。仅使用测试随机标识，测试结束清理自己的数据；不是 GitHub 真实投递或用户亲自观察的证据。
+
+历史 v1 意图原样保留，重投不会升级它们；不得用当前任务自动补齐旧快照。10/13 交付本接收切片时 Dispatcher 只消费计划生成，未接消费者/落库，也无数据库迁移或服务启动；后续落库见 5.14，队列接入及 v1 待办的明确 dead-letter 原因见 5.15。分叉直接比较与真实 Push 闭环仍未完成，R06 未收尾提交。
+
+工程验证：完整 `pnpm check` 通过（格式、lint、全部 workspace 类型、Prisma 校验、47 文件 / 296 项常规测试），R06 42 项、R05 35 项、原计划生成/任务生命周期 8 项数据库集成通过。R05 的 30 项接收测试也包含在 R06 中，不将重复运行相加成不同场景数。
+
+### 5.14 R06：证据、Run 与验收待办原子落库（10/14，独立测试入口）
+
+本轮一个学习点：取证结束不等于可以直接写库；必须复核原上下文，再把相关记录一起提交。首读仅两个入口：
+
+1. `apps/worker/src/github/finalize-github-push-evidence.ts`：接收原取证 eventId 和读取结果，从数据库恢复接收快照，检查绑定/任务，保存结果。消费者在网络调用结束后调用它，装配见 5.15；本节保留独立数据库测试入口。
+2. `prisma/schema.prisma` 的 `Submission` / `Evidence`：Submission 说明哪项任务、哪个绑定、哪次固定提交；Evidence 保存这份提交目标文件的正文、Diff、哈希和来源。AgentRun 引用 Submission，验收 Outbox 只传 Run/Submission ID，不传正文或凭据。
+
+数据库已增量应用 `20261014100000_github_evidence_finalization`。其他环境先 `pnpm db:migrate:deploy` 和 `pnpm build:packages`；不得通过 reset 清空已有记录。观察只需要 PostgreSQL，不需要 Redis、App 私钥或模型服务：
+
+```powershell
+pnpm test:integration:r06 apps/worker/test/finalize-github-push-evidence.integration.ts --reporter=verbose
+```
+
+本文件 36 项场景，先只关注以下现象，不要求通读测试夹具：
+
+- 正常：Task T1/version 3 的证据通过复核后，生成一份 Submission/Evidence、一个 QUEUED AgentRun、一条验收 Outbox，Task 变成 VERIFYING/version 4；Delivery 标为 PROCESSED 并关联结果。PROCESSED 只指取证交接完成，不是验收通过。
+- 失败：模拟 Outbox 或最后一条 Delivery 更新失败，证据/Run/新待办与 Task 修改全部回滚；原接收 Delivery/取证待办仍保留，允许后续重试。
+- 重复/过期：同 Delivery 并发或不同 Delivery 指向同一绑定/任务/after Commit/流程版本，只产生一份有效结果；原绑定、目标路径、任务版本或归属变化时保存忽略原因，不改派其他任务。
+- 删除：保存 before 正文及 removed 标记，不创建语义验收 Run；Task 增加版本使旧证据失效，若原在 VERIFYING 则恢复前一运行记录的稳定状态，不直接判失败。普通新证据遇到 VERIFYING 时同样继承稳定恢复目标，而不是把 VERIFYING 作为失败后的恢复状态。
+
+实现边界：本函数不调用 GitHub、不在事务中等待网络、不完成语义验收。新 Run 持久化 expectedTaskVersion，未来验收消费者/终态写入必须检查它；目前没有真实旧 Run 执行与终止演示。同一任务版本的两个不同提交竞争时，仅先成功落库者生效，另一个记 TASK_CHANGED，不声称做了 Commit 时间排序。历史 v1 缺少任务快照时拒绝，不查询当前任务补造历史上下文。
+
+收到 IGNORED 的原因已存库，但受权查询和页面展示尚未实现；取证异常记录和有界重试见 5.15。Dispatcher 已可路由计划生成与 GitHub 取证，新验收 Outbox 仍保留待后续验收消费者接线，不能把测试当作真实 Push → Worker → 报告已经接通。
+
+本原子落库切片交付时完整 `pnpm check` 通过（303 常规测试）；当时 R06 全套 78 项、R05 35 项、原计划/任务生命周期 8 项通过，共享测试不重复计数。当时只启动 WSL PostgreSQL，未启动 Redis/API/Worker/Web，未调用真实 GitHub/模型或改动凭据。用户后续已确认 Finalizer/模型关系理解，并报告本文件 36 项通过；不重复学习。最新队列验证见下节，R06 尚未完成或提交。
+
+### 5.15 R06：让队列调用已有读取器和 Finalizer（10/14）
+
+本段只学习后台调用编排：原取证 Outbox → Dispatcher → `github-evidence` 队列 → `GitHubEvidenceJobProcessor.process` → 已有读取器 → 已有 Finalizer。先安排约 20 分钟观察/导读，计入 R06 原预算，不增加手写，不要求重读此前的授权和事务实现。
+
+先观察（仅需 PostgreSQL + Redis，不需启动 Web/API/正式 Worker，也不请求 GitHub 或模型）：
+
+```powershell
+pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts --reporter=verbose
+```
+
+14 项场景中先看两个：消费者未启动时 Job 留在 wait，启动后才完成落库；第一次上游读取失败，自动重试后只产生一份 Submission/Evidence/Run/验收 Outbox。测试里的 `github_evidence_job_failed` 警告是刻意触发的故障，不等于测试失败，以最终测试结果为准。另有权限失败、耗尽重试、显式恢复、旧失败通知隔离、回滚和历史 v1 拒绝等检查；无需通读夹具。
+
+首读两个入口：
+
+1. `apps/worker/src/github/github-evidence-job-processor.ts` 的 `process`：根据 Job 中的 eventId/deliveryId 读取原接收记录；已有结果直接返回；记录本次尝试，调用读取器，再交给 Finalizer。失败只保存固定错误码，不让私钥、Token、正文或上游原文进入错误/日志。
+2. `apps/worker/src/queue/bullmq-github-evidence-queue.ts` 的 `publish` 和 `createGitHubEvidenceBullMqProcessor`：前者按 `evidence-{deliveryId}` 入队，只传两个 ID；后者校验 Job，传入当前尝试信息，将不可重试错误转换为 `UnrecoverableError`。有界次数/指数退避复用原 BULLMQ 配置，未引入新队列框架。协议行为可按需查 [BullMQ 自动重试](https://docs.bullmq.io/guide/retrying-failing-jobs)与[停止重试](https://docs.bullmq.io/patterns/stop-retrying-jobs)。
+
+其余配套只了解职责：Runtime 启停两条队列，现有 Dispatcher 循环按类型路由；Module 注入真实读取器；原子落库终态同时清理此前失败标记；共享连接选项保持原计划生成的设置。计划生成处理器不会接收到取证 Job，`NOTE_VERIFICATION_REQUESTED` 也不会被取证消费者认领，仍等待后续验收实现。
+
+取证尚无 AgentRun 时，Delivery 新增四个字段：
+
+| 字段 | 用途 |
+| --- | --- |
+| `evidenceAttemptCount` | 数据库累计取证尝试编号；防止旧尝试的失败覆盖新尝试，不是 Task.version |
+| `evidenceLastAttemptAt` | 最近开始一次取证的时间 |
+| `evidenceLastErrorCode` | 最近一次已记录的安全错误码；成功/忽略后清空 |
+| `evidenceFailedAt` | 本次自动尝试停止的时间；下一次显式尝试或完成后清空 |
+
+`ACCEPTED` 只表示通知已接收，不代表取证健康或正在运行。GITHUB_UNAVAILABLE 和未知处理故障做有限重试；权限、不可用来源、非法证据等停止自动重试。失败不改变 Task、不伪造 FAILED AgentRun。记录错误时同时检查 Delivery 尚未终结且尝试编号未变，旧失败不能覆盖已经成功/忽略的结果或较新尝试；该编号不能替代 Finalizer 的绑定、Task 版本和业务幂等检查。
+
+恢复边界：队列保留 completed/failed Job，重复投递相同 Job ID 不等于重试失败 Job。排障后可显式对失败 Job 调用 `retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true })`；已在本文件的隔离测试验证，仍复查原上下文，不改派新任务。未提供面向用户的重试接口/页面。若进程被强杀、耗尽 stalled 次数，或数据库自身不可写，消费者的 catch 不能保证把最终失败写入 Delivery；需结合保留的 Redis Job 与数据库最近尝试记录排查/显式重试，尚无自动对账补写，也未作进程强杀故障注入验证。不能把普通异常重试测试宣称为所有崩溃场景自愈。
+
+本次已增量应用 `20261014120000_github_evidence_processing`，没有 reset/清库。其他环境先迁移并构建共享包再启动 Worker；启动后会处理已有的 v2 取证待办，v1 则记为 Outbox dead letter，不补造上下文。现有数据库与 Redis 本次检查已在运行，没有另启正式应用、读取/修改真实凭据或调用真实 GitHub。测试只清理自己创建的随机数据库记录和 `r06-evidence-test-*` 隔离队列，不清理正式队列或用户数据。
+
+10/14 工程验证：完整 `pnpm check` 通过（48 文件 / 326 项常规测试），R06 92 项、R05 35 项、原计划/生命周期 8 项通过；共享场景不相加冒充新增数量。10/15 用户确认两个入口导读，并最终明确此处 14 项测试已通过、不用重跑；此前“36项通过”仍属于 5.14 原子落库。短复述中混淆 Outbox 投递与 BullMQ 执行重试，经解释后明确确认理解，完整记录见逐日计划；无需重跑、重读或重复复述。用户报告 R06 累计约 4 小时，原预算已用满而单元尚未收尾；此后分叉比较的小段交付见 5.16，用户新增投入另记。真实签名 GitHub Push、受权失败查询/页面提示及后续验收消费者仍未完成，不将本段标为完整 R06 DONE。
+
+### 5.16 R06：分叉历史也只比较 before → after（10/15）
+
+本段只补原 PRD 15.5，不增加手写，学习目标约 20 至 30 分钟，属于此前累计约 4 小时之后的新增投入。用户在本段学习收尾后报告实际约 30 分钟，R06 累计约 4.5 小时。普通 Compare 路径保留；分叉时的业务问题是：共同祖先与 after 的目标文件相同，不代表 before 与 after 也相同。若旧分支 before 写了“before 的正文”，强制推送后的 after 恢复为共同祖先中的“after 的正文”，共同祖先比较可能没有目标文件，实际本次 Push 却需要记录旧正文被替换。
+
+现在读取两个固定 Commit 的文件树（路径、类型和 Blob 身份的清单），核对完整性并找出真实变化，再仅读取目标正文，生成 before→after Diff。文件树已完整且路径不存在，才可以判断新增/删除；404 不能当空文件，缺失基准也不能改读 main。删除仍保存 before 正文并标记 removed，不作语义验收。返回的 Evidence 结构不变，继续走旧绑定复查与 Finalizer。
+
+只观察两个新场景，不重跑 5.15 的数据库/队列测试；无需 WSL、PostgreSQL、Redis、应用服务或真实凭据：
+
+```powershell
+pnpm exec vitest run apps/worker/test/read-commit-snapshots.spec.ts -t "compares actual before|requires resynchronization when Compare" --reporter=verbose
+```
+
+预期 2 项通过、其余 44 项跳过：第一项断言 Diff 含 `-before 的正文` 与 `+after 的正文`，且应用 Diff 后恰好得到 after；第二项断言 Compare 与原基准 Commit 都不可读时返回 RESYNC_REQUIRED，不改用当前分支。全部 46 项新测试已由 AI 验证，用户无需通读夹具或为凑数量重复运行全部场景。
+
+只看两个入口：
+
+1. `apps/worker/src/github/read-commit-evidence.ts` 的 Compare 分流处：普通来源保持旧路径；分叉或 Compare 404 转入两端核实，其他权限/限流错误不绕过。
+2. `apps/worker/src/github/read-commit-snapshots.ts` 的 `readCommitSnapshots`：核实两端树 → 比较路径与 Blob → 只读目标正文 → 生成有界 Diff 并返回原证据结构。
+
+配套 `readCommitFile` 是从旧读取器提取的共用校验，负责路径、大小、Blob SHA、UTF-8、内容哈希和行号；不需重读。`readTree` 负责 Commit/tree 身份、truncated 与重复路径检查；树清单被截断或响应超限时拒绝整次取证，不按局部清单判目标未改变。保留单次 20 秒请求预算、每响应 2 MiB、变化路径/Markdown 数量、单文件与生成 Diff 限额；Diff 使用已有版本的 diff 8.0.4，并有计算超时/编辑距离上限，不需要学习库内部算法。分叉路径按变化路径保守计数，改名可能占两个路径；只识别唯一且内容不变的改名，其他移动严格按原目标路径的增删处理，不猜测新目标。
+
+失败出口：必需快照或正文不可读为 RESYNC_REQUIRED，消费者沿既有规则记录安全错误码并停止自动重试；不存在“拿最新内容替代后继续验收”。这只是后台可诊断出口，面向用户的查询、提示与手动恢复入口仍待实现。没有真实 Force Push、生产 GitHub 链路或新验收执行能力的声明。
+
+验证证据：快照新测试 46 项 + 原读取器 43 项 + 授权保护 27 项 + 队列适配单测 14 项 = 130 项通过，Worker 类型检查、构建及定向 lint 通过。这里最后 14 项为无 DB/Redis 的单测，与用户先前通过的 14 项集成不同；后者本轮未重跑。未运行完整 pnpm check，未改数据库/凭据或启动常驻服务。实现参考 [GitHub Git trees](https://docs.github.com/en/rest/git/trees#get-a-tree)、[Compare](https://docs.github.com/en/rest/commits/commits#compare-two-commits) 与 [jsdiff](https://github.com/kpdecker/jsdiff#readme)，并核对本地 8.0.4 接口。用户随后已确认业务概念，并报告上述两个定向场景“已运行过，符合预期”（2 passed、44 skipped），不要求重跑；不冒记全部 46 项由用户运行或真实 Force Push 已验证。主函数五步导读后用户明确“读完了。我明白了”，代码阅读理解已确认。短复述曾将正文 404 误判为删除，经区别完整文件清单与读取失败、补充原调用链和错误传播后，用户再次明确理解；保留真实回答与复习点于逐日计划，不记为初次独立全答对。本小段学习收尾，用户报告新增实际用时约 30 分钟，R06 累计约 4.5 小时，保持 WORKING 承接原范围剩余待办；不重读、重跑、提交或将整个 R06 标为 DONE。
+
+### 5.17 R06：无验收 Run 时的取证反馈（只读切片）
+
+本段只解决“后台取证失败，用户去哪里看到”：工作台的“仓库接入”新增“最近取证通知”。只显示**本次绑定已关联学习任务的最近 20 条通知**，包含目标路径、固定 Commit、尝试次数、已保存状态和安全原因。`COLLECTED` 是已取证，不是语义验收通过；`RESYNC_REQUIRED` 是基准不可读，不是笔记不合格。点击“刷新取证记录”只发 GET，不触发 GitHub 读取、队列重试或模型调用。本段学习目标约 20 至 30 分钟，不新增手写。
+
+可观察验证（二选一，无需重跑旧队列测试）：
+
+- 有活动绑定时，启动 Web/API 后访问 `/app/repository`，观察通知区并刷新；没有该绑定的真实通知时显示空状态，不能为看效果伪造真实 Push 记录。
+- PostgreSQL 可用时运行下面两个定向集成场景，观察未登录/越权被拒，以及没有 AgentRun 的取证失败仍能返回可展示状态。它们使用随机用户和合成通知，结束仅清理自己的数据，不访问 GitHub/Redis/模型。测试 Outbox 的可投递时间设为远期，避免被开发 Worker 认领。
+
+```powershell
+pnpm run test:integration:r06 apps/api/test/repository-evidence.integration.ts -t "projects persisted|requires a session"
+```
+
+预期 2 passed、6 skipped。完整新测试 8 项已由 AI 跑过，不要求用户通读测试夹具。
+
+首轮只读两个文件：
+
+1. `apps/api/src/repositories/repository-evidence.service.ts` 的 `list` 和 `visibleState`：先核实活动绑定归属，再按原 Outbox 的 userId/repositoryId 找 Delivery，将保存结果映射为展示状态与白名单原因。只读事务使用同一数据库快照，不加行锁、不改变业务记录。
+2. `apps/web/app/components/RepositoryEvidenceStatus.vue`：按用户 ID 和绑定 ID 建 Query key，携带 Cookie 请求；展示加载/空/正常/错误状态，支持手动刷新。换绑或卸载取消旧请求，401 清会话缓存并返回登录页，404 隐藏旧列表并提示刷新绑定。
+
+Controller 负责路由、鉴权和返回契约；`knowledge-ops-api.ts` 复用带 Cookie、超时、AbortSignal 与 Zod 校验的客户端；`repository.vue` 仅接入组件。这些是配套，不需重新逐行阅读。入口是 `GET /repositories/:repositoryId/evidence-deliveries`，其中 repositoryId 是本项目的绑定记录 ID，不是 GitHub 仓库号；仅需本项目登录会话，不需要重新获取 GitHub 用户 Token。
+
+关键失败路径：固定基准不可读 → Processor 已记录 `RESYNC_REQUIRED/evidenceFailedAt` → 查询返回“需要重新同步” → 页面给出原因，不将 Task 改成 FAILED。若本次 GET 自身网络失败，页面显示“未能读取记录”，与后台取证失败分开。等待结果/曾失败标签仅描述数据库记录，不证明 Worker 此刻在线或 Redis 中一定仍有重试任务。
+
+本段交付时的边界：手动重试/重新同步、完整历史列表及验收报告不在本段。接收时就被忽略且未创建任务 Outbox 的 Delivery（例如没有当前任务）没有可靠的历史 owner，本次不按当前仓库归属猜测返回；对应用户反馈后续在 5.22 通过新接收归属补齐，旧的未知归属仍不猜测。强杀或数据库不可写后的结果对账也未因此完成。
+
+工程证据（2026-10-15）：新接口真实 PostgreSQL/HTTP 集成 8 项、客户端 7 项（其中新增 2 项）、API 常规回归 92 项通过；API/Web 类型检查及构建、定向 lint 通过。初版测试夹具不符合 Delivery 状态/失败字段约束，已补齐合法 Submission/处理时间后通过，未修改数据库约束。隔离浏览器使用合成响应验证 1280px 桌面和 375px 手机布局、长路径换行、44px 按钮、键盘可见焦点、加载/空/网络失败/404/401、换绑中止旧请求；正文/辅助/警告文字在黑底对比度均超过 4.5:1。模拟设备时浏览器重载导致一次夹具丢失，重新注入后完成手机验证；不作为真实登录/Push 证据。Web 构建有上游依赖 DEP0155 弃用提示但退出码为 0。
+
+未运行完整 `pnpm check`，未重跑用户已通过的 14 项队列集成，未修改凭据或数据库结构。临时 Web 预览和隔离浏览器页验证后已关闭，未启动 API/Worker 常驻进程；仅清理随机测试数据，无既有业务记录删除。随后用户完成后端主链路复述，并确认对活动绑定及只读展示状态的校准；前端导读与 AbortSignal 追问讲解后明确理解，后续准确区分“取证 FAILED 展示取证失败”与“GET 断网展示请求失败”，本段短复述通过。用户补充本段约 25 分钟、用例已运行，按上述两个定向观察场景记录运行反馈，不补造具体通过统计或真实页面/Push 证据，也不要求重跑。本小段学习收尾，R06 返回 WORKING 承接剩余待办，累计约 4 小时 55 分钟；下一小段先厘清取证失败的重试/重新同步边界，本轮不启动实现。此次进度同步不改产品代码、不重跑测试，不提交或标记整个单元完成。
+
+### 5.18 R06：普通失败的手动取证恢复
+
+用户已确认“原材料重试”和“缺基准重新同步”的区别，本段只接普通失败。仓库页中，原绑定/任务仍有效且允许重试的失败通知显示“重试取证”。刷新记录仍只是 GET；只有按钮提交 POST。`RESYNC_REQUIRED`、任务/路径/版本已变、正在尝试或已有结果不提供这个恢复入口。
+
+可观察一个新增用例（需要 PostgreSQL/Redis，不访问真实 GitHub 或模型）：
+
+```powershell
+pnpm run test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts -t "recovers a retained failed BullMQ"
+```
+
+预期 1 passed、20 skipped：先故意使原 Job 取证失败并保留，再提交恢复请求；模拟“已入队但投递确认丢失”后补投，仍只完成一次取证、保存一份 Submission/AgentRun。日志里的首次 failed 是设计的故障场景，不是用例失败。旧 14 项队列集成不需重跑。合成用户、记录和随机测试队列会在结束后清理，测试 Outbox 的 availableAt 设为远期避免被开发 Worker 认领。
+
+首读两个入口，学习目标约 20 至 30 分钟，不新增手写：
+
+1. `apps/api/src/repositories/repository-evidence-retry.service.ts` 的 `retry`：登录身份来自 Controller；先锁 User、核对原绑定/接收记录，再锁 Delivery。同一失败尝试次数生成唯一恢复键，重复点击返回旧请求；只有仍有效的原任务和允许恢复的最终取证失败才能创建新 Outbox。保存上轮失败依据及当前恢复请求指针同事务，提交后 202，不改 Task、不创建验收 Run、不访问 GitHub/Redis。
+2. `apps/web/app/components/RepositoryEvidenceStatus.vue` 的 `retry` / `requestRetry`：发送所见 `attemptCount`，提交期间禁用，受理后重新读取数据库结果；不乐观显示取证成功。POST 网络失败意味着未确认受理，不意味着取证失败；409 提示资格/状态变化，401 清会话。换绑/卸载后的迟到命令响应不污染新页面。
+
+Worker 复用已读链路，只补看 `github-evidence-job-processor.ts` 的 `retryEventId` 检查：恢复 Outbox 指向原接收 Outbox，Queue 传原 eventId/deliveryId 加 retryEventId，新 Job ID 为 `evidence-{deliveryId}-retry-{retryEventId}`；仍使用原绑定、任务、路径、before/after。Delivery 指针同时用于开始尝试、失败更新与 Finalizer 落库检查，旧请求迟到不能写结果。原绑定/任务的最终复核及成功原子落库不变。`expectedAttemptCount` 用于重复点击/失败快照校验，`retryEventId` 用于区分恢复请求，二者都不是 Task.version 或 AgentRun.version。
+
+配套文件只需知道职责：Controller/契约校验入参及 202，Dispatcher 认领新增事件，队列适配复用原取证队列；只读查询批量核对原任务以决定按钮资格，但 POST 仍在锁内复核。保留旧失败 Job 和恢复 Outbox 的失败依据；不实现无限自动恢复、重建缺失基准、Redis 丢失后的全部对账或模型验收消费者。
+
+工程验证（2026-10-15）：真实 PostgreSQL/HTTP 16 项（原 8 + 新 8）、新增 PostgreSQL/Redis 恢复集成 7 项、相关纯单测 60 项通过；旧 14 项队列集成本轮跳过。API/Worker/Web 类型检查与构建、定向 lint/格式及 Prisma 校验通过，未跑完整 pnpm check。类型检查发现精确可选字段及跨应用集成测试 rootDir 问题后已修正；Worker 仅移除 noEmit 检查配置的 rootDir，生产构建仍限定 src，没有放宽 strict。Web 构建保留上游 DEP0155 警告，退出码 0。
+
+隔离浏览器用合成响应验证 1280px 桌面/375px 窄屏、长路径无横向溢出、44px 按钮、键盘可见焦点（2px）、正常正文对比度最低约 7.37:1，以及加载、空、提交中、受理、POST 网络失败/409/401、GET 网络失败和换绑后旧 POST 401 不影响新页面。首次窗口 resize 实际只能到 501px，随后用 viewport 模拟并确认 innerWidth=375 完成窄屏检查。不把模拟响应记为真实登录或 GitHub Push 验收。
+
+增量迁移 `20261015100000_github_evidence_retry` 已应用本地数据库，仅增加恢复事件类型与 Delivery 指针，无 reset 或凭据修改。其他环境先执行 `pnpm db:migrate:deploy`、重建共享包并重启 API/Worker/Web，再使用新契约。临时 4310 Web 预览和隔离浏览器页已关闭，未启动 API/Worker 常驻服务；既有业务数据未删除。本段进入 WALKTHROUGH，用户代码观察、导读、复述及实际用时待反馈；R06/M3 不标 DONE、不提交。
+
+2026-10-16 学习进度更新：API 事务、前端 mutation/旧响应隔离和 Worker 恢复请求身份保护的导读理解已确认，Outbox/Job 字段归属及保留原记录的取舍经追问校准。本段转 RECALL，只补一个旧轮次结果隔离场景；上方新增用例的用户运行反馈、短复述及本段实际用时仍待补充，不要求重跑已完成的旧 14 项集成。当前仅更新文档，不新增实现或验证证据，不将整个 R06/M3 标记完成。
+
+同日收尾反馈：用户准确说明，旧任务落库、创建 AgentRun 前需匹配 Delivery 当前 evidenceRetryEventId，不一致即拒绝，短复述通过。用户报告本段约 20 分钟、上方新增用例已运行；未报告具体统计，不补造通过数或真实 Push 观察，不重跑。结合既有工程验证与导读确认，本小段学习收尾，R06 返回 WORKING，累计约 5 小时 15 分钟。下一段先厘清 RESYNC_REQUIRED 手动重新同步的基准与证据语义；本轮仅同步文档，不新增实现、运行测试或提交，整个 R06/M3 仍未完成。
+
+后续业务确认（2026-10-16）：单点快照重新同步固定原 after Commit 与原任务路径；用户主动发起时允许免检 FILE_CHANGED，但不伪造 Diff，也不降低正文与必答追问标准。定义已同步 PRD 10.2/15.5；随后实现及观察见 5.19，上方普通重试命令不能被当作此功能的验证，已完成用例不要求用户重跑。
+
+### 5.19 R06 显式全文快照重新同步（2026-10-16）
+
+本段只学一个区别：两端比较能证明变化，单点快照只能证明原提交中的内容；用户显式重新同步后，后者也可以进入后续验收。不新增手写，学习目标约 20 至 30 分钟，实际投入待反馈。
+
+先观察一个新增场景（真实 PostgreSQL/Redis，GitHub 响应是合成夹具；不需要真实 Force Push 或配置新的凭据）：
+
+```powershell
+pnpm run test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts -t "recovers a missing baseline"
+```
+
+预期 1 passed、35 skipped。初次 Job 的失败日志是测试主动模拟旧基准不可读取，不是实现故障；随后恢复 Job 完成，断言确认 Evidence 为 SNAPSHOT、固定原 after、change/diff 为 null、只有一个 QUEUED 验收 Run、Task 仍为 VERIFYING 而非 PASSED。这个用例不验证 M4 的正文或追问质量；先前旧队列/普通重试观察无需重跑。
+
+导读顺序只看三个入口的新分支，不重读整套事务：
+
+1. `apps/worker/src/github/read-commit-snapshots.ts` 的 `readTargetFileSnapshot`：由原 Reader 根据持久化模式调用，核实原 after 的树和目标文件，再读完整正文；未读到文件是失败，不是删除或空正文。
+2. `apps/api/src/repositories/repository-evidence-retry.service.ts` 的 `resync/request`：只对需要重新同步且原绑定/任务仍有效的最终失败受理；复用原恢复请求去重和指针，将 SNAPSHOT 冻结在 Outbox。此模式随后遇到可重试失败，普通 retry 也必须保留它。
+3. `apps/worker/src/github/finalize-github-push-evidence.ts` 的模式检查与 Evidence 创建：持锁后读取当前恢复请求，不允许 Reader 自行切换模式；合法快照才和 Submission、QUEUED Run、验收 Outbox 原子落库。
+
+配套变化：恢复事件 v2 显式保存 evidenceMode，v1 严格兼容为 DIFF；队列仍只传 ID，Processor 从数据库取得模式再传给授权 Reader。仓库页面新增“按本次提交全文重新同步”，复用原 mutation、Cookie/Origin 保护和迟到响应隔离；GET 返回 canResync 并展示已保存的真实证据模式，不把 202、快照保存和验收通过混为一谈。模式即固定的 FILE_CHANGED 免检依据，不提供任意标准豁免；M4 仍须按该依据执行正文与追问规则。
+
+关键失败：原 after 或目标正文也不可读时，不创建 Submission/AgentRun；等待期间原任务/绑定改变或恢复请求已换轮时，不让旧结果写入。普通 Push 无变化仍忽略，不自动转快照；不重建历史、不改用最新分支、不重新选择任务。
+
+工程验证：快照新增集成 24 项、API 相关旧回归 16 项，共 40 项；定向纯测试 190 项，API/Worker/Web typecheck/build、lint/格式、Prisma 校验通过。浏览器隔离合成响应覆盖 1280px/375px、44px/焦点/对比度、受理/重复点击/取证结果及网络、401/404/409、空/加载和换绑旧响应。全部不是生产、真实 GitHub 推送或模型验收证据，未跑全量 pnpm check。
+
+迁移 `20261016100000_github_evidence_snapshot` 已应用本地数据库，无 reset；其他环境需 `pnpm db:migrate:deploy`、`pnpm build:packages` 并重启 API/Worker/Web，避免新旧契约混用。既有证据默认 DIFF，新模式由数据库约束要求 change/diff/previousPath 均为 null，不改写旧证据。2026-10-16 用户已确认三个增量入口及重新同步触发条件的理解，短复述通过；10/17 补充“用例已运行，本段用时 15 分钟”，未提供具体统计，不补造用户通过数或真实 Push 观察，不要求重跑。本小段学习收尾，R06 返回 WORKING、累计约 5 小时 30 分钟；本轮只同步进度，不修改产品、重跑测试或提交，真实 Push 等剩余范围未闭环，整个 R06/M3 不标 DONE。
+
+### 5.20 R06 真实 Push：前置准备（2026-10-17，尚未完成真实观察）
+
+本段复用已理解的链路，目标是让真实 GitHub Push 经验签、任务快照、队列和固定 Commit 取证后产生 Evidence 与一个 QUEUED 验收 Run；不验证模型验收或任务通过，不新增手写或 SSE。学习观察目标约 20 至 30 分钟，实际环境准备时间待反馈。
+
+10/17 用户启动 WSL 后，`pnpm infra:check` 已通过，R06 增量迁移已应用。只读检查发现当前绑定有效且分支为 main，但绑定用户的计划仍是 DRAFT，没有已开始的任务。先在产品页面确认并激活原计划，再从 `/app/today` 进入一个 READY 任务，填写将要提交的 Markdown 相对路径并点击“开始任务”；不能仅有仓库绑定就推送，也不直接改库制造当前任务。
+
+Web/API/Worker 现已分别启动。独立启动方式如下，每条常驻命令放在各自终端；先检查端口及 Worker 进程，已有服务时不要重复启动：
+
+```powershell
+# 仓库根目录：构建共享依赖、API 与 Worker。
+pnpm build:packages
+pnpm --filter @knowledgeops/api build
+pnpm --filter @knowledgeops/worker build
+
+# 仓库根目录的独立 API 终端。
+node --env-file=.env apps/api/dist/main.js
+
+# 仓库根目录的独立 Worker 终端；生成新计划及后台取证都需要它。
+node --env-file=.env apps/worker/dist/main.js
+
+# apps/web 目录的独立 Web 终端；此绝对路径仅对应当前本地工作区。
+node --env-file=D:/project/agent/.env node_modules/nuxt/bin/nuxt.mjs dev --host 127.0.0.1 --port 3000
+```
+
+本次 `/health/ready` 与 `/login` 均返回 200；这是本地就绪检查，不是登录成功或 GitHub 投递的证据，也不代表 Worker 正在消费。最初仅为确认已有草稿启动 Web/API；用户新生成请求因缺少 Worker 停在 QUEUED。现已独立补启动 Worker，旧请求超过三分钟期限，按原超时扫描转为 TIMED_OUT，Processor 跳过终态而未调用模型。刷新后可由用户显式“创建关联重试”，或继续使用已有草稿；不能强行续跑过期 Run。曾误由 dotenv/pnpm 嵌套命令触发根 dev，已停止该进程组并清理，数据库审计无该时段新增投递/取证/验收处理；这里使用直接入口，避免为单独启动 Web 而启动整套应用。
+
+真实 Push 前仍需完成：原任务已经开始且目标路径确定；本地 `GITHUB_WEBHOOK_SECRET` 与 GitHub App 的 Secret 一致；GitHub 能访问的接收/转发入口指向本机 `POST /webhooks/github`；App 的 Webhook 启用、Push 订阅及安装权限匹配。当前仅确认 App 配置存在、私钥文件存在，Secret 尚未配置，公网入口未确认；不要在聊天、文档或提交中粘贴 Secret/私钥。尚未建立公网转发、修改 GitHub 设置或发起真实推送，待上述条件满足后再观察；若更新环境配置，需重启读取该配置的对应服务。已有合成测试和快照恢复用例不要求重跑。
+
+### 5.21 R06 Webhook：真实 Push 已取证并交接待验收（2026-10-18）
+
+本节更新 5.20 的环境快照：用户已在产品页面开始 Markdown 任务，数据库确认计划 ACTIVE、任务 IN_PROGRESS、目标路径已保存、main 绑定启用；已完成本地 Secret、GitHub App Webhook 与 Smee 转发配置并报告已连接。只读检查确认 Smee 进程在运行；原三个应用均已停止，本次重建共享包/API/Worker 并用 5.20 的独立命令补启动 Web、API、Worker，未重复启动转发进程。API 健康检查与 Web 登录页均 200，Worker runtime_started；没有新增实现或重跑已完成用例。
+
+安全检查仅输出配置是否存在/有效，不输出 Secret、私钥、JWT、Smee 通道地址或真实请求正文。GitHub 只读查询确认 Push 订阅、Contents read、Smee HTTPS/JSON、TLS 校验及远端 Secret 已设置；本地无签名 POST 返回 401 / WEBHOOK_SIGNATURE_INVALID。后者是拒绝探测，不会写 Delivery，也不代表正确签名已经通过。Smee 仅用于已告知风险的非敏感开发调试，正式上线使用受控公网 HTTPS 接口。
+
+本次真实 ping 的验证步骤（已完成，保留供复现）：
+
+1. 保持用户的 Smee 转发终端开启，目标应为 `http://127.0.0.1:4000/webhooks/github`。
+2. 打开 GitHub App 的 Edit → Advanced → Recent deliveries，选择 `X-GitHub-Event: ping` 的记录，点击 Redeliver；不是重投旧 Push，也不在仓库另建 Webhook。操作路径见 [GitHub 官方说明](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/redelivering-webhooks#redelivering-github-app-webhooks)。
+3. 观察 Smee 终端本机 POST 的状态码，预期 202，再核对数据库有同一 Delivery ID 的 ping / IGNORED / EVENT_UNSUPPORTED。项目只处理 push，因此合法 ping 不创建 Outbox、验收 Run 或改变 Task。
+4. GitHub 的 200 只证明中转服务收到了请求；本机 202 与对应 Delivery 才是最后一段接收/验签证据。若 401，检查两端 Secret 及原始正文转发；若 503，检查 API 是否加载配置及数据库可用性，不关闭验签绕过问题。
+
+用户重投后反馈“本机收到了”：API 日志确认 POST /webhooks/github 返回 202，数据库存在同一 GitHub ping Delivery，状态 IGNORED / EVENT_UNSUPPORTED；没有取证 Outbox、Submission 或验收 Run，原任务仍为 IN_PROGRESS / version 2。真实 ping 的本机验签与接收落库已验证，替代此前“本地 Delivery 为空”的环境快照；它未关联任务 Outbox，不显示在仓库页的取证列表中。尚不能宣称真实 Push 或 R06/M3 完成；未由 AI 修改 GitHub 配置、重投通知或发起模型调用，新增用户用时仍待反馈。
+
+真实 Push 的操作：由用户在已绑定的学习仓库（不是 KnowledgeOps Agent 代码仓库）的现有 main 分支，对任务详情记录的目标 Markdown 路径新增或追加少量非敏感笔记，普通 commit + Push 一次；保留已有内容，不空提交、不强推、不切换绑定或目标路径。保持 Smee、API 和 Worker 运行，在 `/app/repository` 的“最近取证通知”点击“刷新取证记录”。预期出现“已取证”，再核对固定提交的 Evidence、VERIFYING 任务与 QUEUED 验收 Run；这不是任务通过，M4 的正文验收消费尚未接入。若失败，反馈页面状态及错误码，不粘贴 Secret、通道地址或完整私有请求正文。
+
+本次首次真实 Push 的实际结果为“已忽略／目标文件未修改”。只读提交列表确认文件所在目录比任务目标少一层，完整相对路径不一致；数据库 Delivery 为 IGNORED / TARGET_NOT_CHANGED，已尝试 1 次、无取证错误码，任务仍 IN_PROGRESS / version 2，无 Submission 或验收 Run。这证明真实接收和后台比较已执行，不是转发断开或 Worker 未启动，也不代表正文取证成功。下一步由用户将笔记放到任务要求的完整路径并新增普通提交后 Push；不要重投旧通知或修改数据库绕过路径匹配。AI 仅诊断与记录，未修改学习仓库或代为推送。
+
+随后用户修正目录、修改内容并新增提交，报告页面“已取证”。只读核对对应 Delivery 为 PROCESSED、已尝试 1 次且无错误码；Submission 与 DIFF/added Evidence 已保存，正文和 Diff 存在、来源 SHA 与该 Push 一致。任务由 IN_PROGRESS / version 2 变为 VERIFYING / version 3，关联 NOTE_VERIFICATION Run 为 QUEUED、expectedTaskVersion 为 3，验收 Outbox 一条、尚未投递。这是本轮真实取证与交接成功的观察证据，替代上段待成功观察的返回点；M4 消费尚未接入，不等待其自动通过、不为推进状态重复 Push 或重启，也不手改数据库。未重跑旧测试、调用模型或完成整个 R06；短复述反馈与实际用时统一在逐日计划记录。
+
+### 5.22 R06 接收阶段忽略反馈（2026-10-18）
+
+本段只学习一个区别：**通知属于哪次仓库绑定，与这次通知是否有可取证的任务，是两件事。** 目标约 20 至 30 分钟，无新手写。此前列表从任务 Outbox 反查通知，无当前任务时没有 Outbox，页面就看不到原因；现在接收事务先固定 `Delivery.receivedRepositoryId`，再决定是否创建取证待办。
+
+可观察结果：活动绑定下没有当前任务时，一次合法 Push 仍返回 202；仓库页显示“已忽略／未关联任务 · 未进入取证”和“请先开始任务，再修改目标文件并提交新的 Push”。不会产生 Outbox、Submission 或 AgentRun，也没有重试/全文同步按钮。后来开始任务或重投同一通知不会把旧 Push 改成新任务的证据；解绑重绑也不会继承它。
+
+在项目根目录运行这一个新增观察用例即可，PostgreSQL 需已启动：
+
+```powershell
+pnpm test:integration:r06 apps/api/test/repository-evidence.integration.ts -t "R06 observation: ignored receipt"
+```
+
+预期 1 项通过、其余场景跳过。它用随机测试用户、绑定、任务及真实签名 HTTP 走接收和查询，再断言上述结果；测试自行清理自己的记录，不访问真实 GitHub、不调用模型、不修改已取证的真实任务。用户无需再次 Push 或取消当前 VERIFYING 任务。
+
+首轮只读两个增量入口：
+
+1. `apps/api/src/webhooks/github-webhook.service.ts`：第 3 段锁用户、重查原绑定后，先写 `receivedRepositoryId`；非目标分支直接记原因，没有任务则在第 4 段记原因，均不制造 Outbox。
+2. `apps/api/src/repositories/repository-evidence.service.ts`：`list` 先确认登录用户拥有当前绑定，再按接收绑定查询 Delivery；有 Outbox 走已有取证结果映射，无 Outbox 只返回白名单内、未开始取证的忽略记录。未知历史归属不展示，无权返回 404。
+
+配套迁移只增加可空归属、外键及索引，并从原 v2 Outbox 已固定且核验一致的绑定材料补齐历史；不按今天的仓库 owner 回填。契约只允许无任务记录为 IGNORED/零尝试/不可恢复，页面复用现有通知组件。这里的绑定 ID 是本项目 Repository 记录 ID，不是 GitHub 仓库号。
+
+本地已应用 `20261018100000_webhook_receipt_binding` 并重建共享包/API。其他环境须先应用迁移、重建共享包并切换到新版 API/Web，再接收与观察新通知；未改造旧 API 继续写入的滚动升级窗口，不宣称未知归属会自动补齐。本轮没有重启现有 API/Worker 或其他应用；用于 UI 检查的独立 4310 Web 和隔离浏览器页已关闭。
+
+定向工程验证：接收及查询/恢复 PostgreSQL+HTTP 集成共 63 项、相关常规测试 38 项通过；API/Web/Worker 类型检查、API/Web 构建、定向 lint、格式与差异检查通过。Web 构建仅有上游 DEP0155 弃用提示，退出码 0。真实产品页面配合隔离合成响应检查 1280px/375px 布局、长路径、44px 按钮、键盘可见焦点、正文最低对比度约 7.37:1，以及加载、空、网络错误、401/404 清理；不是新增真实 GitHub Push 或登录证据。没有运行完整 `pnpm check` 或重跑用户已完成的队列集成。用户观察、导读理解、短复述和实际用时待反馈，R06/M3 不标 DONE、不提交。
+
+2026-10-19 用户已确认上述两个增量入口的导读理解，本段转 RECALL；只补无任务通知归属及重绑隔离的简短复述、新增观察用例运行反馈与实际用时，不重读或重跑旧用例。此次仅同步进度，不新增实现或验证证据，R06/M3 仍未完成。
+
+随后用户正确复述忽略通知的安全文案/无任务展示及重绑 ID 隔离，短复述通过；AI 补齐接收绑定持久化、按用户授权查询，以及 message 属于响应映射而非数据库写入。仅待上方新增观察用例运行反馈和本段实际用时，不重复复述或重跑旧用例；累计仍为已报告约 5 小时 45 分钟，R06/M3 不标 DONE、不提交。
+
+同日用户补充“已运行，用时15分钟”，记录为本节新增观察用例已运行，未报告具体统计，不补造通过数或真实 Push 证据。本小段学习收尾，R06 累计约 6 小时、返回 WORKING；异常退出/数据库不可写恢复留下一小段，R07 部署 smoke 保留。本轮仅同步进度，不重跑测试、改产品、启动服务或提交，整个 R06/M3 尚未完成。
+
+### 5.23 R06：证据已落库，Worker 却没来得及确认完成（2026-10-19）
+
+本段只学“业务提交与队列确认是两步”，约 20 至 30 分钟、无新手写。场景是 Finalizer 已将证据、QUEUED 验收 Run、验收 Outbox 和 Delivery 终态原子保存，Worker 随即退出；PostgreSQL 已经成功，但 Redis 的 Job 仍可能是 active。不能因此把 Task 改成失败，也不能把同一证据再写一份。
+
+先启动本机 PostgreSQL/Redis，在根目录运行一个新增观察用例；无需启动产品 API/Web/Worker 或再次 Push：
+
+```powershell
+pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts -t "R06 observation: recovers a worker crash" --disableConsoleIntercept
+```
+
+预期 1 项通过、其余不匹配的用例跳过，并看到三个检查点：
+
+1. `committed-before-ack`：Delivery=PROCESSED、Job=active、Run 数量 1。
+2. `fixture-worker-exited`：测试子进程已被强制结束，数据库成功结果仍在，Job 尚为 active。
+3. `recovered-from-saved-result`：新 Worker 检查失联后处理同一 Job，最终 completed，readerCalledAgain=false，Run 仍为 1、Task version 仍为 4。
+
+这些数量和版本是独立测试夹具，不是用户的真实任务。本例确实终止一个由测试创建的 Node 子进程，不是把普通 throw 或 worker.close() 当作崩溃；GitHub 读取结果为合成数据，Processor/Finalizer、PostgreSQL、Redis 为真实实现。只使用带随机 UUID 的测试队列和数据，本地 URL 与队列前缀有检查，原取证待办停放在未来并仅按指定 ID 投递；不停止常驻服务、清空正式队列或改用户笔记。退出及资源清理由测试负责。
+
+首轮只读两个既有产品入口，不要求阅读子进程测试装配：
+
+1. `apps/worker/src/queue/bullmq-github-evidence-queue.ts` 的 `createGitHubEvidenceBullMqProcessor`：适配器等待 handler.process 返回；数据库事务提交发生在内部，BullMQ 标记 Job 完成在返回之后，因此存在本次退出窗口。
+2. `apps/worker/src/github/github-evidence-job-processor.ts` 的 `terminalResult(delivery)` 调用及函数：原通知身份/恢复轮次检查后，先返回已保存终态，早于尝试数递增、Reader 和 Finalizer；因此再次领取不等于再次读取正文或写入业务结果。Finalizer 持锁后的幂等检查仍保留，防并发期间状态变化，不需重读整个函数。
+
+BullMQ 的处理锁过期后，需要运行中的 Worker 执行 stalled 检查，在未超允许次数时重新排队处理；不是所有 Worker 都停了仍会自己继续，也不是无限重试。参考 [BullMQ 失联任务机制](https://docs.bullmq.io/guide/jobs/stalled)与[异常退出恢复](https://docs.bullmq.io/guide/workers/graceful-shutdown)。测试用 1.5 秒锁、100 毫秒扫描缩短观察，产品沿用本地安装 BullMQ 6.0.10 的默认值；不把测试耗时写成生产性能承诺。
+
+本轮没有修改产品逻辑、迁移或配置，只新增退出测试及配套子进程，复用原有幂等保护。新增集成 1 项及适配器单测 15 项通过，Worker 类型检查、定向 lint/格式与差异检查通过；未运行完整 R06 或 pnpm check。临时进程/随机数据/队列已清理，没有重启既有服务。10/19 用户已确认理解恢复链路及两个测试文件的导读，短复述通过：发现 PROCESSED 后复用已有结果，避免重复落库；AI 补齐回调正常返回后由 BullMQ 完成队列状态更新。随后用户反馈新增观察用例已运行、本段约 20 分钟，未给具体统计，不补造用户通过数；结合既有工程验证，本小段学习收尾，不要求重跑。R06 累计约 6 小时 20 分钟，返回 WORKING；下一小段预告数据库写入失败时的回滚与重试边界，尚未启动。未提交时退出、数据库持续不可写及连续失联超过上限的结果对账尚未因此验证；R06/M3 不标 DONE、不提交。
+
+### 5.24 R06：验收 Outbox 写入失败，回滚后再自动重试（2026-10-19）
+
+本段约 20 至 30 分钟、无新手写，只看一个写入失败出口。与 5.23 已提交后退出不同，本次在 Finalizer 的事务提交前失败：前面即使执行过 Task 更新、Submission/Evidence 和 AgentRun 创建，也必须一起回滚；先前独立提交的接收 Delivery 与原取证 Outbox 不删除。
+
+本机 PostgreSQL/Redis 可用时，在根目录仅运行一个新增观察用例，不需要再 Push、启动产品服务或重跑旧退出用例：
+
+```powershell
+pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts -t "R06 observation: write retry" --disableConsoleIntercept
+```
+
+预期 1 项通过，其余不匹配用例跳过。两个观察日志是测试在对应时刻保存的检查点，断言后集中打印；不以它们与产品日志的输出顺序推断执行时序：
+
+| 检查项 | handoff-rolled-back：首次失败后 | handoff-recovered：自动重试成功后 |
+| --- | --- | --- |
+| Delivery | ACCEPTED；安全错误 EVIDENCE_PROCESSING_FAILED，未耗尽次数 | PROCESSED；错误清空 |
+| Task | IN_PROGRESS / version 3 | VERIFYING / version 4 |
+| Submission / Evidence / AgentRun / 验收 Outbox | 各 0 条 | 各 1 条；AgentRun 仅 QUEUED，不是验收通过 |
+| 取证尝试次数 | 1 | 2 |
+| 原接收 Outbox 投递次数 | 1 | 仍为 1；整条记录不变 |
+
+出现一次 `github_evidence_job_failed` WARN 是本次预期故障，不代表整个测试失败。产品 Processor 在事务外记录错误后继续抛出，由 BullMQ 按 attempts/backoff 自动重试；此处没有再次投递 Outbox，也没有手动重试调用。由于首次证据未提交，第二次会重新调用 Reader，仍使用原接收快照的固定 SHA。队列配置限定总尝试次数，不能无限重跑；参考 [BullMQ 重试说明](https://docs.bullmq.io/guide/retrying-failing-jobs)。
+
+首轮只读两个既有产品入口，不要求阅读整份测试装配：
+
+1. `apps/worker/src/github/finalize-github-push-evidence.ts` 的第 3 段：Task、Submission/Evidence、AgentRun、验收 Outbox 和 Delivery 完成状态都在同一个 `$transaction` 内；任一步失败都不能留下前面几步的业务结果。参考 [PostgreSQL 事务说明](https://www.postgresql.org/docs/14/tutorial-transactions.html)。
+2. `apps/worker/src/github/github-evidence-job-processor.ts` 的 `catch`：失败记录不在刚回滚的事务内；只更新仍属于本次尝试的 Delivery，不改 Task、不伪造 FAILED AgentRun，然后 `throw failure` 交给原 BullMQ 适配器。最终成功会清空安全错误；不可重试或重试次数耗尽时保存 `evidenceFailedAt`，可继续自动重试时为 `null`，Delivery.status 不因此改为失败。
+
+测试位置为 `apps/worker/test/github-evidence-processing.integration.ts` 的 `R06 database write recovery`。只在测试专用 Prisma 客户端的验收 Outbox 写入中使用本夹具已有的唯一键，触发真实 [P2002 唯一约束错误](https://www.prisma.io/docs/orm/reference/error-reference#p2002)；第二次解除故障注入，并非断言真实唯一键冲突总能靠重试解决。使用随机队列/用户/任务，本地地址检查和未来时间停放避免常驻 Dispatcher 领取夹具；GitHub 读取结果为合成数据，没有访问 GitHub 或模型。无全局触发器、迁移、数据库停机或正式队列清空，测试仅清理自己的记录与队列。
+
+另有同组回归覆盖连续三次写入拒绝：总尝试 3 次后 Job failed，Task 保持原状态/版本，无任何验收结果，Delivery 留下安全错误和失败时间。它依然允许事务外错误记录写入，不能替代“整库不可用、连错误都写不回”的验证。新增集成 2 项通过（其余 37 项跳过），上方短标题单项命令另复核为 1 passed / 38 skipped，不累加为新场景；Worker 类型检查、定向 lint、格式/文档差异检查通过，没有修改产品代码或运行完整 R06/pnpm check。2026-10-19 用户已确认两个入口的导读理解，短复述通过，并报告观察用例已运行、本段约 15 分钟；未提供用户测试统计，不补造或要求重跑。本小段学习收尾，R06 返回 WORKING，累计约 6 小时 35 分钟。提交前进程退出、整库不可用及连续失联耗尽上限的对账仍待补，R06/M3 不标 DONE、不提交。
+
+### 5.25 R06：剩余故障统一工程收尾（2026-10-20）
+
+按用户确认，三类故障合并成一次工程验证，统一学习约 20 至 30 分钟，不逐个开导读/复述，不加手写或要求再次 Push。既有真实 Push 与学习证据保留。这里唯一新增概念是：队列已经停止处理，但数据库可能没有失败记录，需要核对并补记，而不是再执行一遍任务。
+
+| 隔离场景 | 验证结果 |
+| --- | --- |
+| 事务写入后、提交前结束测试 Worker | 未提交的 Task/Submission/Evidence/Run/验收 Outbox 不可见；新 Worker 自动重领后只落一份结果 |
+| 连续两次提交前退出，超过允许失联次数 | Job 最终 failed；对账补记 Delivery 的取证失败，Task 不变、无验收 Run |
+| 已成功落库，但连续退出最终使队列失败 | PostgreSQL 的成功结果保持不变，不能被对账改为失败 |
+| 取证后数据库连接断开，连 catch 错误记录都写不回 | 短暂故障恢复后可自动成功；耗尽尝试后，连接恢复再补记可查询失败，原手动恢复仍能成功 |
+| 连接在登记开始前就失败，后续手动恢复再次失败 | 根据保留 Job 的实际领取次数补齐累计值，下一次恢复得到新请求，不卡回旧防重键 |
+| 对账读取期间发生成功、新尝试或新恢复请求 | 条件更新返回 0，旧失败不能覆盖新状态 |
+
+产品首轮只读两个入口：
+
+1. `apps/worker/src/github/github-evidence-reconciler.ts`：查未记最终失败的 Delivery，恢复原 Outbox/当前恢复请求上下文，核对队列后条件补记。它不执行 GitHub 请求、不改 Task/Run，不用超时时长猜失败；失败码固定为 EVIDENCE_PROCESSING_FAILED，不转发 Redis 任意错误原文。
+2. `apps/worker/src/queue/bullmq-github-evidence-queue.ts` 的 `getFailure`：按稳定 Job ID 找当前请求，校验名称和 payload，只返回真正 failed 的结束时间、领取时间与次数。waiting/active/delayed/completed 或缺失 Job 都不给失败结论。
+
+装配只需知道：`WorkerRuntimeService` 将对账传给原 `OutboxDispatchLoop`，共享已有定时器、批大小、不重入和停机等待；单次数据库/Redis 错误会记录安全提示并留待下一轮，启动时也会核对，不依赖瞬时 failed 回调。已确认的 Processor/Finalizer 不重讲。实际领取次数用于补齐登记失败造成的缺口，并不证明调用过 GitHub；补记后 API 返回 FAILED/canRetry，已保存的成功业务仍优先。
+
+工程验证已由 AI 集中运行：全 R06 集成 **159 项通过**，Worker 常规单元 **198 项通过**（其中新增 14 项）；新增集成共 9 项，已包含在 159 项中。Worker 类型检查、构建与定向 lint 通过；未运行全仓 pnpm check。若用户希望统一观察，可选以下单条命令，不作为新增逐项打卡要求：
+
+```powershell
+pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integration.ts -t "R06 engineering closeout" --disableConsoleIntercept
+```
+
+上方筛选命令已复核为 **9 passed / 39 skipped**，是全 R06 回归的子集，不累加为新场景。最后收窄对账查询只读取必要元数据、不搬运 Push 原始正文后，类型检查、定向 lint/格式和该组集成再次通过。`closeout-exit` / `closeout-database` 日志只报告合成夹具结果，失败 WARN 是故障注入的一部分，不代表用例失败；不把测试中的短锁/扫描时间当作生产恢复指标。
+
+测试使用真实本机 PostgreSQL/Redis、随机记录和随机队列，GitHub 读取为合成结果。专用 TCP 入口断开本测试客户端的所有数据库连接，覆盖查询、事务和错误写回均不可用；不是停止 PostgreSQL 服务，更不是修改用户网络。进程退出仅结束测试自己创建的隐藏子进程，无全局锁删除或正式队列清空；结束后清理临时入口、进程、记录和队列。保留 Job 丢失、Redis 全量数据损坏及部署时延不在本轮证据内；服务部署验证仍属于 R07。机制依据：[BullMQ 失联次数上限](https://docs.bullmq.io/guide/jobs/stalled)、[有限重试](https://docs.bullmq.io/guide/retrying-failing-jobs)，实际属性按本地 BullMQ 6.0.10 类型与运行结果核对。
+
+2026-10-20 用户已确认统一导读理解，并正确复述候选 Delivery → 当前处理 Job → 确认 failed → 补记失败的链路，短复述通过。AI 补充当前恢复请求定位、条件更新为 0 时保护成功/新尝试及安全失败码的细节，不要求重述。用户随后报告本段约 15 分钟，R06 累计约 6 小时 50 分钟，较原预算超出约 2 小时 50 分钟；不把 AI 工程耗时计入学习。R06 的实现、既有验证、真实 Push 观察与学习收尾完成，DONE 随本次本地提交生效；本轮不重跑产品测试，不推送。两个临时 Playground 源码已清理，正式测试和历史观察保留。下一单元 R07 部署 smoke 未启动，M3 尚未完成；不声明已接入 M4 正文验收或 Redis 数据丢失后的自动重建。
 
 ## 6. 启动应用
 

@@ -24,6 +24,7 @@ export {
   type RunTerminationRecoverySkipReason,
 } from './domain/run-termination-recovery.js'
 export {
+  CURRENT_TASK_STATES,
   RESTORABLE_TASK_STATES,
   TASK_STATES,
   isRestorableTaskState,
@@ -72,6 +73,22 @@ export {
   type OutboxEventType,
   type PlanGenerationRequestedEventPayload,
 } from './events/plan-generation.js'
+export {
+  GITHUB_EVIDENCE_QUEUE_NAME,
+  GITHUB_EVIDENCE_JOB_NAME,
+  GITHUB_PUSH_RECEIVED_SCHEMA_VERSION,
+  buildGitHubEvidenceJobId,
+  githubEvidenceJobPayloadSchema,
+  githubPushPayloadSchema,
+  githubPushReceivedEventPayloadSchema,
+  type GitHubEvidenceJobPayload,
+  type GitHubPushReceivedEventPayload,
+} from './events/github-push.js'
+export {
+  NOTE_VERIFICATION_WORKFLOW_VERSION,
+  NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  noteVerificationRequestedEventPayloadSchema,
+} from './events/note-verification.js'
 export {
   ERROR_CODES,
   apiErrorResponseSchema,
@@ -146,6 +163,25 @@ export {
   type GitHubInstallationsResponse,
   type RepositoryOptionsResponse,
 } from './http/repository.js'
+export {
+  REPOSITORY_EVIDENCE_LIMIT,
+  repositoryEvidenceStatusSchema,
+  repositoryEvidenceResponseSchema,
+  retryRepositoryEvidenceInputSchema,
+  retryRepositoryEvidenceResponseSchema,
+  type RetryRepositoryEvidenceInput,
+  type RetryRepositoryEvidenceResponse,
+  type RepositoryEvidenceStatus,
+  type RepositoryEvidenceResponse,
+} from './http/repository-evidence.js'
+export {
+  GITHUB_EVIDENCE_RETRY_SCHEMA_VERSION,
+  githubEvidenceRetryPayloadSchema,
+  githubEvidenceRetryEventSchema,
+  retryableEvidenceFailureSchema,
+  buildGitHubEvidenceRetryKey,
+  type GitHubEvidenceRetryPayload,
+} from './events/github-push.js'
 export {
   MODEL_CATALOG_ID_PATTERN,
   entityIdSchema,

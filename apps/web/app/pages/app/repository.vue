@@ -6,6 +6,7 @@ import type { RepositoryBindingResponse } from '@knowledgeops/contracts'
 import { useKnowledgeOpsApi } from '../../composables/use-knowledge-ops-api'
 import { useSessionUser } from '../../composables/use-session-user'
 import { apiUrl, KnowledgeOpsApiError } from '../../lib/knowledge-ops-api'
+import RepositoryEvidenceStatus from '../../components/RepositoryEvidenceStatus.vue'
 
 definePageMeta({ layout: 'workspace' })
 useHead({ title: '仓库接入 · KnowledgeOps Agent' })
@@ -191,7 +192,8 @@ async function refresh() {
           {{ binding.data.value.repository.isPrivate ? '私有仓库' : '公开仓库' }}
         </p>
         <p class="text-muted">
-          这里显示已保存的绑定，不代表 GitHub 当前权限仍然有效。后台接收 Push 的功能尚未接入。
+          这里显示已保存的绑定，不代表 GitHub 当前权限仍然有效。本次绑定的 Push
+          接收和取证结果见下方通知。
         </p>
         <button
           v-if="!confirmingUnbind"
@@ -339,6 +341,11 @@ async function refresh() {
         </template>
       </div>
     </template>
+    <RepositoryEvidenceStatus
+      v-if="user && binding.data.value?.repository && !binding.isError.value"
+      :key="`${user.id}:${binding.data.value.repository.id}`"
+      :repository-id="binding.data.value.repository.id"
+    />
     <button
       type="button"
       :disabled="

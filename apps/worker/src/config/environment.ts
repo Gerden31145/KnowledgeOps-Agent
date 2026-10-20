@@ -1,4 +1,5 @@
 import { LOG_LEVELS } from '@knowledgeops/observability'
+import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 
 const optionalNonEmptyStringSchema = z.preprocess(
@@ -21,6 +22,12 @@ const workerEnvironmentSchema = z
       .startsWith('postgresql://')
       .default('postgresql://knowledgeops:knowledgeops_dev@127.0.0.1:5432/knowledgeops'),
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+    // GitHub 后台取证按需使用 App 凭据；不需要用户登录 Token 或 Client Secret。
+    GITHUB_APP_CLIENT_ID: optionalNonEmptyStringSchema,
+    GITHUB_APP_PRIVATE_KEY_PATH: optionalNonEmptyStringSchema.refine(
+      (value) => value === undefined || isAbsolute(value),
+      { message: 'must be an absolute filesystem path' },
+    ),
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     OPENAI_API_KEY: optionalNonEmptyStringSchema,
     OPENAI_BASE_URL: optionalUrlSchema,

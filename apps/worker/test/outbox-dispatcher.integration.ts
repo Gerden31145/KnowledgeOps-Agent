@@ -77,7 +77,7 @@ describe('OutboxDispatcher against PostgreSQL', () => {
     await database.$disconnect()
   })
 
-  it('leaves the R05 intake intent pending for its future consumer', async () => {
+  it('leaves GitHub intake pending when only the plan publisher is installed', async () => {
     const eventId = randomUUID()
     const publish = vi.fn<OutboxPublisher['publish']>()
     const dispatcher = new OutboxDispatcher(database, { publish }, RETRY_POLICY, () => INITIAL_NOW)

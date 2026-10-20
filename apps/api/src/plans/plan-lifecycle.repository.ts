@@ -1,7 +1,8 @@
-import type {
-  ConfirmPlanResponse,
-  StartTaskInput,
-  StartTaskResponse,
+import {
+  CURRENT_TASK_STATES,
+  type ConfirmPlanResponse,
+  type StartTaskInput,
+  type StartTaskResponse,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 
@@ -14,13 +15,6 @@ import {
   TaskTargetPathConflictError,
   TaskTargetPathRequiredError,
 } from './plan-lifecycle.errors.js'
-
-const TASK_STATES_OCCUPYING_ACTIVE_SLOT = [
-  'IN_PROGRESS',
-  'VERIFYING',
-  'NEEDS_REVISION',
-  'NEEDS_EVIDENCE',
-] as const
 
 type Clock = () => Date
 
@@ -172,7 +166,7 @@ export class PlanLifecycleRepository {
       const occupiedSlot = await transaction.task.findFirst({
         where: {
           id: { not: task.id },
-          state: { in: [...TASK_STATES_OCCUPYING_ACTIVE_SLOT] },
+          state: { in: [...CURRENT_TASK_STATES] },
           stage: { plan: { status: 'ACTIVE', goal: { userId: actorUserId } } },
         },
         select: { id: true },

@@ -12,6 +12,7 @@ export class OutboxDispatchLoop {
     private readonly dispatcher: OutboxDispatcher,
     private readonly batchSize: number,
     private readonly pollIntervalMs: number,
+    private readonly reconcileEvidence?: () => Promise<number>,
   ) {}
 
   async start(): Promise<void> {
@@ -61,6 +62,14 @@ export class OutboxDispatchLoop {
         errorMessage: sanitizeDispatchErrorMessage(normalized.message),
         errorName: normalized.name,
       })
+    } finally {
+      // 复用同一轮询和停机等待；不依赖瞬时 failed 事件，也不新增一个定时器。
+      try {
+        const updated = await this.reconcileEvidence?.()
+        if (updated) this.logger.log({ event: 'github_evidence_reconciled', updated })
+      } catch {
+        this.logger.warn({ event: 'github_evidence_reconcile_unavailable' })
+      }
     }
   }
 }

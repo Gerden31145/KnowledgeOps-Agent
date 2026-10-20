@@ -145,6 +145,39 @@ describe('GitHub repository authorization adapter', () => {
     ).rejects.toMatchObject({ status: 404 })
   })
 
+  it.each([{ id: 999 }, { suspended_at: '2026-10-13T00:00:00Z' }])(
+    'maps shared App authorization rejection to a safe 404 even after user access passed: %j',
+    async (change) => {
+      const f = fixture()
+      f.upstream
+        .mockResolvedValueOnce(Response.json({ installations: [installation] }))
+        .mockResolvedValueOnce(Response.json({ repositories: [repository] }))
+        .mockResolvedValueOnce(Response.json({ ...installation, ...change }))
+      await expect(f.github.verify('fixture-user-token', input)).rejects.toMatchObject({
+        status: 404,
+      })
+      expect(f.upstream).toHaveBeenCalledTimes(3)
+    },
+  )
+
+  it('maps an already-expired installation token to 503 without exposing the credential', async () => {
+    const f = fixture()
+    f.upstream
+      .mockResolvedValueOnce(Response.json({ installations: [installation] }))
+      .mockResolvedValueOnce(Response.json({ repositories: [repository] }))
+      .mockResolvedValueOnce(Response.json(installation))
+      .mockResolvedValueOnce(
+        Response.json({
+          token: 'FIXTURE_ONLY_INSTALLATION_CREDENTIAL',
+          expires_at: new Date(Date.now() - 1000).toISOString(),
+        }),
+      )
+    const result = f.github.verify('fixture-user-token', input)
+    await expect(result).rejects.toMatchObject({ status: 503 })
+    await expect(result).rejects.not.toThrow('FIXTURE_ONLY_INSTALLATION_CREDENTIAL')
+    expect(f.upstream).toHaveBeenCalledTimes(4)
+  })
+
   it('does not silently truncate paginated repositories', async () => {
     const f = fixture()
     f.upstream

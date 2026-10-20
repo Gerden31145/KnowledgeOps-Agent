@@ -12,6 +12,7 @@
   "dependencies": {
     "@knowledgeops/contracts": "workspace:*",
     "@knowledgeops/database": "workspace:*",
+    "@knowledgeops/github": "workspace:*",
     "@knowledgeops/observability": "workspace:*",
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",

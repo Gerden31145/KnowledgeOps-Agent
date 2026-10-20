@@ -52,6 +52,8 @@ enum PlanGenerationRunState {
 enum OutboxEventType {
   PLAN_GENERATION_REQUESTED
   GITHUB_PUSH_RECEIVED
+  GITHUB_EVIDENCE_RETRY_REQUESTED
+  NOTE_VERIFICATION_REQUESTED
 }
 
 enum AgentRunKind {
@@ -121,6 +123,8 @@ model Repository {
   unboundAt          DateTime?          @map("unbound_at") @db.Timestamptz(3)
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   installation       GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  submissions        Submission[]
+  receivedDeliveries WebhookDelivery[]
 
   @@unique([userId], map: "repositories_one_enabled_per_user", where: raw("enabled"))
   @@unique([githubRepositoryId], map: "repositories_one_enabled_per_github_repository", where: raw("enabled"))
@@ -194,6 +198,7 @@ model Task {
   dependents       TaskDependency[]      @relation("TaskDependents")
   criteria         AcceptanceCriterion[]
   runs             AgentRun[]
+  submissions      Submission[]
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -230,27 +235,73 @@ model TaskDependency {
 }
 
 model AgentRun {
-  id                 String        @id @default(uuid()) @db.Uuid
-  taskId             String        @map("task_id") @db.Uuid
-  kind               AgentRunKind
-  status             AgentRunState @default(QUEUED)
-  taskStateBeforeRun TaskState     @map("task_state_before_run")
-  retryOfRunId       String?       @map("retry_of_run_id") @db.Uuid
-  workflowVersion    String        @map("workflow_version") @db.VarChar(64)
-  errorCode          String?       @map("error_code") @db.VarChar(64)
-  version            Int           @default(0)
-  queuedAt           DateTime      @default(now()) @map("queued_at") @db.Timestamptz(3)
-  startedAt          DateTime?     @map("started_at") @db.Timestamptz(3)
-  finishedAt         DateTime?     @map("finished_at") @db.Timestamptz(3)
-  task               Task          @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  retryOfRun         AgentRun?     @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
-  retries            AgentRun[]    @relation("AgentRunRetries")
-  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                  String            @id @default(uuid()) @db.Uuid
+  taskId              String            @map("task_id") @db.Uuid
+  submissionId        String?           @map("submission_id") @db.Uuid
+  expectedTaskVersion Int?              @map("expected_task_version")
+  kind                AgentRunKind
+  status              AgentRunState     @default(QUEUED)
+  taskStateBeforeRun  TaskState         @map("task_state_before_run")
+  retryOfRunId        String?           @map("retry_of_run_id") @db.Uuid
+  workflowVersion     String            @map("workflow_version") @db.VarChar(64)
+  errorCode           String?           @map("error_code") @db.VarChar(64)
+  version             Int               @default(0)
+  queuedAt            DateTime          @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt           DateTime?         @map("started_at") @db.Timestamptz(3)
+  finishedAt          DateTime?         @map("finished_at") @db.Timestamptz(3)
+  task                Task              @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  submission          Submission?       @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  deliveries          WebhookDelivery[]
+  retryOfRun          AgentRun?         @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries             AgentRun[]        @relation("AgentRunRetries")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  @@unique([submissionId], map: "agent_runs_one_initial_per_submission", where: raw("(retry_of_run_id IS NULL)"))
   @@index([taskId, queuedAt])
   @@index([status, queuedAt])
   @@map("agent_runs")
+}
+
+// R06 笔记提交：一份固定 Commit 的证据可以被不同的重试运行引用，不覆盖旧证据。
+model Submission {
+  id              String            @id @default(uuid()) @db.Uuid
+  repositoryId    String            @map("repository_id") @db.Uuid
+  taskId          String            @map("task_id") @db.Uuid
+  taskVersion     Int               @map("task_version")
+  beforeCommitSha String            @map("before_commit_sha") @db.VarChar(40)
+  afterCommitSha  String            @map("after_commit_sha") @db.VarChar(40)
+  targetPath      String            @map("target_path") @db.VarChar(1024)
+  workflowVersion String            @map("workflow_version") @db.VarChar(64)
+  repository      Repository        @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  task            Task              @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  evidence        Evidence?
+  runs            AgentRun[]
+  deliveries      WebhookDelivery[]
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([repositoryId, taskId, afterCommitSha, workflowVersion], map: "submissions_note_business_key")
+  @@index([taskId, createdAt])
+  @@map("submissions")
+}
+
+// 当前只保存一个任务目标文件的完整证据；删除保存 before 正文，不冒充当前文件。
+model Evidence {
+  id              String     @id @default(uuid()) @db.Uuid
+  submissionId    String     @unique @map("submission_id") @db.Uuid
+  // SNAPSHOT 记录显式全文重新同步及 FILE_CHANGED 免检依据；不伪报变更类型。
+  mode            String     @default("DIFF") @db.VarChar(16)
+  change          String?    @db.VarChar(16)
+  previousPath    String?    @map("previous_path") @db.VarChar(1024)
+  sourceCommitSha String     @map("source_commit_sha") @db.VarChar(40)
+  content         String     @db.Text
+  contentHash     String     @map("content_hash") @db.VarChar(64)
+  lineCount       Int        @map("line_count")
+  diff            String?    @db.Text
+  submission      Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("evidence")
 }
 
 model PlanGenerationRun {
@@ -283,16 +334,35 @@ model PlanGenerationRun {
   @@map("plan_generation_runs")
 }
 
-// R05 接收记录；任务/Submission/AgentRun 关联在 R06 补齐，不把接收成功当作验收成功。
+// 接收与取证处理状态，不等于 AgentRun 验收结果。
 model WebhookDelivery {
-  id           String   @id @db.Uuid
-  eventType    String   @map("event_type") @db.VarChar(64)
-  payloadHash  String   @map("payload_hash") @db.VarChar(64)
-  status       String   @db.VarChar(16)
-  ignoreReason String?  @map("ignore_reason") @db.VarChar(64)
-  payload      Json     @db.JsonB
-  receivedAt   DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+  id           String      @id @db.Uuid
+  eventType    String      @map("event_type") @db.VarChar(64)
+  payloadHash  String      @map("payload_hash") @db.VarChar(64)
+  status       String      @db.VarChar(16)
+  ignoreReason String?     @map("ignore_reason") @db.VarChar(64)
+  payload      Json        @db.JsonB
+  receivedAt   DateTime    @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt  DateTime?   @map("processed_at") @db.Timestamptz(3)
+  submissionId String?     @map("submission_id") @db.Uuid
+  agentRunId   String?     @map("agent_run_id") @db.Uuid
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  agentRun     AgentRun?   @relation(fields: [agentRunId], references: [id], onDelete: Restrict)
 
+  // 接收时冻结的本项目绑定；即使没有当前任务/Outbox，也能安全展示忽略原因。
+  // 解绑后新建的同仓库绑定不会继承旧通知；无法证明归属的历史记录保持 null。
+  receivedRepositoryId String?     @map("received_repository_id") @db.Uuid
+  receivedRepository   Repository? @relation(fields: [receivedRepositoryId], references: [id], onDelete: SetNull)
+
+  // 取证先于 AgentRun：ACCEPTED 只表示已接收，失败/重试另记，不伪造验收结论。
+  evidenceAttemptCount  Int       @default(0) @map("evidence_attempt_count")
+  evidenceLastAttemptAt DateTime? @map("evidence_last_attempt_at") @db.Timestamptz(3)
+  evidenceLastErrorCode String?   @map("evidence_last_error_code") @db.VarChar(64)
+  evidenceFailedAt      DateTime? @map("evidence_failed_at") @db.Timestamptz(3)
+  // 当前手动恢复请求；原始尝试为 null，防止旧队列通知覆盖新一轮结果。
+  evidenceRetryEventId  String?   @map("evidence_retry_event_id") @db.Uuid
+
+  @@index([receivedRepositoryId, receivedAt, id])
   @@map("webhook_deliveries")
 }
 

@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { resolve } from 'node:path'
 
 import { readWorkerEnvironment } from '../src/config/environment.js'
 
 describe('Worker environment', () => {
+  it('keeps GitHub App settings optional and accepts only absolute private-key paths', () => {
+    expect(readWorkerEnvironment({}).GITHUB_APP_CLIENT_ID).toBeUndefined()
+    expect(
+      readWorkerEnvironment({ GITHUB_APP_PRIVATE_KEY_PATH: ' ' }).GITHUB_APP_PRIVATE_KEY_PATH,
+    ).toBeUndefined()
+    const path = resolve('.secrets', 'fixture-only.pem')
+    expect(
+      readWorkerEnvironment({
+        GITHUB_APP_CLIENT_ID: 'fixture-client',
+        GITHUB_APP_PRIVATE_KEY_PATH: path,
+      }),
+    ).toMatchObject({ GITHUB_APP_CLIENT_ID: 'fixture-client', GITHUB_APP_PRIVATE_KEY_PATH: path })
+    expect(() =>
+      readWorkerEnvironment({ GITHUB_APP_PRIVATE_KEY_PATH: 'relative/fixture.pem' }),
+    ).toThrow('Invalid Worker environment fields: GITHUB_APP_PRIVATE_KEY_PATH')
+  })
   it('defaults to strict schema output and accepts only an explicit supported method', () => {
     expect(readWorkerEnvironment({}).PLAN_GENERATION_OUTPUT_METHOD).toBe('jsonSchema')
     expect(

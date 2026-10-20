@@ -6,26 +6,17 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
-import { githubIdSchema } from '@knowledgeops/contracts'
+import {
+  CURRENT_TASK_STATES,
+  GITHUB_PUSH_RECEIVED_SCHEMA_VERSION,
+  githubPushPayloadSchema,
+  githubPushReceivedEventPayloadSchema,
+  markdownTargetPathSchema,
+} from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import { z } from 'zod'
 import { verifyGitHubWebhookSignature } from './github-webhook-signature.exercise.js'
 
-const id = z.union([githubIdSchema, z.number().int().positive().safe().transform(String)])
-const sha = z
-  .string()
-  .regex(/^[a-fA-F0-9]{40}$/)
-  .transform((value) => value.toLowerCase())
-// 只保存后续取证所需的最少字段；不保存 sender、commit message 等整个私有 payload。
-const pushSchema = z.object({
-  installation: z.object({ id }),
-  repository: z.object({ id }),
-  ref: z.string().min(1).max(1024),
-  before: sha,
-  after: sha,
-  deleted: z.boolean(),
-  forced: z.boolean(),
-})
 const metadataSchema = z.object({
   deliveryId: z.uuid(),
   eventType: z.string().regex(/^[a-z_]{1,64}$/),
@@ -71,7 +62,7 @@ export class GitHubWebhookService {
     } catch {
       throw invalid()
     }
-    const parsed = eventType === 'push' ? pushSchema.safeParse(body) : undefined
+    const parsed = eventType === 'push' ? githubPushPayloadSchema.safeParse(body) : undefined
     if (parsed && !parsed.success) throw invalid()
     const push = parsed?.success ? parsed.data : undefined
     const payloadHash = createHash('sha256').update(input.rawBody).digest('hex')
@@ -83,7 +74,7 @@ export class GitHubWebhookService {
           ? 'BRANCH_DELETED'
           : null
 
-    // 2. 唯一 Delivery 与 Outbox 同事务；ON CONFLICT 不会把事务置为错误状态。
+    // 2. 唯一 Delivery、接收上下文与取证 Outbox 同事务；不调用 GitHub 或创建验收 Run。
     return this.database.$transaction(async (tx) => {
       const inserted = await tx.webhookDelivery.createMany({
         data: [
@@ -107,14 +98,13 @@ export class GitHubWebhookService {
           })
         return received()
       }
-      if (initialReason || !push) return received()
+      if (!push) return received()
 
       // 3. 绑定来自数据库，不相信 sender/login/full_name；绑定与解绑共用 User 行锁。
       const where = {
         enabled: true,
         installationId: push.installation.id,
         githubRepositoryId: push.repository.id,
-        branch: push.ref.slice('refs/heads/'.length),
       }
       // 仓库活动绑定独占：最多匹配一条，不展开多个用户。
       const matched = await tx.repository.findFirst({ where, select: { id: true, userId: true } })
@@ -127,32 +117,79 @@ export class GitHubWebhookService {
       const binding = matched
         ? await tx.repository.findFirst({
             where: { ...where, id: matched.id, userId: matched.userId },
-            select: { id: true, userId: true, user: { select: { repositoryVersion: true } } },
+            select: {
+              id: true,
+              userId: true,
+              branch: true,
+              user: { select: { repositoryVersion: true } },
+            },
           })
         : null
       if (!binding) {
         await tx.webhookDelivery.update({
           where: { id: deliveryId },
-          data: { status: 'IGNORED', ignoreReason: 'NO_ACTIVE_BINDING' },
+          data: { status: 'IGNORED', ignoreReason: initialReason ?? 'NO_ACTIVE_BINDING' },
         })
         return received()
       }
+
+      // 先冻结归属，再决定是否取证；无任务/非目标分支也不需要制造一个 Outbox。
+      // 重复 Delivery 在上方直接返回，不能用后来重绑的仓库认领这条旧通知。
+      const receiptIgnoreReason =
+        initialReason ?? (push.ref === `refs/heads/${binding.branch}` ? null : 'BRANCH_NOT_TRACKED')
+      await tx.webhookDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          receivedRepositoryId: binding.id,
+          ...(receiptIgnoreReason ? { status: 'IGNORED', ignoreReason: receiptIgnoreReason } : {}),
+        },
+      })
+      if (receiptIgnoreReason) return received()
+
+      // 4. 和开始任务共用 User 锁：固化接收时的任务，不等消费时重新挑一个。
+      // 查询两条足以发现歧义；不能用 findFirst 随意认领，也不能过滤掉缺失路径的任务。
+      const tasks = await tx.task.findMany({
+        where: {
+          type: 'MARKDOWN_NOTE',
+          state: { in: [...CURRENT_TASK_STATES] },
+          stage: { plan: { status: 'ACTIVE', goal: { userId: binding.userId } } },
+        },
+        select: { id: true, version: true, targetPath: true },
+        take: 2,
+      })
+      const task = tasks.length === 1 ? tasks[0] : undefined
+      const path = markdownTargetPathSchema.safeParse(task?.targetPath)
+      const ignoreReason = !tasks.length
+        ? 'NO_CURRENT_TASK'
+        : tasks.length > 1
+          ? 'AMBIGUOUS_CURRENT_TASK'
+          : !path.success || path.data !== task?.targetPath
+            ? 'INVALID_TARGET_PATH'
+            : null
+      if (ignoreReason || !task || !path.success) {
+        await tx.webhookDelivery.update({
+          where: { id: deliveryId },
+          data: { status: 'IGNORED', ignoreReason: ignoreReason ?? 'INVALID_TARGET_PATH' },
+        })
+        return received()
+      }
+
+      const context = githubPushReceivedEventPayloadSchema.parse({
+        deliveryId,
+        binding: {
+          repositoryId: binding.id,
+          userId: binding.userId,
+          repositoryVersion: binding.user.repositoryVersion,
+        },
+        task: { taskId: task.id, taskVersion: task.version, targetPath: path.data },
+      })
       await tx.outboxEvent.create({
         data: {
           type: 'GITHUB_PUSH_RECEIVED',
           aggregateId: deliveryId,
           deduplicationKey: `github-push-received-${deliveryId}`,
-          payload: {
-            deliveryId,
-            // 保持已保存的 schemaVersion=1 格式；新事件只允许一个绑定元素。
-            bindings: [
-              {
-                repositoryId: binding.id,
-                userId: binding.userId,
-                repositoryVersion: binding.user.repositoryVersion,
-              },
-            ],
-          },
+          schemaVersion: GITHUB_PUSH_RECEIVED_SCHEMA_VERSION,
+          payload: context,
         },
       })
       // 不返回用户/仓库内部信息；202 只承诺接收意图持久化，不承诺 Diff/Agent 已执行。

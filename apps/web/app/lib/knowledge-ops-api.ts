@@ -32,6 +32,11 @@ import {
   type RepositoryOptionsResponse,
   type BindRepositoryInput,
   type UnbindRepositoryInput,
+  repositoryEvidenceResponseSchema,
+  type RepositoryEvidenceResponse,
+  retryRepositoryEvidenceResponseSchema,
+  type RetryRepositoryEvidenceInput,
+  type RetryRepositoryEvidenceResponse,
 } from '@knowledgeops/contracts'
 import { z, type ZodType } from 'zod'
 
@@ -52,6 +57,20 @@ export interface KnowledgeOpsApi {
   getSession(): Promise<SessionResponse>
   logout(): Promise<null>
   getRepositoryBinding(signal?: AbortSignal): Promise<RepositoryBindingResponse>
+  getRepositoryEvidence(
+    repositoryId: string,
+    signal?: AbortSignal,
+  ): Promise<RepositoryEvidenceResponse>
+  retryRepositoryEvidence(
+    repositoryId: string,
+    deliveryId: string,
+    input: RetryRepositoryEvidenceInput,
+  ): Promise<RetryRepositoryEvidenceResponse>
+  resyncRepositoryEvidence(
+    repositoryId: string,
+    deliveryId: string,
+    input: RetryRepositoryEvidenceInput,
+  ): Promise<RetryRepositoryEvidenceResponse>
   getGitHubInstallations(signal?: AbortSignal): Promise<GitHubInstallationsResponse>
   getRepositoryOptions(
     installationId: string,
@@ -78,6 +97,27 @@ export interface KnowledgeOpsApi {
 
 export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   return {
+    resyncRepositoryEvidence: (repositoryId, deliveryId, input) =>
+      request(
+        baseUrl,
+        `/repositories/${encodeURIComponent(repositoryId)}/evidence-deliveries/${encodeURIComponent(deliveryId)}/resync`,
+        retryRepositoryEvidenceResponseSchema,
+        { ...jsonRequest('POST', input), signal: repositorySignal() },
+      ),
+    retryRepositoryEvidence: (repositoryId, deliveryId, input) =>
+      request(
+        baseUrl,
+        `/repositories/${encodeURIComponent(repositoryId)}/evidence-deliveries/${encodeURIComponent(deliveryId)}/retry`,
+        retryRepositoryEvidenceResponseSchema,
+        { ...jsonRequest('POST', input), signal: repositorySignal() },
+      ),
+    getRepositoryEvidence: (repositoryId, signal) =>
+      request(
+        baseUrl,
+        `/repositories/${encodeURIComponent(repositoryId)}/evidence-deliveries`,
+        repositoryEvidenceResponseSchema,
+        { signal: repositorySignal(signal) },
+      ),
     getRepositoryBinding: (signal) =>
       request(baseUrl, '/repositories/binding', repositoryBindingResponseSchema, {
         signal: repositorySignal(signal),

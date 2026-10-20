@@ -1,7 +1,10 @@
 import { NestFactory } from '@nestjs/core'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readWorkerEnvironment } from '../src/config/environment.js'
 
 import { DatabaseService } from '../src/database/database.service.js'
+import { GitHubEvidenceJobProcessor } from '../src/github/github-evidence-job-processor.js'
+import { GitHubEvidenceReconciler } from '../src/github/github-evidence-reconciler.js'
 import { OutboxDispatcher } from '../src/outbox/outbox-dispatcher.js'
 import { PlanGenerationJobProcessor } from '../src/plan-generation/plan-generation-job-processor.js'
 import { PlanGenerationRunRepository } from '../src/plan-generation/plan-generation-run.repository.js'
@@ -12,6 +15,22 @@ const queue = vi.hoisted(() => ({
   constructed: vi.fn(),
   start: vi.fn(),
   close: vi.fn().mockResolvedValue(undefined),
+}))
+
+const evidenceQueue = vi.hoisted(() => ({
+  constructed: vi.fn(),
+  start: vi.fn(),
+  close: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('../src/queue/bullmq-github-evidence-queue.js', () => ({
+  BullMqGitHubEvidenceQueue: class {
+    constructor(options: unknown) {
+      evidenceQueue.constructed(options)
+    }
+    start = evidenceQueue.start
+    close = evidenceQueue.close
+  },
 }))
 
 vi.mock('../src/queue/bullmq-plan-generation-queue.js', () => ({
@@ -26,6 +45,9 @@ vi.mock('../src/queue/bullmq-plan-generation-queue.js', () => ({
 }))
 
 describe('Worker runtime dependency injection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
   it('boots the real module, starts both loops and closes resources without emitted type metadata', async () => {
     // Vitest may emit metadata that tsx does not. Reproduce the dev-runner boundary explicitly.
     const metadata = Reflect.getOwnMetadata('design:paramtypes', WorkerRuntimeService)
@@ -40,6 +62,7 @@ describe('Worker runtime dependency injection', () => {
       retryScheduled: 0,
     })
     const closeDatabase = vi.spyOn(DatabaseService.prototype, 'close')
+    const reconcile = vi.spyOn(GitHubEvidenceReconciler.prototype, 'reconcile').mockResolvedValue(0)
     let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined
 
     try {
@@ -52,8 +75,13 @@ describe('Worker runtime dependency injection', () => {
         expect.objectContaining({ processor: expect.any(PlanGenerationJobProcessor) }),
       )
       expect(queue.start).toHaveBeenCalledOnce()
+      expect(evidenceQueue.constructed).toHaveBeenCalledWith(
+        expect.objectContaining({ processor: expect.any(GitHubEvidenceJobProcessor) }),
+      )
+      expect(evidenceQueue.start).toHaveBeenCalledOnce()
       expect(sweep).toHaveBeenCalledWith(expect.any(Number), expect.any(Date))
       expect(dispatch).toHaveBeenCalledWith(expect.any(Number))
+      expect(reconcile).toHaveBeenCalledWith(expect.any(Number))
     } finally {
       await app?.close()
       if (metadata !== undefined) {
@@ -63,6 +91,25 @@ describe('Worker runtime dependency injection', () => {
     }
 
     expect(queue.close).toHaveBeenCalledOnce()
+    expect(evidenceQueue.close).toHaveBeenCalledOnce()
     expect(closeDatabase).toHaveBeenCalledOnce()
+  })
+
+  it('closes both queues and the database when the evidence consumer cannot start', async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    evidenceQueue.start.mockImplementationOnce(() => {
+      throw new Error('fixture-start-failure')
+    })
+    const runtime = new WorkerRuntimeService(
+      readWorkerEnvironment({}),
+      { close } as unknown as DatabaseService,
+      {} as PlanGenerationJobProcessor,
+      {} as PlanGenerationRunRepository,
+      {} as GitHubEvidenceJobProcessor,
+    )
+    await expect(runtime.onApplicationBootstrap()).rejects.toThrow('fixture-start-failure')
+    expect(queue.close).toHaveBeenCalledOnce()
+    expect(evidenceQueue.close).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledOnce()
   })
 })

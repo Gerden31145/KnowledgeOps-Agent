@@ -6,7 +6,11 @@ import {
   type ClassifiedOutboxDispatchFailure,
 } from './outbox-dispatch-error.js'
 import {
+  parseGitHubPushOutboxEvent,
+  parseGitHubEvidenceRetryOutboxEvent,
+  type GitHubEvidenceRetryOutboxMessage,
   parsePlanGenerationOutboxEvent,
+  type GitHubPushOutboxMessage,
   type LockedOutboxEvent,
   type PlanGenerationOutboxMessage,
 } from './outbox-event.js'
@@ -16,6 +20,9 @@ const DISPATCH_TRANSACTION_TIMEOUT_MS = 5_000
 
 export interface OutboxPublisher {
   publish(message: PlanGenerationOutboxMessage): Promise<{ jobId: string }>
+  // 只有装配了取证消费者的 Runtime 才认领此类待办；旧的计划生成装配保持可用。
+  publishGitHubPush?(message: GitHubPushOutboxMessage): Promise<{ jobId: string }>
+  publishGitHubEvidenceRetry?(message: GitHubEvidenceRetryOutboxMessage): Promise<{ jobId: string }>
 }
 
 export type OutboxDispatchResult =
@@ -96,8 +103,11 @@ export class OutboxDispatcher {
               "dispatch_attempt_count" AS "dispatchAttemptCount"
             FROM "outbox_events"
             WHERE "dispatched_at" IS NULL
-              -- R05 的接收意图保留待 R06 接入；计划处理器不能认领其他业务类型。
-              AND "type" = 'PLAN_GENERATION_REQUESTED'
+              AND (
+                "type" = 'PLAN_GENERATION_REQUESTED'
+                ${this.publisher.publishGitHubPush ? Prisma.sql`OR "type" = 'GITHUB_PUSH_RECEIVED'` : Prisma.empty}
+                ${this.publisher.publishGitHubEvidenceRetry ? Prisma.sql`OR "type" = 'GITHUB_EVIDENCE_RETRY_REQUESTED'` : Prisma.empty}
+              )
               AND "dead_lettered_at" IS NULL
               AND "available_at" <= ${now}
               ${eventId ? Prisma.sql`AND "id" = ${eventId}::uuid` : Prisma.empty}
@@ -114,8 +124,18 @@ export class OutboxDispatcher {
         let published: { jobId: string }
 
         try {
-          const message = parsePlanGenerationOutboxEvent(event)
-          published = await this.publisher.publish(message)
+          if (event.type === 'GITHUB_PUSH_RECEIVED' && this.publisher.publishGitHubPush) {
+            published = await this.publisher.publishGitHubPush(parseGitHubPushOutboxEvent(event))
+          } else if (
+            event.type === 'GITHUB_EVIDENCE_RETRY_REQUESTED' &&
+            this.publisher.publishGitHubEvidenceRetry
+          ) {
+            published = await this.publisher.publishGitHubEvidenceRetry(
+              parseGitHubEvidenceRetryOutboxEvent(event),
+            )
+          } else {
+            published = await this.publisher.publish(parsePlanGenerationOutboxEvent(event))
+          }
         } catch (error: unknown) {
           const failure = classifyOutboxDispatchFailure(error)
           const lastError = `${failure.code}: ${failure.message}`

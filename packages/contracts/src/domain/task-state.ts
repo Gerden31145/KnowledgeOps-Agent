@@ -14,6 +14,14 @@ export const taskStateSchema = z.enum(TASK_STATES)
 
 export type TaskState = z.infer<typeof taskStateSchema>
 
+/** A user's active plan has at most one task occupying the current learning slot. */
+export const CURRENT_TASK_STATES = [
+  'IN_PROGRESS',
+  'VERIFYING',
+  'NEEDS_REVISION',
+  'NEEDS_EVIDENCE',
+] as const satisfies readonly TaskState[]
+
 const taskTransitions = {
   BLOCKED: ['READY'],
   READY: ['IN_PROGRESS'],

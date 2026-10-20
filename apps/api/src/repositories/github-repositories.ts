@@ -1,4 +1,3 @@
-import { createPrivateKey, sign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import {
   ConflictException,
@@ -8,16 +7,16 @@ import {
 } from '@nestjs/common'
 import { z } from 'zod'
 import type { BindRepositoryInput, RepositoryOptionsResponse } from '@knowledgeops/contracts'
+import {
+  createGitHubAppJwt,
+  createGitHubRepositoryAccess,
+  GitHubAppAuthError,
+  githubInstallationSchema as installationSchema,
+  isUsableGitHubInstallation,
+} from '@knowledgeops/github'
 import type { ApiEnvironment } from '../config/environment.js'
 
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const installationSchema = z.object({
-  id,
-  account: z.object({ id, login: z.string().min(1).max(100) }),
-  permissions: z.object({ contents: z.string().optional() }),
-  repository_selection: z.enum(['all', 'selected']),
-  suspended_at: z.string().nullable(),
-})
 const repositorySchema = z.object({
   id,
   full_name: z.string().min(3).max(220),
@@ -62,12 +61,10 @@ export class GitHubRepositories {
     )
     return {
       installUrl: `https://github.com/apps/${app.slug}/installations/new`,
-      installations: installations
-        .filter((item) => this.usable(item))
-        .map((item) => ({
-          id: String(item.id),
-          accountLogin: item.account.login,
-        })),
+      installations: installations.filter(isUsableGitHubInstallation).map((item) => ({
+        id: String(item.id),
+        accountLogin: item.account.login,
+      })),
     }
   }
 
@@ -102,26 +99,16 @@ export class GitHubRepositories {
       throw notAuthorized()
 
     const appToken = await this.appToken()
-    const installation = await this.request(
-      `/app/installations/${input.installationId}`,
-      appToken,
-      installationSchema,
-      signal,
-    )
-    if (String(installation.id) !== input.installationId || !this.usable(installation))
-      throw notAuthorized()
-    // 显式收窄：只有所选一个仓库，且只读。不落库、不发送给浏览器。
-    const access = await this.request(
-      `/app/installations/${input.installationId}/access_tokens`,
-      appToken,
-      z.object({ token: z.string().min(1), expires_at: z.iso.datetime() }),
-      signal,
-      {
-        repository_ids: [Number(input.githubRepositoryId)],
-        permissions: { contents: 'read', metadata: 'read' },
-      },
-    )
-    if (new Date(access.expires_at).getTime() <= Date.now()) throw unavailable()
+    const access = await createGitHubRepositoryAccess(
+      input.installationId,
+      input.githubRepositoryId,
+      (path, schema, body) => this.request(path, appToken, schema, signal, body),
+    ).catch((error: unknown) => {
+      if (error instanceof GitHubAppAuthError)
+        throw error.code === 'NOT_AUTHORIZED' ? notAuthorized() : unavailable()
+      throw error
+    })
+    const { installation } = access
     const repository = await this.request(
       `/repositories/${input.githubRepositoryId}`,
       access.token,
@@ -152,14 +139,6 @@ export class GitHubRepositories {
     }
   }
 
-  private usable(item: z.infer<typeof installationSchema>) {
-    return (
-      item.suspended_at === null &&
-      item.permissions.contents === 'read' &&
-      item.repository_selection === 'selected'
-    )
-  }
-
   private async requireInstallation(
     userToken: string,
     installationId: string,
@@ -172,21 +151,17 @@ export class GitHubRepositories {
       userToken,
       signal,
     )
-    if (!installations.some((item) => String(item.id) === installationId && this.usable(item)))
+    if (
+      !installations.some(
+        (item) => String(item.id) === installationId && isUsableGitHubInstallation(item),
+      )
+    )
       throw notAuthorized()
   }
 
   private async appToken(): Promise<string> {
     try {
-      const path = this.environment.GITHUB_APP_PRIVATE_KEY_PATH
-      const issuer = this.environment.GITHUB_APP_CLIENT_ID
-      if (!path || !issuer) throw unavailable()
-      const key = createPrivateKey(await this.loadKey(path))
-      if (key.asymmetricKeyType !== 'rsa') throw unavailable()
-      const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
-      const now = Math.floor(Date.now() / 1000)
-      const input = `${encode({ alg: 'RS256', typ: 'JWT' })}.${encode({ iss: issuer, iat: now - 60, exp: now + 300 })}`
-      return `${input}.${sign('RSA-SHA256', Buffer.from(input), key).toString('base64url')}`
+      return await createGitHubAppJwt(this.environment, this.loadKey)
     } catch {
       throw unavailable()
     }

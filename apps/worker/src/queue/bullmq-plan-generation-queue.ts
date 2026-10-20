@@ -3,7 +3,8 @@ import {
   type PlanGenerationRequestedEventPayload,
 } from '@knowledgeops/contracts'
 import { Logger } from '@nestjs/common'
-import { Queue, type ConnectionOptions } from 'bullmq'
+import { Queue } from 'bullmq'
+import { bullMqProducerConnection, bullMqWorkerConnection } from './bullmq-connections.js'
 
 import type { OutboxPublisher } from '../outbox/outbox-dispatcher.js'
 import { sanitizeDispatchErrorMessage } from '../outbox/outbox-dispatch-error.js'
@@ -37,7 +38,7 @@ export class BullMqPlanGenerationQueue implements OutboxPublisher {
   constructor(private readonly options: BullMqPlanGenerationQueueOptions) {
     this.queueName = options.queueName ?? PLAN_GENERATION_QUEUE_NAME
     this.queue = new Queue<PlanGenerationRequestedEventPayload>(this.queueName, {
-      connection: this.producerConnection(),
+      connection: bullMqProducerConnection(this.options.redisUrl),
     }) as PlanGenerationQueue
 
     this.queue.on('error', (error) => {
@@ -56,7 +57,7 @@ export class BullMqPlanGenerationQueue implements OutboxPublisher {
 
     this.worker = registerPlanGenerationWorker({
       concurrency: this.options.concurrency,
-      connection: this.workerConnection(),
+      connection: bullMqWorkerConnection(this.options.redisUrl),
       processor: createPlanGenerationBullMqProcessor(this.options.processor),
       queueName: this.queueName,
     })
@@ -100,22 +101,5 @@ export class BullMqPlanGenerationQueue implements OutboxPublisher {
   async close(): Promise<void> {
     await this.worker?.close()
     await this.queue.close()
-  }
-
-  private producerConnection(): ConnectionOptions {
-    return {
-      commandTimeout: 2_000,
-      connectTimeout: 2_000,
-      enableOfflineQueue: false,
-      maxRetriesPerRequest: 1,
-      url: this.options.redisUrl,
-    }
-  }
-
-  private workerConnection(): ConnectionOptions {
-    return {
-      maxRetriesPerRequest: null,
-      url: this.options.redisUrl,
-    }
   }
 }
