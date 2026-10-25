@@ -1,0 +1,62 @@
+{
+  "apps": [
+    {
+      "name": "knowledgeops-api",
+      "cwd": "/opt/knowledgeops-agent",
+      "script": "apps/api/dist/main.js",
+      "interpreter": "node",
+      "node_args": ["--env-file=/opt/knowledgeops-agent/.env"],
+      "exec_mode": "fork",
+      "instances": 1,
+      "watch": false,
+      "autorestart": true,
+      "min_uptime": "10s",
+      "max_restarts": 5,
+      "restart_delay": 3000,
+      "kill_timeout": 10000,
+      "env": {
+        "NODE_ENV": "production",
+        "API_HOST": "127.0.0.1",
+        "API_PORT": "4000"
+      }
+    },
+    {
+      "name": "knowledgeops-worker",
+      "cwd": "/opt/knowledgeops-agent",
+      "script": "apps/worker/dist/main.js",
+      "interpreter": "node",
+      "node_args": ["--env-file=/opt/knowledgeops-agent/.env"],
+      "exec_mode": "fork",
+      "instances": 1,
+      "watch": false,
+      "autorestart": true,
+      "min_uptime": "10s",
+      "max_restarts": 5,
+      "restart_delay": 3000,
+      "kill_timeout": 210000,
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    {
+      "name": "knowledgeops-web",
+      "cwd": "/opt/knowledgeops-agent",
+      "script": "apps/web/.output/server/index.mjs",
+      "interpreter": "node",
+      "node_args": ["--env-file=/opt/knowledgeops-agent/.env"],
+      "exec_mode": "fork",
+      "instances": 1,
+      "watch": false,
+      "autorestart": true,
+      "min_uptime": "10s",
+      "max_restarts": 5,
+      "restart_delay": 3000,
+      "kill_timeout": 10000,
+      "env": {
+        "NODE_ENV": "production",
+        "NITRO_HOST": "127.0.0.1",
+        "NITRO_PORT": "3200"
+      }
+    }
+  ]
+}
