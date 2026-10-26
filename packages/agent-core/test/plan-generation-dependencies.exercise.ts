@@ -19,11 +19,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -41,11 +43,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -63,11 +67,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -90,11 +96,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -112,11 +120,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -134,11 +144,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -181,11 +193,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -203,11 +217,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -225,11 +241,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -272,11 +290,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -294,11 +314,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -316,11 +338,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -363,11 +387,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -385,11 +411,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -412,11 +440,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -449,11 +479,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -471,11 +503,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },
@@ -493,11 +527,13 @@ describe('plan generation dependency validation (day 08-08 handwrite)', () => {
               acceptanceCriteria: [
                 {
                   type: 'SECTION_PRESENT',
+                  config: { heading: '事件循环' },
                   description: 'Contains a section comparing tasks and microtasks.',
                   required: true,
                 },
                 {
                   type: 'SEMANTIC_CORRECTNESS',
+                  config: null,
                   description: 'Explains the ordering without reversing tasks and microtasks.',
                   required: true,
                 },

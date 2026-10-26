@@ -63,6 +63,17 @@ export {
   type PlanGenerationModelSnapshot,
 } from './domain/plan-generation-model.js'
 export {
+  sectionPresentConfigSchema,
+  contentMinimumConfigSchema,
+  generatedAcceptanceCriterionSchema,
+} from './domain/criterion-config.js'
+export {
+  noteCitationSchema,
+  criterionResultSchema,
+  type NoteCitation,
+  type CriterionResult,
+} from './domain/note-verification.js'
+export {
   OUTBOX_EVENT_TYPES,
   PLAN_GENERATION_JOB_ID_PREFIX,
   PLAN_GENERATION_JOB_NAME,

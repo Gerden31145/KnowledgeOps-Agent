@@ -69,6 +69,8 @@ describe('LangChainPlanGenerator', () => {
     expect(body.response_format).toEqual({ type: 'json_object' })
     expect(body.messages[0].content).toContain('acceptanceCriteria')
     expect(body.messages[0].content).toContain('dependsOnTaskIds')
+    expect(body.messages[0].content).toContain('minCharacters')
+    expect(body.messages[0].content).toContain('heading')
     expect(JSON.stringify(body)).not.toContain('server-secret')
   })
 
@@ -170,6 +172,21 @@ describe('LangChainPlanGenerator', () => {
     ).rejects.toMatchObject({ code: 'MODEL_CONFIGURATION_ERROR' })
 
     expect(neverCalled).not.toHaveBeenCalled()
+  })
+
+  it('does not silently upgrade a run with a frozen v1 model snapshot', async () => {
+    const factory: LangChainChatModelFactory = vi.fn()
+    await expect(
+      new LangChainPlanGenerator({ apiKey: 'fixture-secret' }, factory).generate({
+        ...validPlanGenerationRequest,
+        model: {
+          ...validPlanGenerationRequest.model,
+          promptVersion: 'plan-generation-v1',
+          outputSchemaVersion: 'plan-generation-output-v1',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'MODEL_CONFIGURATION_ERROR' })
+    expect(factory).not.toHaveBeenCalled()
   })
 
   it('distinguishes an aborted invocation from an upstream failure', async () => {

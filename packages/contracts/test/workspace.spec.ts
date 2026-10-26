@@ -1,4 +1,5 @@
 import {
+  acceptanceCriterionSummarySchema,
   learningGoalResponseSchema,
   planDetailResponseSchema,
   taskDetailResponseSchema,
@@ -32,6 +33,7 @@ const task = {
       id: ids.criterion,
       type: 'SECTION_PRESENT',
       description: 'Contains a section comparing tasks and microtasks.',
+      parameterDescription: null,
       required: true,
       position: 0,
     },
@@ -39,6 +41,11 @@ const task = {
 } as const
 
 describe('workspace HTTP contracts', () => {
+  it('accepts older responses without parameter text without inventing a check', () => {
+    const legacy = { ...task.criteria[0], parameterDescription: undefined }
+    expect(acceptanceCriterionSummarySchema.parse(legacy).parameterDescription).toBeNull()
+  })
+
   it('accepts a browser-safe learning goal receipt', () => {
     expect(
       learningGoalResponseSchema.parse({

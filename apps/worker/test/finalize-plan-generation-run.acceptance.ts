@@ -34,6 +34,7 @@ const candidate = {
           acceptanceCriteria: [
             {
               type: 'SECTION_PRESENT',
+              config: { heading: '事件循环' },
               description: 'Contains a section about tasks and microtasks.',
               required: true,
             },
@@ -51,6 +52,7 @@ const candidate = {
           acceptanceCriteria: [
             {
               type: 'TOPIC_COVERAGE',
+              config: null,
               description: 'Covers layout, paint, and composite.',
               required: true,
             },
@@ -73,6 +75,7 @@ const candidate = {
           acceptanceCriteria: [
             {
               type: 'EXPLANATION_QUALITY',
+              config: null,
               description: 'Uses a concrete example for batched updates.',
               required: true,
             },
@@ -474,6 +477,36 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
       await expect(
         database.planGenerationRun.findUniqueOrThrow({ where: { id: ids.generationRunId } }),
       ).resolves.toMatchObject({ status: 'SUCCEEDED', version: 2, finishedAt })
+    } finally {
+      await database.user.delete({ where: { id: ids.userId } })
+    }
+  })
+
+  it('persists the configured content threshold without deriving it from description', async () => {
+    const ids = await createRun()
+    const configured: PlanGenerationOutput = structuredClone(candidate)
+    configured.stages[0]!.tasks[0]!.acceptanceCriteria[0] = {
+      type: 'CONTENT_MINIMUM',
+      description: '正文与代码至少包含 200 个非空白字符。',
+      required: true,
+      config: { minCharacters: 200 },
+    }
+    try {
+      await new FinalizePlanGenerationRun(database).execute({
+        candidate: configured,
+        expectedRunVersion: 1,
+        finishedAt,
+        generationRunId: ids.generationRunId,
+        goalId: ids.goalId,
+      })
+      await expect(
+        database.acceptanceCriterion.findFirstOrThrow({
+          where: {
+            type: 'CONTENT_MINIMUM',
+            task: { stage: { plan: { generationRunId: ids.generationRunId } } },
+          },
+        }),
+      ).resolves.toMatchObject({ config: { minCharacters: 200 } })
     } finally {
       await database.user.delete({ where: { id: ids.userId } })
     }

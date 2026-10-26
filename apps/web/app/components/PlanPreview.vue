@@ -73,7 +73,7 @@ defineEmits<{
             <span class="font-mono text-caption tracking-label text-muted-soft uppercase">
               {{ String(task.position + 1).padStart(2, '0') }}
             </span>
-            <div>
+            <div class="min-w-0">
               <div class="flex flex-wrap items-start justify-between gap-4">
                 <h4 class="font-display text-2xl font-normal tracking-display uppercase">
                   {{ task.title }}
@@ -124,6 +124,12 @@ defineEmits<{
                           {{ criterion.type }}{{ criterion.required ? ' / 必需' : ' / 可选' }}
                         </span>
                         <p class="mt-1">{{ criterion.description }}</p>
+                        <p
+                          v-if="criterion.parameterDescription"
+                          class="mt-2 text-sm leading-6 text-body-strong [overflow-wrap:anywhere]"
+                        >
+                          {{ criterion.parameterDescription }}
+                        </p>
                       </li>
                     </ul>
                   </div>

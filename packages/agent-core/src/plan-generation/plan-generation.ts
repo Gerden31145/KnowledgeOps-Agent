@@ -4,7 +4,7 @@ import {
   isoDateSchema,
   markdownTargetPathSchema,
   planGenerationModelSnapshotSchema,
-  planTaskAcceptanceCriterionTypeSchema,
+  generatedAcceptanceCriterionSchema,
 } from '@knowledgeops/contracts'
 import { z } from 'zod'
 
@@ -18,8 +18,8 @@ export const PLAN_GENERATION_LIMITS = {
   acceptanceCriteria: { min: 1, max: 6 },
 } as const
 
-export const PLAN_GENERATION_PROMPT_VERSION = 'plan-generation-v1'
-export const PLAN_GENERATION_OUTPUT_SCHEMA_VERSION = 'plan-generation-output-v1'
+export const PLAN_GENERATION_PROMPT_VERSION = 'plan-generation-v2'
+export const PLAN_GENERATION_OUTPUT_SCHEMA_VERSION = 'plan-generation-output-v2'
 
 const taskReferenceIdSchema = z
   .string()
@@ -68,14 +68,6 @@ export const planGenerationRequestSchema = z
     generationRunId: entityIdSchema,
     model: planGenerationModelSnapshotSchema,
     goal: planGenerationGoalSchema,
-  })
-  .strict()
-
-const generatedAcceptanceCriterionSchema = z
-  .object({
-    type: planTaskAcceptanceCriterionTypeSchema,
-    description: z.string().trim().min(5).max(500),
-    required: z.boolean(),
   })
   .strict()
 

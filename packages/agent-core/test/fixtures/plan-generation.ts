@@ -6,8 +6,8 @@ export const validPlanGenerationRequest = {
     catalogId: 'openai-primary',
     provider: 'openai',
     modelName: 'test-model',
-    promptVersion: 'plan-generation-v1',
-    outputSchemaVersion: 'plan-generation-output-v1',
+    promptVersion: 'plan-generation-v2',
+    outputSchemaVersion: 'plan-generation-output-v2',
   },
   goal: {
     title: 'Prepare for frontend internship interviews',
@@ -34,11 +34,13 @@ export const validPlanGenerationOutput = {
           acceptanceCriteria: [
             {
               type: 'SECTION_PRESENT',
+              config: { heading: '事件循环' },
               description: 'Contains a section comparing tasks and microtasks.',
               required: true,
             },
             {
               type: 'SEMANTIC_CORRECTNESS',
+              config: null,
               description: 'Explains the ordering without reversing tasks and microtasks.',
               required: true,
             },
@@ -56,6 +58,7 @@ export const validPlanGenerationOutput = {
           acceptanceCriteria: [
             {
               type: 'TOPIC_COVERAGE',
+              config: null,
               description: 'Covers style, layout, paint, and composite.',
               required: true,
             },
@@ -73,6 +76,7 @@ export const validPlanGenerationOutput = {
           acceptanceCriteria: [
             {
               type: 'EXPLANATION_QUALITY',
+              config: null,
               description: 'Uses a concrete example to explain batched updates.',
               required: true,
             },

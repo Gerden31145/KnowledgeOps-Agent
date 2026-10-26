@@ -71,8 +71,8 @@ const apiEnvironmentSchema = z
       .trim()
       .min(1)
       .max(64)
-      .default('plan-generation-output-v1'),
-    PLAN_GENERATION_PROMPT_VERSION: z.string().trim().min(1).max(64).default('plan-generation-v1'),
+      .default('plan-generation-output-v2'),
+    PLAN_GENERATION_PROMPT_VERSION: z.string().trim().min(1).max(64).default('plan-generation-v2'),
     PLAN_GENERATION_TIMEOUT_MS: z.coerce
       .number()
       .int()

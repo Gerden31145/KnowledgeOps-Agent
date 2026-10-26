@@ -48,6 +48,7 @@ const candidate = {
         acceptanceCriteria: [
           {
             type: 'SECTION_PRESENT' as const,
+            config: { heading: '事件循环' },
             description: 'Contains the required explanation section.',
             required: true,
           },

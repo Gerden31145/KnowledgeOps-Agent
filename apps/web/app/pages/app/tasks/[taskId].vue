@@ -119,7 +119,7 @@ async function startTask() {
       </header>
 
       <div class="grid gap-12 py-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="space-y-12">
+        <div class="min-w-0 space-y-12">
           <section aria-labelledby="steps-title">
             <h2
               id="steps-title"
@@ -158,6 +158,12 @@ async function startTask() {
                   {{ criterion.type }} · {{ criterion.required ? '必需' : '可选' }}
                 </p>
                 <p class="mt-3 leading-7 text-body">{{ criterion.description }}</p>
+                <p
+                  v-if="criterion.parameterDescription"
+                  class="mt-2 text-sm leading-6 text-body-strong [overflow-wrap:anywhere]"
+                >
+                  {{ criterion.parameterDescription }}
+                </p>
               </li>
             </ul>
           </section>

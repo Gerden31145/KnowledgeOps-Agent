@@ -163,6 +163,7 @@ export class FinalizePlanGenerationRun implements PlanGenerationSuccessFinalizer
                   type: criteria.type,
                   description: criteria.description,
                   required: criteria.required,
+                  ...(criteria.config === null ? {} : { config: criteria.config }),
                   position: index,
                 },
               })

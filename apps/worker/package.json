@@ -19,6 +19,8 @@
     "@nestjs/core": "11.1.28",
     "bullmq": "6.0.10",
     "diff": "8.0.4",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-to-string": "4.0.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "zod": "4.4.3"

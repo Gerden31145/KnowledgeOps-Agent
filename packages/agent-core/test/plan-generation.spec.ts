@@ -14,6 +14,14 @@ import {
 } from './fixtures/plan-generation.js'
 
 describe('plan generation domain contract', () => {
+  it('rejects a missing deterministic config at the model port boundary', async () => {
+    const incomplete = structuredClone(validPlanGenerationOutput)
+    Reflect.deleteProperty(incomplete.stages[0].tasks[0].acceptanceCriteria[0], 'config')
+    await expect(
+      generatePlanCandidate({ generate: async () => incomplete }, validPlanGenerationRequest),
+    ).rejects.toBeInstanceOf(InvalidPlanGenerationOutputError)
+  })
+
   it('accepts a bounded plan and a future goal deadline', () => {
     expect(planGenerationRequestSchema.parse(validPlanGenerationRequest)).toEqual(
       validPlanGenerationRequest,

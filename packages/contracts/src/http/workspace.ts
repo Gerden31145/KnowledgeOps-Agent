@@ -16,6 +16,7 @@ export const acceptanceCriterionSummarySchema = z
     id: entityIdSchema,
     type: acceptanceCriterionTypeSchema,
     description: z.string().trim().min(1),
+    parameterDescription: z.string().trim().min(1).nullable().default(null),
     required: z.boolean(),
     position: z.number().int().nonnegative(),
   })

@@ -1,7 +1,10 @@
 import {
+  contentMinimumConfigSchema,
   planDetailResponseSchema,
+  sectionPresentConfigSchema,
   taskDetailResponseSchema,
   todayTasksResponseSchema,
+  type AcceptanceCriterionSummary,
   type PlanDetailResponse,
   type TaskDetailResponse,
   type TodayTasksResponse,
@@ -118,6 +121,7 @@ export class PlanRepository {
                     id: true,
                     type: true,
                     description: true,
+                    config: true,
                     required: true,
                     position: true,
                   },
@@ -144,6 +148,7 @@ export class PlanRepository {
         ...stage,
         tasks: stage.tasks.map(({ prerequisites, ...task }) => ({
           ...task,
+          criteria: task.criteria.map(summarizeCriterion),
           prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
         })),
       })),
@@ -233,6 +238,7 @@ export class PlanRepository {
             id: true,
             type: true,
             description: true,
+            config: true,
             required: true,
             position: true,
           },
@@ -268,6 +274,7 @@ export class PlanRepository {
 
     return taskDetailResponseSchema.parse({
       ...taskWithoutPrerequisites,
+      criteria: task.criteria.map(summarizeCriterion),
       prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
       runs: task.runs.map((run) => ({
         ...run,
@@ -277,4 +284,29 @@ export class PlanRepository {
       })),
     })
   }
+}
+
+// 与检查器使用同一参数校验；历史缺参标准只展示限制，不从 description 猜条件。
+function summarizeCriterion({
+  config,
+  ...criterion
+}: Omit<AcceptanceCriterionSummary, 'parameterDescription'> & {
+  config: unknown
+}): AcceptanceCriterionSummary {
+  let parameterDescription: string | null = null
+  const unavailable = '当前标准缺少有效的检查条件，暂时无法自动判定此项。'
+
+  if (criterion.type === 'SECTION_PRESENT') {
+    const parsed = sectionPresentConfigSchema.safeParse(config)
+    parameterDescription = parsed.success
+      ? `实际检查：文档中须有标题“${parsed.data.heading}”，标题文字精确匹配、区分大小写；代码块、引用块和列表内的标题不计入。`
+      : unavailable
+  } else if (criterion.type === 'CONTENT_MINIMUM') {
+    const parsed = contentMinimumConfigSchema.safeParse(config)
+    parameterDescription = parsed.success
+      ? `实际检查：正文与代码合计至少 ${parsed.data.minCharacters} 个非空白字符；按 Unicode 码点计数，不计标题、HTML、图片替代文字和链接目标地址。`
+      : unavailable
+  }
+
+  return { ...criterion, parameterDescription }
 }
