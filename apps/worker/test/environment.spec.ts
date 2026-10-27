@@ -4,6 +4,34 @@ import { resolve } from 'node:path'
 import { readWorkerEnvironment } from '../src/config/environment.js'
 
 describe('Worker environment', () => {
+  it('requires explicit model prices and credentials before enabling note consumption', () => {
+    expect(readWorkerEnvironment({}).NOTE_VERIFICATION_MODEL_JSON).toBeUndefined()
+    const model = {
+      catalogId: 'glm-5-3',
+      modelName: 'glm-5.3',
+      currency: 'CNY',
+      inputMicrounitsPerMillionTokens: 8_000_000,
+      outputMicrounitsPerMillionTokens: 28_000_000,
+    }
+    const source = {
+      OPENAI_API_KEY: 'fixture',
+      NOTE_VERIFICATION_MODEL_JSON: JSON.stringify(model),
+    }
+    expect(readWorkerEnvironment(source).NOTE_VERIFICATION_MODEL_JSON).toEqual(model)
+    expect(() => readWorkerEnvironment({ ...source, OPENAI_API_KEY: '' })).toThrow('OPENAI_API_KEY')
+    expect(() =>
+      readWorkerEnvironment({ ...source, NOTE_VERIFICATION_MODEL_JSON: '{broken' }),
+    ).toThrow('NOTE_VERIFICATION_MODEL_JSON')
+    expect(() =>
+      readWorkerEnvironment({
+        ...source,
+        NOTE_VERIFICATION_MODEL_JSON: JSON.stringify({
+          ...model,
+          inputMicrounitsPerMillionTokens: -1,
+        }),
+      }),
+    ).toThrow('NOTE_VERIFICATION_MODEL_JSON')
+  })
   it('keeps GitHub App settings optional and accepts only absolute private-key paths', () => {
     expect(readWorkerEnvironment({}).GITHUB_APP_CLIENT_ID).toBeUndefined()
     expect(

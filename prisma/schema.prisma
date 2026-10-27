@@ -235,32 +235,65 @@ model TaskDependency {
 }
 
 model AgentRun {
-  id                  String            @id @default(uuid()) @db.Uuid
-  taskId              String            @map("task_id") @db.Uuid
-  submissionId        String?           @map("submission_id") @db.Uuid
-  expectedTaskVersion Int?              @map("expected_task_version")
-  kind                AgentRunKind
-  status              AgentRunState     @default(QUEUED)
-  taskStateBeforeRun  TaskState         @map("task_state_before_run")
-  retryOfRunId        String?           @map("retry_of_run_id") @db.Uuid
-  workflowVersion     String            @map("workflow_version") @db.VarChar(64)
-  errorCode           String?           @map("error_code") @db.VarChar(64)
-  version             Int               @default(0)
-  queuedAt            DateTime          @default(now()) @map("queued_at") @db.Timestamptz(3)
-  startedAt           DateTime?         @map("started_at") @db.Timestamptz(3)
-  finishedAt          DateTime?         @map("finished_at") @db.Timestamptz(3)
-  task                Task              @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  submission          Submission?       @relation(fields: [submissionId], references: [id], onDelete: Restrict)
-  deliveries          WebhookDelivery[]
-  retryOfRun          AgentRun?         @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
-  retries             AgentRun[]        @relation("AgentRunRetries")
-  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                     String                     @id @default(uuid()) @db.Uuid
+  taskId                 String                     @map("task_id") @db.Uuid
+  submissionId           String?                    @map("submission_id") @db.Uuid
+  expectedTaskVersion    Int?                       @map("expected_task_version")
+  kind                   AgentRunKind
+  status                 AgentRunState              @default(QUEUED)
+  taskStateBeforeRun     TaskState                  @map("task_state_before_run")
+  retryOfRunId           String?                    @map("retry_of_run_id") @db.Uuid
+  workflowVersion        String                     @map("workflow_version") @db.VarChar(64)
+  errorCode              String?                    @map("error_code") @db.VarChar(64)
+  deadlineAt             DateTime?                  @map("deadline_at") @db.Timestamptz(3)
+  executionConfiguration Json?                      @map("execution_configuration") @db.JsonB
+  version                Int                        @default(0)
+  queuedAt               DateTime                   @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt              DateTime?                  @map("started_at") @db.Timestamptz(3)
+  finishedAt             DateTime?                  @map("finished_at") @db.Timestamptz(3)
+  task                   Task                       @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  submission             Submission?                @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  deliveries             WebhookDelivery[]
+  retryOfRun             AgentRun?                  @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries                AgentRun[]                 @relation("AgentRunRetries")
+  modelExecution         NoteVerificationExecution?
+  report                 VerificationReport?
+  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([submissionId], map: "agent_runs_one_initial_per_submission", where: raw("(retry_of_run_id IS NULL)"))
   @@index([taskId, queuedAt])
   @@index([status, queuedAt])
   @@map("agent_runs")
+}
+
+model VerificationReport {
+  id        String   @id @default(uuid()) @db.Uuid
+  runId     String   @unique @map("run_id") @db.Uuid
+  body      Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@map("verification_reports")
+}
+
+// R09 执行账本：只记录模型预算与结果，不替代验收报告或 Task 状态。
+model NoteVerificationExecution {
+  runId              String    @id @map("run_id") @db.Uuid
+  claimToken         String    @map("claim_token") @db.Uuid
+  runVersion         Int       @map("run_version")
+  requestFingerprint String    @map("request_fingerprint") @db.VarChar(64)
+  configuration      Json      @db.JsonB
+  deadlineAt         DateTime  @map("deadline_at") @db.Timestamptz(3)
+  attemptCount       Int       @default(0) @map("attempt_count")
+  pendingAttempt     Int?      @map("pending_attempt")
+  accounting         Json      @db.JsonB
+  result             Json?     @db.JsonB
+  startedAt          DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(3)
+  run                AgentRun  @relation(fields: [runId], references: [id], onDelete: Cascade, map: "note_verification_executions_run_fkey")
+
+  @@map("note_verification_executions")
 }
 
 // R06 笔记提交：一份固定 Commit 的证据可以被不同的重试运行引用，不覆盖旧证据。

@@ -894,6 +894,29 @@ pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integratio
 
 2026-10-20 用户已确认统一导读理解，并正确复述候选 Delivery → 当前处理 Job → 确认 failed → 补记失败的链路，短复述通过。AI 补充当前恢复请求定位、条件更新为 0 时保护成功/新尝试及安全失败码的细节，不要求重述。用户随后报告本段约 15 分钟，R06 累计约 6 小时 50 分钟，较原预算超出约 2 小时 50 分钟；不把 AI 工程耗时计入学习。R06 的实现、既有验证、真实 Push 观察与学习收尾完成，DONE 随本次本地提交生效；本轮不重跑产品测试，不推送。两个临时 Playground 源码已清理，正式测试和历史观察保留。下一单元 R07 部署 smoke 未启动，M3 尚未完成；不声明已接入 M4 正文验收或 Redis 数据丢失后的自动重建。
 
+### 5.26 R09 笔记验收消费者与报告（2026-10-27）
+
+本地执行 `pnpm db:migrate:deploy`、`pnpm build:packages` 后可运行 `pnpm test:integration:r09`。该命令包含 11 项账本用例和 13 项消费/报告用例，使用真实 PostgreSQL/Redis、随机夹具与隔离队列，模型全部模拟，不产生模型费用；清理仅涉及本轮夹具。普通 `pnpm test` 不包含这些集成场景。
+
+正式消费者以 `.env.example` 的 `NOTE_VERIFICATION_MODEL_JSON` 显式启用，留空时不认领 `NOTE_VERIFICATION_REQUESTED`，不丢弃待办。共享既有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`PLAN_GENERATION_OUTPUT_METHOD`；密钥不能写进模型 JSON。示例 GLM-5.3 单价由用户于 10/27 提供：输入 ¥8、输出 ¥28、缓存命中 ¥2／百万 Token；目前不拆分缓存用量，全部输入按普通价估算，不能当作供应商账单。微货币单位为百万分之一元，价格 JSON 中分别填 8000000、28000000；默认费用阈值 1000000 表示 ¥1。
+
+实际 `.env` 与 VPS 本轮未修改；10/27 随后的独立真实模型 smoke 见下文。启用正式消费者前先核对数据库中的待办：Worker 启动后会自动消费符合条件的历史验收 Outbox。配置更新后重启 Worker；预算、单价和截止时间在首次领取 Run 时冻结，重启不刷新已有 Run 额度。额度超出或用量未知时保留已校验的合法结果及 warnings，不再追加调用；过期或取消仍不能发布报告。
+
+报告由 `GET /agent-runs/:runId` 查询（API 本身无 `/api` 全局前缀，部署代理规则另计），要求有效登录且归属当前用户。返回 Run 状态、报告单项结果、免检项、待追问标准及费用估算，不返回凭据/内部配置。报告和 `SUCCEEDED` 同事务落库；失败或超时只恢复版本仍匹配的 Task。报告成功不代表 Task 通过；追问、Task 汇总和产品页面仍按 R10/R11/R12 接入。
+
+队列重投不重复调用模型；已有完整账本允许补报告，未完成账本不重新计费尝试，等待原截止时间收束。恢复扫描复用 Outbox 轮询器：数据库恢复后可补报告/终态，首次领取前耗尽队列重试的 Run 还会核对失败 Job。Redis 数据被删除后的自动重建不在本段范围。队列失败日志为安全代码，数据库 `errorCode` 与队列投递错误应分开理解。
+
+手动真实模型观察入口为 `apps/worker/scripts/verify-note-live.ts`，不属于自动测试或基础入门练习。在仓库根目录运行：
+
+```powershell
+# 只读上次保存的观察，不请求模型，也不连接数据库/Redis。
+pnpm verify:r09:live
+```
+
+只有显式追加 `--run` 才会创建新的付费验收：要求本地数据库/Redis、现有智谱 HTTPS Base URL/API Key，固定 GLM-5.3、用户确认的单价和单 Run 最多两次调用，三分钟截止时间、每次最多 4096 输出 Token。脚本使用独立队列、随机合成记录与定向 Outbox 投递，结束后清理自身记录和队列，保存 `apps/worker/.local/r09-live-note-result.json`（Git 忽略）。其中原文、Commit、绑定为合成材料，实际请求走正式模型适配器；不读取用户仓库内容，不启动全局消费者。
+
+10/27 AI 已运行一次：Run/报告成功，模型调用 1 次，输入 973、输出 1248、共 2221 Token，估算 ¥0.042728，无记账警告。同 Run 再次处理新增调用 0、返回同报告 ID。语义引用为原文第 4–5、7 行；三个已有检查均通过，一个追问标准待处理，Task 仍 VERIFYING。数据库夹具已清理，后续通过本地 JSON 观察该报告，无需重复付费。此结果验证合成证据经真实队列、模型和数据库生成报告，不代表本轮验证了浏览器/GitHub Push 全流程或已发布至 VPS。
+
 ## 6. 启动应用
 
 ```powershell

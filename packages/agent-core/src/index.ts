@@ -26,3 +26,20 @@ export {
   assertPlanGenerationDependenciesAreAcyclic,
   hasPlanGenerationDependencyCycle,
 } from './plan-generation/plan-dependency-graph.exercise.js'
+export {
+  noteSemanticCriterionTypeSchema,
+  noteVerificationCandidateSchema,
+  noteVerificationRequestSchema,
+  NOTE_VERIFICATION_PROMPT_VERSION,
+  NOTE_VERIFICATION_OUTPUT_SCHEMA_VERSION,
+  type NoteVerificationCandidate,
+  type NoteVerificationRequest,
+  type NoteVerificationOptions,
+  type NoteVerificationResponse,
+  type NoteVerificationUsage,
+  type NoteVerificationPort,
+} from './note-verification/note-verification.js'
+export {
+  LangChainNoteVerifier,
+  NoteVerificationModelError,
+} from './note-verification/langchain-note-verifier.js'

@@ -19,6 +19,9 @@ import { PlanGenerationRunRepository } from './plan-generation/plan-generation-r
 import { PlanGenerationTimeoutSweepLoop } from './plan-generation/plan-generation-timeout-sweep-loop.js'
 import { BullMqPlanGenerationQueue } from './queue/bullmq-plan-generation-queue.js'
 import { BullMqGitHubEvidenceQueue } from './queue/bullmq-github-evidence-queue.js'
+import { BullMqNoteVerificationQueue } from './queue/bullmq-note-verification-queue.js'
+import { NoteVerificationJobProcessor } from './verification/note-verification-job-processor.js'
+import { NoteVerificationRunRepository } from './verification/note-verification-run.repository.js'
 
 @Injectable()
 export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -26,6 +29,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
   private dispatchLoop: OutboxDispatchLoop | undefined
   private queue: BullMqPlanGenerationQueue | undefined
   private evidenceQueue: BullMqGitHubEvidenceQueue | undefined
+  private noteQueue: BullMqNoteVerificationQueue | undefined
   private timeoutSweepLoop: PlanGenerationTimeoutSweepLoop | undefined
 
   constructor(
@@ -37,6 +41,9 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
     private readonly planGenerationRunRepository: PlanGenerationRunRepository,
     @Inject(GitHubEvidenceJobProcessor)
     private readonly gitHubEvidenceProcessor: GitHubEvidenceJobProcessor,
+    @Inject(NoteVerificationJobProcessor)
+    private readonly noteProcessor: NoteVerificationJobProcessor,
+    @Inject(NoteVerificationRunRepository) private readonly noteRuns: NoteVerificationRunRepository,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -61,6 +68,18 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
       })
       this.queue.start()
       this.evidenceQueue.start()
+      if (this.environment.NOTE_VERIFICATION_MODEL_JSON) {
+        this.noteQueue = new BullMqNoteVerificationQueue({
+          concurrency: this.environment.WORKER_CONCURRENCY,
+          jobOptions: {
+            attempts: this.environment.BULLMQ_JOB_ATTEMPTS,
+            backoffDelayMs: this.environment.BULLMQ_JOB_BACKOFF_MS,
+          },
+          processor: this.noteProcessor,
+          redisUrl: this.environment.REDIS_URL,
+        })
+        this.noteQueue.start()
+      }
 
       this.timeoutSweepLoop = new PlanGenerationTimeoutSweepLoop(
         this.planGenerationRunRepository,
@@ -71,12 +90,20 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
 
       const planQueue = this.queue
       const evidenceQueue = this.evidenceQueue
+      const noteQueue = this.noteQueue
       const dispatcher = new OutboxDispatcher(
         this.database.client,
         {
           publish: (message) => planQueue.publish(message),
           publishGitHubPush: (message) => evidenceQueue.publish(message),
           publishGitHubEvidenceRetry: (message) => evidenceQueue.publish(message),
+          ...(noteQueue
+            ? {
+                publishNoteVerification: (
+                  message: import('./outbox/outbox-event.js').NoteVerificationOutboxMessage,
+                ) => noteQueue.publish(message),
+              }
+            : {}),
         },
         {
           baseDelayMs: this.environment.OUTBOX_RETRY_BASE_DELAY_MS,
@@ -89,7 +116,21 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         dispatcher,
         this.environment.OUTBOX_BATCH_SIZE,
         this.environment.OUTBOX_POLL_INTERVAL_MS,
-        () => evidenceReconciler.reconcile(this.environment.OUTBOX_BATCH_SIZE),
+        async () => {
+          // 一个恢复器失败不应阻断另一个；Run 收尾只依赖 PostgreSQL，不依赖 Redis。
+          try {
+            return await evidenceReconciler.reconcile(this.environment.OUTBOX_BATCH_SIZE)
+          } finally {
+            try {
+              await this.noteRuns.reconcile(
+                this.environment.OUTBOX_BATCH_SIZE,
+                noteQueue ? (message) => noteQueue.isFailed(message) : undefined,
+              )
+            } catch {
+              this.logger.warn({ event: 'note_verification_reconcile_unavailable' })
+            }
+          }
+        },
       )
       await this.dispatchLoop.start()
 
@@ -111,6 +152,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
       }
       this.queue = undefined
       this.evidenceQueue = undefined
+      this.noteQueue = undefined
       this.timeoutSweepLoop = undefined
       throw error
     }
@@ -128,7 +170,11 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
 
   private async closeQueues(): Promise<void> {
     try {
-      await this.evidenceQueue?.close()
+      try {
+        await this.noteQueue?.close()
+      } finally {
+        await this.evidenceQueue?.close()
+      }
     } finally {
       await this.queue?.close()
     }

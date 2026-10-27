@@ -18,6 +18,9 @@ coverage/
 /generated/prisma/
 /packages/database/src/generated/prisma/
 
+# Local manual smoke observations; no private fixtures or provider output in commits.
+/apps/worker/.local/
+
 *.log
 .DS_Store
 Thumbs.db

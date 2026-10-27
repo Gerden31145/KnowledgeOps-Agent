@@ -12,6 +12,25 @@ const optionalUrlSchema = z.preprocess(
   z.string().url().optional(),
 )
 
+const noteModelSchema = z
+  .object({
+    catalogId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+    modelName: z.string().trim().min(1).max(160),
+    currency: z.enum(['CNY', 'USD']),
+    inputMicrounitsPerMillionTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    outputMicrounitsPerMillionTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict()
+const noteModelConfigurationSchema = z.preprocess((value) => {
+  if (value === undefined || value === '') return undefined
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}, noteModelSchema.optional())
+
 const workerEnvironmentSchema = z
   .object({
     BULLMQ_JOB_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
@@ -31,6 +50,17 @@ const workerEnvironmentSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     OPENAI_API_KEY: optionalNonEmptyStringSchema,
     OPENAI_BASE_URL: optionalUrlSchema,
+    // 未配置时不创建验收队列、不认领验收 Outbox；不能凭空猜测单价或默认零成本。
+    NOTE_VERIFICATION_MODEL_JSON: noteModelConfigurationSchema,
+    NOTE_VERIFICATION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(180_000),
+    NOTE_VERIFICATION_MAX_TOTAL_TOKENS: z.coerce.number().int().min(1).max(200_000).default(32_000),
+    NOTE_VERIFICATION_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(8_192).default(4_096),
+    NOTE_VERIFICATION_MAX_COST_MICROUNITS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100_000_000)
+      .default(1_000_000),
     PLAN_GENERATION_OUTPUT_METHOD: z.enum(['jsonSchema', 'jsonMode']).default('jsonSchema'),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
@@ -52,6 +82,13 @@ const workerEnvironmentSchema = z
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(2),
   })
   .superRefine((environment, context) => {
+    if (environment.NOTE_VERIFICATION_MODEL_JSON && !environment.OPENAI_API_KEY) {
+      context.addIssue({
+        code: 'custom',
+        message: 'required for note verification',
+        path: ['OPENAI_API_KEY'],
+      })
+    }
     if (environment.OUTBOX_RETRY_BASE_DELAY_MS > environment.OUTBOX_RETRY_MAX_DELAY_MS) {
       context.addIssue({
         code: 'custom',

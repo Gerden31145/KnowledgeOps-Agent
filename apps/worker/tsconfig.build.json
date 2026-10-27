@@ -8,5 +8,5 @@
     "rootDir": "src",
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.build.tsbuildinfo"
   },
-  "exclude": ["test/**/*.ts"]
+  "exclude": ["test/**/*.ts", "scripts/**/*.ts"]
 }

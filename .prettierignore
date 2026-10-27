@@ -4,6 +4,7 @@
 .nuxt/
 .output/
 coverage/
+/apps/worker/.local/
 dist/
 node_modules/
 *.md

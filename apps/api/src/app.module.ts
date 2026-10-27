@@ -10,6 +10,7 @@ import { PlanGenerationModule } from './plan-generation/plan-generation.module.j
 import { PlansModule } from './plans/plans.module.js'
 import { RepositoriesModule } from './repositories/repositories.module.js'
 import { GitHubWebhookModule } from './webhooks/github-webhook.module.js'
+import { NoteVerificationModule } from './verification/note-verification.module.js'
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { GitHubWebhookModule } from './webhooks/github-webhook.module.js'
     PlansModule,
     RepositoriesModule,
     GitHubWebhookModule,
+    NoteVerificationModule,
   ],
   controllers: [AppController],
 })

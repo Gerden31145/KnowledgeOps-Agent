@@ -1,7 +1,15 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
+import {
+  createOpenAiChatModel,
+  type LangChainChatModelConfiguration,
+  type LangChainChatModelFactory,
+} from '../models/chat-model.js'
+export type {
+  LangChainChatModelConfiguration,
+  LangChainChatModelFactory,
+  LangChainChatModelFactoryInput,
+} from '../models/chat-model.js'
 
 import {
   PLAN_GENERATION_OUTPUT_SCHEMA_VERSION,
@@ -39,36 +47,6 @@ export class PlanGenerationModelError extends Error {
   ) {
     super(message, options)
   }
-}
-
-export interface LangChainChatModelConfiguration {
-  apiKey?: string
-  baseUrl?: string
-  structuredOutputMethod?: 'jsonSchema' | 'jsonMode'
-}
-
-export interface LangChainChatModelFactoryInput {
-  apiKey: string
-  baseUrl?: string
-  modelName: string
-}
-
-export type LangChainChatModelFactory = (input: LangChainChatModelFactoryInput) => BaseChatModel
-
-function createOpenAiChatModel(input: LangChainChatModelFactoryInput): BaseChatModel {
-  return new ChatOpenAI({
-    apiKey: input.apiKey,
-    model: input.modelName,
-    maxRetries: 0,
-    temperature: 0,
-    ...(input.baseUrl
-      ? {
-          configuration: {
-            baseURL: input.baseUrl,
-          },
-        }
-      : {}),
-  })
 }
 
 export class LangChainPlanGenerator implements PlanGenerationPort {

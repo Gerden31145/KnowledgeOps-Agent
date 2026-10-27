@@ -1,4 +1,7 @@
 import {
+  NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  noteVerificationRequestedEventPayloadSchema,
+  type NoteVerificationRequestedPayload,
   GITHUB_PUSH_RECEIVED_SCHEMA_VERSION,
   buildGitHubEvidenceRetryKey,
   githubEvidenceRetryEventSchema,
@@ -36,6 +39,28 @@ export interface GitHubPushOutboxMessage {
 export interface GitHubEvidenceRetryOutboxMessage {
   eventId: string
   payload: GitHubEvidenceRetryPayload
+}
+
+export interface NoteVerificationOutboxMessage {
+  eventId: string
+  payload: NoteVerificationRequestedPayload
+}
+export function parseNoteVerificationOutboxEvent(
+  event: LockedOutboxEvent,
+): NoteVerificationOutboxMessage {
+  const parsed = noteVerificationRequestedEventPayloadSchema.safeParse(event.payload)
+  if (
+    event.type !== 'NOTE_VERIFICATION_REQUESTED' ||
+    event.schemaVersion !== NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION ||
+    !parsed.success ||
+    event.aggregateId !== parsed.data.runId ||
+    event.deduplicationKey !== `note-verification-requested-${parsed.data.runId}`
+  )
+    throw new NonRetryableOutboxDispatchError(
+      'OUTBOX_PAYLOAD_INVALID',
+      'Invalid note verification intent',
+    )
+  return { eventId: event.id, payload: parsed.data }
 }
 
 export function parseGitHubEvidenceRetryOutboxEvent(

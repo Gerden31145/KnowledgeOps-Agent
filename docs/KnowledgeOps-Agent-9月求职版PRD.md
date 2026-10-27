@@ -514,6 +514,7 @@ P1 可增加：
 
 - 模型瞬时错误重试和结构化输出修复必须计入所属 `PlanGenerationRun` 或 `AgentRun` 的统一模型调用次数、Token、成本和总耗时预算；验收阶段的只读工具重试还要计入同一 `AgentRun` 的工具预算。
 - LangChain 中间件、模型供应商 SDK 与 BullMQ 不得分别使用互不知情的默认重试，避免一次失败形成乘法级调用放大。
+- 2026-10-26 用户确认：调用结束后才获知 Token/费用超额或用量缺失，不因此丢弃已通过结构、标准身份、引用及时效检查的合法验收结果；保留结果并单独记录预算/记账警告，不再追加模型调用。没有合法结果且预算耗尽或用量未知时停止修复；此规则不放宽权限、旧证据、超时、取消及终态保护，不把费用估算描述为供应商事前硬额度或实际账单。
 - BullMQ 负责 Job 投递和 Worker 级故障重试；`PlanGenerationRun` 或 `AgentRun` 已进入终态后，用户重试必须创建同类新运行并通过 `retryOfRunId` 关联旧记录。
 - 每次模型调用、工具调用、修复重试和错误分类都要关联 `runId`、`stepId` 与尝试序号，但内部调用记录不能越权修改 Task 或 Report。
 
@@ -597,11 +598,11 @@ BullMQ Job ID 使用稳定的业务键，例如：
 plan-generation-{runId}
 evidence-{deliveryId}
 evidence-{deliveryId}-retry-{retryEventId}
-note-{repositoryId}-{taskId}-{afterCommitSha}-{workflowVersion}
+note-verification-{runId}
 answer-{taskId}-{answerSubmissionId}-{workflowVersion}
 ```
 
-初次取证 Job 按 Delivery ID 去重，手动恢复 Job 再绑定持久化的恢复请求 ID；各请求复用既有有限自动重试策略，不添加另一层无限自动重试。笔记验收再按仓库绑定/任务/提交/流程版本进行业务幂等。自定义 Job ID 使用连字符，不使用 BullMQ 保留为 Redis 键分隔符的冒号。稳定 Job ID 只负责队列内的第一层去重，Job 被自动清理后不能继续提供永久幂等；PostgreSQL 唯一约束、运行终态和条件更新才是最终防线。
+初次取证 Job 按 Delivery ID 去重，手动恢复 Job 再绑定持久化的恢复请求 ID；各请求复用既有有限自动重试策略，不添加另一层无限自动重试。笔记验收的 Submission 按仓库绑定/任务/提交/流程版本保持业务幂等，初始 Run 唯一引用 Submission；队列按持久化 runId 去重，使后续关联重试 Run 可保留独立执行记录。自定义 Job ID 使用连字符，不使用 BullMQ 保留为 Redis 键分隔符的冒号。稳定 Job ID 只负责队列内的第一层去重，Job 被自动清理后不能继续提供永久幂等；PostgreSQL 唯一约束、运行终态和条件更新才是最终防线。
 
 即使发生重复生成请求、重复 Delivery、重复入队或 Worker 重试，也只能产生一份有效业务结果。计划生成 Worker 只有在完整结果通过 Schema、数量、日期和 DAG 校验后，才能用单个事务创建 Plan 图并把运行推进到 `SUCCEEDED`；重复消费已经终态的运行必须返回既有结果。
 

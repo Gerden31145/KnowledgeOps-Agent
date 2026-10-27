@@ -1,4 +1,8 @@
-import { LangChainPlanGenerator, type PlanGenerationPort } from '@knowledgeops/agent-core'
+import {
+  LangChainPlanGenerator,
+  LangChainNoteVerifier,
+  type PlanGenerationPort,
+} from '@knowledgeops/agent-core'
 import { Module, type Provider } from '@nestjs/common'
 
 import { ConfigModule, WORKER_ENVIRONMENT } from './config/config.module.js'
@@ -15,6 +19,9 @@ import {
 import { PlanGenerationJobProcessor } from './plan-generation/plan-generation-job-processor.js'
 import { PlanGenerationRunRepository } from './plan-generation/plan-generation-run.repository.js'
 import { WorkerRuntimeService } from './worker-runtime.service.js'
+import { NoteVerificationRunRepository } from './verification/note-verification-run.repository.js'
+import { NoteVerificationExecutionRepository } from './verification/note-verification-execution.repository.js'
+import { NoteVerificationJobProcessor } from './verification/note-verification-job-processor.js'
 
 export const PLAN_GENERATION_PORT = Symbol('PLAN_GENERATION_PORT')
 
@@ -61,6 +68,31 @@ const gitHubEvidenceProcessorProvider: Provider<GitHubEvidenceJobProcessor> = {
     ),
 }
 
+const noteRunRepositoryProvider: Provider<NoteVerificationRunRepository> = {
+  provide: NoteVerificationRunRepository,
+  inject: [DatabaseService, WORKER_ENVIRONMENT],
+  useFactory: (database: DatabaseService, environment: WorkerEnvironment) =>
+    new NoteVerificationRunRepository(database.client, environment),
+}
+const noteProcessorProvider: Provider<NoteVerificationJobProcessor> = {
+  provide: NoteVerificationJobProcessor,
+  inject: [DatabaseService, WORKER_ENVIRONMENT, NoteVerificationRunRepository],
+  useFactory: (
+    database: DatabaseService,
+    environment: WorkerEnvironment,
+    runs: NoteVerificationRunRepository,
+  ) =>
+    new NoteVerificationJobProcessor(
+      runs,
+      new NoteVerificationExecutionRepository(database.client),
+      new LangChainNoteVerifier({
+        structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
+        ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
+        ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
+      }),
+    ),
+}
+
 @Module({
   imports: [ConfigModule, DatabaseModule],
   providers: [
@@ -69,6 +101,8 @@ const gitHubEvidenceProcessorProvider: Provider<GitHubEvidenceJobProcessor> = {
     planGenerationFinalizerProvider,
     planGenerationJobProcessorProvider,
     gitHubEvidenceProcessorProvider,
+    noteRunRepositoryProvider,
+    noteProcessorProvider,
     WorkerRuntimeService,
   ],
 })

@@ -14,9 +14,77 @@
 pnpm --filter @knowledgeops/worker exec tsx playground/<exercise>/<file>.ts
 ```
 
+## 已完成观察：R09 执行预算与失败处理（2026-10-26）
+
+用户已确认运行、理解并完成本段复述，随后明确要求保留合法结果、另记预算异常。AI 已验证调整后的行为，临时 `r09-budget/inspect-budget.ts` 已清理，当前没有活动练习；以下命令仅作历史记录，不要求重跑。练习使用模拟模型、用量和单价，不联网、不读取 .env、不产生费用。原观察/导读目标 20 至 30 分钟，计入 R09 原预算，无新手写，新增实际耗时未报告。
+
+```powershell
+pnpm --filter @knowledgeops/worker exec tsx playground/r09-budget/inspect-budget.ts
+```
+
+观察三条路径：
+
+- `repair-succeeds`：第一次伪造引用、第二次合法，返回 SUCCEEDED；calls=2，knownTotalTokens=400，失败的用量没有被漏掉。
+- `tokens-exhausted`：第一次引用错误且已花满 200 Token，返回 MODEL_BUDGET_EXCEEDED；calls=1，不发起第二次。
+- `usage-unknown`：回答合法但供应商未返回有效用量，调整后保留结果返回 SUCCEEDED，accounting.warnings 包含 MODEL_USAGE_UNKNOWN；usageComplete=false，calls=1。已知合计为 0 不代表免费，attempt.usage/cost 仍是 null。旧版将此情况直接判失败，已按用户决定修正。
+
+入口顺序：execute-note-verification.ts（共享预算 → 调用 → 结算 → 停止或有限补调用），再看 verify-note-semantics.ts 的 catch 如何把已花用量交还执行层。适配器补充了安全修复提示与失败 usage，不要求重读全部文件。
+
+本段只有单次执行内存记账；消费者、跨 Worker 重启/队列重试的持久化预算及报告落库尚未接入。费用是配置单价估算，Token/费用在响应后结算，不能声称供应商事前硬额度。用户观察/理解/复述已完成；调整后相关 62 项通过，合法结果超额或用量未知时保留并单列警告，无效结果及超时/取消仍不可发布。
+
+## 已完成观察：R09 单次模型调用（2026-10-26）
+
+用户已确认观察、理解并完成简短复述，`r09-model/inspect-model-call.ts` 已清理，后续预算观察也已完成。以下命令仅作历史记录，不要求重跑。本小段阅读/观察目标 25 至 35 分钟，计入 R09 原 5 小时预算，无手写；用户报告 R09 累计约 3 小时，未单独报告本段耗时。
+正式 LangChainNoteVerifier 注入模拟模型，Worker 调用与候选核对都走正式实现；不联网、不读取 .env，不产生真实模型费用，输出中的 Token 用量是模拟值。
+
+```powershell
+pnpm --filter @knowledgeops/worker exec tsx playground/r09-model/inspect-model-call.ts
+```
+
+观察三条路径：
+
+- `valid`：request-prepared 保留第 3 行正文，validated-result 包含原文引用和模拟用量。
+- `forged-quote`：模型响应格式合法，但 Worker 核对原文时拒绝 INVALID_MODEL_CITATION。
+- `upstream-error`：模型调用失败，适配器返回 MODEL_UPSTREAM_ERROR；本段不会重试或编造通过结果。
+
+首轮只读 `apps/worker/src/verification/verify-note-semantics.ts` 与
+`packages/agent-core/src/note-verification/langchain-note-verifier.ts`。
+前者只发送笔记语义标准并串起模型与校验；后者组装系统约束/数据、调用结构化输出并分类错误。
+连接工厂从计划生成适配器抽出共用，沿用 Base URL/JSON 模式、maxRetries=0；计划生成行为不变。
+请求契约和测试按配套职责查看，不要求逐行通读。
+
+模型上下文以 lines 数组保留空行，来源由固定正文绑定；输入 JSON 最多 80000 个 JS 字符单位，超限拒绝、不截断，输出 Token 上限每次显式传入。
+供应商未提供完整有效用量时 usage 为 null，不能当作 0；这不等于已有完整预算管理。
+单次错误会向上传播，尚未写 AgentRun FAILED；队列消费、统一调用/Token/成本/耗时预算、有限修复和报告落库仍待实现。
+AI 观察与定向测试已通过，用户已确认本段调用链及语义标准筛选的理解、脚本运行，并说明模型格式正确仍可能引用错误或虚构证据，需要业务校验。本段观察与简短复述已完成；不将其记为真实模型或队列调用验证，不重开此前候选校验。
+
+## 已完成观察：R09 模型候选与真实引用（2026-10-26）
+
+用户已确认运行及职责理解，临时 `r09-candidate/inspect-candidate.ts` 已清理；后续单次模型调用观察也已完成。以下命令及输出说明仅作历史记录。
+本小段约 20 至 30 分钟计入 R09 原 5 小时预算，无新手写，不需要数据库、Redis 或模型密钥。
+
+```powershell
+pnpm --filter @knowledgeops/worker exec tsx playground/r09-candidate/inspect-candidate.ts
+```
+
+脚本直接调用正式的 `validateNoteVerification`，依次观察：
+
+- `accepted`：第 3 行引文与固定正文一致，程序补齐仓库、Commit、路径和哈希。
+- `forged-quote-rejected`：只改引文就返回 `INVALID_MODEL_CITATION`，不能拿模型编造的话做证据。
+- `authentic-quote-does-not-prove-correct-reasoning`：引用真实，但示例理由故意写反；当前校验不能证明语义判断正确。
+
+首轮只读 `packages/agent-core/src/note-verification/note-verification.ts` 与
+`apps/worker/src/verification/validate-note-verification.ts`；前者定义模型返回的形状，后者核对标准范围和原文。
+原文通过 `parseNoteEvidence` 校验后传入，复用 R08 的 `readNoteCitation`；不重新读取 GitHub。
+通过/失败的语义结论必须有非空真实引文；证据不足允许空引用，但已提供的引用仍必须真实。
+任一结构/标准身份/引用检查失败时整份候选拒绝，不返回半份结果，不修改 Task。
+
+AI 已观察上述三种输出，27 项新增测试与 12 项引用回归通过；用户已确认两个检查器的职责区别，并明确“已运行过”。不要求重跑，不推断用户逐项输出或额外变体操作。
+真实模型适配、调用预算、修复/失败输出、消费者和报告持久化仍未接入；大小上限不等于运行预算。
+
 ## 已完成观察与手写：R08 确定性检查（2026-10-25）
 
-手写已通过 Review 和正式验收；临时 inspect-checks.ts 已清理，当前没有活动练习源码。以下命令及输出说明作为历史记录保留。
+手写已通过 Review 和正式验收；临时 inspect-checks.ts 已清理，R08 没有活动练习源码。以下命令及输出说明作为历史记录保留。
 
 ```powershell
 pnpm --filter @knowledgeops/worker exec tsx playground/r08-markdown-ast/inspect-checks.ts

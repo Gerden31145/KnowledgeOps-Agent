@@ -99,7 +99,16 @@ export {
   NOTE_VERIFICATION_WORKFLOW_VERSION,
   NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
   noteVerificationRequestedEventPayloadSchema,
+  NOTE_VERIFICATION_QUEUE_NAME,
+  NOTE_VERIFICATION_JOB_NAME,
+  buildNoteVerificationJobId,
+  type NoteVerificationRequestedPayload,
 } from './events/note-verification.js'
+export {
+  noteVerificationReportBodySchema,
+  noteVerificationRunResponseSchema,
+  type NoteVerificationReportBody,
+} from './http/note-verification.js'
 export {
   ERROR_CODES,
   apiErrorResponseSchema,

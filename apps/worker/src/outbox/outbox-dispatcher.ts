@@ -6,6 +6,8 @@ import {
   type ClassifiedOutboxDispatchFailure,
 } from './outbox-dispatch-error.js'
 import {
+  parseNoteVerificationOutboxEvent,
+  type NoteVerificationOutboxMessage,
   parseGitHubPushOutboxEvent,
   parseGitHubEvidenceRetryOutboxEvent,
   type GitHubEvidenceRetryOutboxMessage,
@@ -23,6 +25,7 @@ export interface OutboxPublisher {
   // 只有装配了取证消费者的 Runtime 才认领此类待办；旧的计划生成装配保持可用。
   publishGitHubPush?(message: GitHubPushOutboxMessage): Promise<{ jobId: string }>
   publishGitHubEvidenceRetry?(message: GitHubEvidenceRetryOutboxMessage): Promise<{ jobId: string }>
+  publishNoteVerification?(message: NoteVerificationOutboxMessage): Promise<{ jobId: string }>
 }
 
 export type OutboxDispatchResult =
@@ -107,6 +110,7 @@ export class OutboxDispatcher {
                 "type" = 'PLAN_GENERATION_REQUESTED'
                 ${this.publisher.publishGitHubPush ? Prisma.sql`OR "type" = 'GITHUB_PUSH_RECEIVED'` : Prisma.empty}
                 ${this.publisher.publishGitHubEvidenceRetry ? Prisma.sql`OR "type" = 'GITHUB_EVIDENCE_RETRY_REQUESTED'` : Prisma.empty}
+                ${this.publisher.publishNoteVerification ? Prisma.sql`OR "type" = 'NOTE_VERIFICATION_REQUESTED'` : Prisma.empty}
               )
               AND "dead_lettered_at" IS NULL
               AND "available_at" <= ${now}
@@ -124,7 +128,14 @@ export class OutboxDispatcher {
         let published: { jobId: string }
 
         try {
-          if (event.type === 'GITHUB_PUSH_RECEIVED' && this.publisher.publishGitHubPush) {
+          if (
+            event.type === 'NOTE_VERIFICATION_REQUESTED' &&
+            this.publisher.publishNoteVerification
+          ) {
+            published = await this.publisher.publishNoteVerification(
+              parseNoteVerificationOutboxEvent(event),
+            )
+          } else if (event.type === 'GITHUB_PUSH_RECEIVED' && this.publisher.publishGitHubPush) {
             published = await this.publisher.publishGitHubPush(parseGitHubPushOutboxEvent(event))
           } else if (
             event.type === 'GITHUB_EVIDENCE_RETRY_REQUESTED' &&
