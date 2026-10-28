@@ -1,4 +1,4 @@
-import type { NoteVerificationPort } from '@knowledgeops/agent-core'
+import type { NoteVerificationPort, FollowUpGenerationPort } from '@knowledgeops/agent-core'
 import type { NoteVerificationRequestedPayload } from '@knowledgeops/contracts'
 import { executePersistedNoteVerification } from './execute-persisted-note-verification.js'
 import {
@@ -15,6 +15,7 @@ export class NoteVerificationJobProcessor {
     private readonly runs: NoteVerificationRunRepository,
     private readonly ledger: NoteVerificationExecutionRepository,
     private readonly model: NoteVerificationPort,
+    private readonly followUp?: FollowUpGenerationPort,
   ) {}
 
   async process(
@@ -33,6 +34,7 @@ export class NoteVerificationJobProcessor {
           maxOutputTokens: prepared.configuration.maxOutputTokens,
         },
         prepared.configuration.budget,
+        this.followUp,
       )
     } catch (error) {
       // 取消/终态与模型返回可能交错；复核业务状态。数据库异常仍交给队列重试。

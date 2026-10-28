@@ -54,6 +54,7 @@ enum OutboxEventType {
   GITHUB_PUSH_RECEIVED
   GITHUB_EVIDENCE_RETRY_REQUESTED
   NOTE_VERIFICATION_REQUESTED
+  ANSWER_VERIFICATION_REQUESTED
 }
 
 enum AgentRunKind {
@@ -238,6 +239,7 @@ model AgentRun {
   id                     String                     @id @default(uuid()) @db.Uuid
   taskId                 String                     @map("task_id") @db.Uuid
   submissionId           String?                    @map("submission_id") @db.Uuid
+  answerSubmissionId     String?                    @map("answer_submission_id") @db.Uuid
   expectedTaskVersion    Int?                       @map("expected_task_version")
   kind                   AgentRunKind
   status                 AgentRunState              @default(QUEUED)
@@ -253,6 +255,7 @@ model AgentRun {
   finishedAt             DateTime?                  @map("finished_at") @db.Timestamptz(3)
   task                   Task                       @relation(fields: [taskId], references: [id], onDelete: Restrict)
   submission             Submission?                @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  answerSubmission       AnswerSubmission?          @relation(fields: [answerSubmissionId], references: [id], onDelete: Restrict)
   deliveries             WebhookDelivery[]
   retryOfRun             AgentRun?                  @relation("AgentRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
   retries                AgentRun[]                 @relation("AgentRunRetries")
@@ -262,22 +265,51 @@ model AgentRun {
   updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([submissionId], map: "agent_runs_one_initial_per_submission", where: raw("(retry_of_run_id IS NULL)"))
+  @@unique([answerSubmissionId], map: "agent_runs_one_initial_per_answer", where: raw("(retry_of_run_id IS NULL)"))
   @@index([taskId, queuedAt])
   @@index([status, queuedAt])
   @@map("agent_runs")
 }
 
 model VerificationReport {
-  id        String   @id @default(uuid()) @db.Uuid
-  runId     String   @unique @map("run_id") @db.Uuid
-  body      Json     @db.JsonB
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  id               String            @id @default(uuid()) @db.Uuid
+  runId            String            @unique @map("run_id") @db.Uuid
+  body             Json              @db.JsonB
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  run              AgentRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  followUpQuestion FollowUpQuestion?
 
   @@map("verification_reports")
 }
 
-// R09 执行账本：只记录模型预算与结果，不替代验收报告或 Task 状态。
+// 一份笔记报告最多一道追问；body 固定原 Submission/Commit、评分要点及原文引用。
+model FollowUpQuestion {
+  id        String             @id @default(uuid()) @db.Uuid
+  reportId  String             @unique @map("report_id") @db.Uuid
+  body      Json               @db.JsonB
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  report    VerificationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  answers   AnswerSubmission[]
+
+  @@map("follow_up_questions")
+}
+
+// 回答引用原追问，追问经 Report → 笔记 Run → Submission 固定原笔记；不伪造 GitHub 提交。
+model AnswerSubmission {
+  id                  String           @id @default(uuid()) @db.Uuid
+  questionId          String           @map("question_id") @db.Uuid
+  requestId           String           @map("request_id") @db.Uuid
+  expectedTaskVersion Int              @map("expected_task_version")
+  content             String           @db.Text
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  question            FollowUpQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  runs                AgentRun[]
+
+  @@unique([questionId, requestId])
+  @@map("answer_submissions")
+}
+
+// 笔记与回答共用按 Run 隔离的执行账本；保留 R09 表名，不替代正式报告或 Task 状态。
 model NoteVerificationExecution {
   runId              String    @id @map("run_id") @db.Uuid
   claimToken         String    @map("claim_token") @db.Uuid

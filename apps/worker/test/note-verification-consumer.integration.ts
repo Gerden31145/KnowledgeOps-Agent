@@ -1,10 +1,15 @@
-import { randomUUID, randomInt } from 'node:crypto'
-import { createDatabaseClient, type DatabaseClient } from '@knowledgeops/database'
+import { randomUUID } from 'node:crypto'
+import { createDatabaseClient, Prisma, type DatabaseClient } from '@knowledgeops/database'
 import {
   buildNoteVerificationJobId,
   noteVerificationReportBodySchema,
 } from '@knowledgeops/contracts'
-import type { NoteVerificationPort, NoteVerificationRequest } from '@knowledgeops/agent-core'
+import type {
+  NoteVerificationPort,
+  NoteVerificationRequest,
+  FollowUpGenerationPort,
+  FollowUpGenerationRequest,
+} from '@knowledgeops/agent-core'
 import { Queue, QueueEvents } from 'bullmq'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { readWorkerEnvironment } from '../src/config/environment.js'
@@ -16,7 +21,7 @@ import { BullMqNoteVerificationQueue } from '../src/queue/bullmq-note-verificati
 import { bullMqWorkerConnection } from '../src/queue/bullmq-connections.js'
 import { OutboxDispatcher } from '../src/outbox/outbox-dispatcher.js'
 import { NoteVerificationQueryService } from '../../api/src/verification/note-verification-query.service.js'
-import { noteEvidence } from './fixtures/note-evidence.js'
+import { createNoteVerificationFixture } from './fixtures/verification.js'
 
 // 真实 PostgreSQL / Redis；模型只用合成返回，不读取用户笔记，不调用供应商。
 const environment = readWorkerEnvironment({
@@ -54,153 +59,21 @@ const response = (request: NoteVerificationRequest) => ({
     })),
   },
 })
+const questionResponse = (request: FollowUpGenerationRequest) => ({
+  usage,
+  candidate: {
+    question: '如果清空微任务时又加入一个微任务，会先执行它还是下一个宏任务？为什么？',
+    rubric: ['说明微任务队列会继续清空后才进入下一个宏任务。'],
+    citations: [{ startLine: 3, endLine: 3, excerpt: request.note.lines[2]! }],
+  },
+})
 
-async function fixture() {
-  const userId = randomUUID(),
-    taskId = randomUUID(),
-    repositoryId = randomUUID(),
-    submissionId = randomUUID()
-  const runId = randomUUID(),
-    eventId = randomUUID()
-  const installationId = String(randomInt(8_000_000_000_000, 9_000_000_000_000))
-  const content = '# 事件循环\n\n当前任务结束后，先清空微任务队列。'
-  fixtures.push({ userId, taskId, runId, eventId, installationId })
-  await database.user.create({
-    data: {
-      id: userId,
-      goals: {
-        create: {
-          title: 'R09 consumer fixture',
-          currentLevel: 'fixture',
-          weeklyMinutes: 120,
-          deadline: new Date('2026-12-01'),
-          plans: {
-            create: {
-              status: 'ACTIVE',
-              stages: {
-                create: {
-                  title: 'fixture',
-                  position: 0,
-                  tasks: {
-                    create: {
-                      id: taskId,
-                      title: '事件循环',
-                      description: '解释微任务顺序',
-                      position: 0,
-                      estimatedMinutes: 30,
-                      state: 'VERIFYING',
-                      version: 6,
-                      targetPath: 'notes/event-loop.md',
-                      criteria: {
-                        create: [
-                          { type: 'FILE_CHANGED', position: 0, description: '修改文件' },
-                          {
-                            type: 'SECTION_PRESENT',
-                            position: 1,
-                            description: '存在章节',
-                            config: { heading: '事件循环' },
-                          },
-                          {
-                            type: 'SEMANTIC_CORRECTNESS',
-                            position: 2,
-                            description: '正确解释顺序',
-                          },
-                          { type: 'FOLLOW_UP_ANSWER', position: 3, description: '完成追问' },
-                        ],
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  await database.gitHubInstallation.create({
-    data: { id: installationId, accountId: '42', accountLogin: 'fixture', verifiedAt: new Date() },
-  })
-  await database.repository.create({
-    data: {
-      id: repositoryId,
-      userId,
-      installationId,
-      githubRepositoryId: installationId,
-      fullName: 'fixture/notes',
-      branch: 'main',
-      defaultBranch: 'main',
-      isPrivate: true,
-    },
-  })
-  const fixed = noteEvidence(content)
-  const evidence = {
-    content: fixed.content,
-    contentHash: fixed.contentHash,
-    lineCount: fixed.lineCount,
-    sourceCommitSha: fixed.sourceCommitSha,
-    mode: fixed.mode,
-    change: fixed.change,
-  }
-  await database.submission.create({
-    data: {
-      id: submissionId,
-      repositoryId,
-      taskId,
-      taskVersion: 5,
-      beforeCommitSha: 'a'.repeat(40),
-      afterCommitSha: 'b'.repeat(40),
-      targetPath: fixed.path,
-      workflowVersion: 'note-v1',
-      evidence: {
-        create: {
-          ...evidence,
-          diff: '@@ -1 +1,3 @@\n # 事件循环\n+\n+当前任务结束后，先清空微任务队列。',
-        },
-      },
-    },
-  })
-  await database.agentRun.create({
-    data: {
-      id: runId,
-      submissionId,
-      taskId,
-      expectedTaskVersion: 6,
-      kind: 'NOTE_VERIFICATION',
-      taskStateBeforeRun: 'IN_PROGRESS',
-      workflowVersion: 'note-v1',
-    },
-  })
-  const payload = { runId, submissionId }
-  await database.outboxEvent.create({
-    data: {
-      id: eventId,
-      type: 'NOTE_VERIFICATION_REQUESTED',
-      aggregateId: runId,
-      deduplicationKey: `note-verification-requested-${runId}`,
-      payload,
-    },
-  })
-  return {
-    userId,
-    taskId,
-    repositoryId,
-    runId,
-    submissionId,
-    payload,
-    eventId,
-    run: () =>
-      database.agentRun.findUniqueOrThrow({
-        where: { id: runId },
-        include: { report: true, modelExecution: true },
-      }),
-    task: () => database.task.findUniqueOrThrow({ where: { id: taskId } }),
-  }
-}
+const fixture = () => createNoteVerificationFixture(database, (value) => fixtures.push(value))
 function processor(
   verify: NoteVerificationPort['verify'],
   db: DatabaseClient = database,
   now = () => new Date(),
+  generate?: FollowUpGenerationPort['generate'],
 ) {
   // 恢复扫描也限定本文件随机夹具，不能收尾本机用户正在运行的任务。
   const scoped = db.$extends({
@@ -217,7 +90,16 @@ function processor(
   }) as unknown as DatabaseClient
   const runs = new NoteVerificationRunRepository(scoped, environment, now)
   const ledger = new NoteVerificationExecutionRepository(db)
-  return { runs, ledger, handler: new NoteVerificationJobProcessor(runs, ledger, { verify }) }
+  return {
+    runs,
+    ledger,
+    handler: new NoteVerificationJobProcessor(
+      runs,
+      ledger,
+      { verify },
+      generate ? { generate } : undefined,
+    ),
+  }
 }
 async function transport(handler: Pick<NoteVerificationJobProcessor, 'process'>) {
   const queueName = `r09-fixture-${randomUUID()}`
@@ -255,6 +137,241 @@ afterEach(async () => {
   }
 })
 afterAll(() => database.$disconnect())
+
+describe('R10 shared note/question execution and atomic persistence', () => {
+  it('leaves answer verification intents pending until an answer publisher is installed', async () => {
+    const f = await fixture()
+    await database.outboxEvent.update({
+      where: { id: f.eventId },
+      data: {
+        type: 'ANSWER_VERIFICATION_REQUESTED',
+        payload: { runId: f.runId, answerSubmissionId: randomUUID() },
+      },
+    })
+    const publisher = {
+      publish: vi.fn(),
+      publishNoteVerification: vi.fn(),
+      publishGitHubPush: vi.fn(),
+      publishGitHubEvidenceRetry: vi.fn(),
+    }
+    const dispatcher = new OutboxDispatcher(database, publisher, {
+      baseDelayMs: 100,
+      maxDelayMs: 1000,
+    })
+    expect(await dispatcher.dispatchEvent(f.eventId)).toEqual({ status: 'EMPTY' })
+    for (const publish of Object.values(publisher)) expect(publish).not.toHaveBeenCalled()
+    expect(await database.outboxEvent.findUnique({ where: { id: f.eventId } })).toMatchObject({
+      dispatchedAt: null,
+      deadLetteredAt: null,
+    })
+  })
+  it('dispatches both steps through one Run and returns one private-owner question without its rubric', async () => {
+    const f = await fixture()
+    const verify = vi
+      .fn<NoteVerificationPort['verify']>()
+      .mockImplementation(async (r) => response(r))
+    const generate = vi
+      .fn<FollowUpGenerationPort['generate']>()
+      .mockImplementation(async (r) => questionResponse(r))
+    const { handler } = processor(verify, database, undefined, generate)
+    const { queue, inspector, events } = await transport(handler)
+    const dispatcher = new OutboxDispatcher(
+      database,
+      { publish: vi.fn(), publishNoteVerification: (message) => queue.publish(message) },
+      { baseDelayMs: 100, maxDelayMs: 1000 },
+    )
+    await dispatcher.dispatchEvent(f.eventId)
+    const job = await inspector.getJob(buildNoteVerificationJobId(f.runId))
+    queue.start()
+    const result = await job!.waitUntilFinished(events, 10_000)
+    expect(result.status).toBe('SUCCEEDED')
+    const run = await f.run()
+    expect(run.modelExecution).toMatchObject({ attemptCount: 2, pendingAttempt: null })
+    const saved = await database.followUpQuestion.findUniqueOrThrow({
+      where: { reportId: result.reportId },
+    })
+    expect(saved.body).toMatchObject({
+      source: {
+        taskId: f.taskId,
+        submissionId: f.submissionId,
+        noteRunId: f.runId,
+        reportId: result.reportId,
+        repositoryId: f.repositoryId,
+        commitSha: 'b'.repeat(40),
+      },
+      rubric: expect.any(Array),
+    })
+    const queries = new NoteVerificationQueryService(database)
+    const queried = await queries.getRun(f.runId, f.userId)
+    expect(queried.followUpQuestion).toMatchObject({
+      id: saved.id,
+      question: expect.any(String),
+      citations: expect.any(Array),
+    })
+    expect(JSON.stringify(queried)).not.toContain('rubric')
+    expect(queried.report?.body).toMatchObject({
+      followUp: { status: 'READY' },
+      accounting: { knownTotalTokens: 300, knownCostMicrounits: 4400 },
+    })
+    await expect(queries.getRun(f.runId, randomUUID())).rejects.toMatchObject({ status: 404 })
+    await expect(handler.process(f.payload)).resolves.toEqual(result)
+    expect(verify).toHaveBeenCalledOnce()
+    expect(generate).toHaveBeenCalledOnce()
+    expect(await database.followUpQuestion.count({ where: { reportId: result.reportId } })).toBe(1)
+    expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: 6 })
+  })
+
+  it('rolls back report and terminal state if the question write fails, then reuses both saved model results', async () => {
+    const f = await fixture()
+    const faulty = database.$extends({
+      query: {
+        followUpQuestion: {
+          async create() {
+            throw new Error('fixture-question-write-outage')
+          },
+        },
+      },
+    }) as unknown as DatabaseClient
+    const verify = vi
+      .fn<NoteVerificationPort['verify']>()
+      .mockImplementation(async (r) => response(r))
+    const generate = vi
+      .fn<FollowUpGenerationPort['generate']>()
+      .mockImplementation(async (r) => questionResponse(r))
+    await expect(
+      processor(verify, faulty, undefined, generate).handler.process(f.payload),
+    ).rejects.toThrow('fixture-question-write-outage')
+    expect(await f.run()).toMatchObject({
+      status: 'RUNNING',
+      report: null,
+      modelExecution: {
+        attemptCount: 2,
+        result: { status: 'SUCCEEDED', followUp: { status: 'READY' } },
+      },
+    })
+    const normal = processor(verify, database, undefined, generate)
+    const result = await normal.handler.process(f.payload)
+    expect(result.status).toBe('SUCCEEDED')
+    expect(await database.followUpQuestion.count({ where: { reportId: result.reportId! } })).toBe(1)
+    expect(verify).toHaveBeenCalledOnce()
+    expect(generate).toHaveBeenCalledOnce()
+  })
+
+  it.each(['unbind', 'version', 'cancel'] as const)(
+    'rejects the question after %s during generation',
+    async (change) => {
+      const f = await fixture()
+      const { handler } = processor(
+        async (r) => response(r),
+        database,
+        undefined,
+        async (request) => {
+          if (change === 'unbind')
+            await database.repository.update({
+              where: { id: f.repositoryId },
+              data: { enabled: false },
+            })
+          if (change === 'version')
+            await database.task.update({ where: { id: f.taskId }, data: { version: 7 } })
+          if (change === 'cancel')
+            await database.agentRun.update({
+              where: { id: f.runId },
+              data: { status: 'CANCEL_REQUESTED', version: { increment: 1 } },
+            })
+          return questionResponse(request)
+        },
+      )
+      expect(await handler.process(f.payload)).toMatchObject({
+        status: change === 'cancel' ? 'CANCELLED' : 'FAILED',
+        reportId: null,
+      })
+      expect((await f.run()).report).toBeNull()
+      expect(await database.followUpQuestion.count({ where: { report: { runId: f.runId } } })).toBe(
+        0,
+      )
+    },
+  )
+
+  it.each(['failed-section', 'snapshot-exemption'] as const)(
+    'derives question eligibility from R08 checks: %s',
+    async (kind) => {
+      const f = await fixture()
+      if (kind === 'failed-section')
+        await database.acceptanceCriterion.updateMany({
+          where: { taskId: f.taskId, type: 'SECTION_PRESENT' },
+          data: { config: { heading: '不存在的章节' } },
+        })
+      else
+        await database.evidence.update({
+          where: { submissionId: f.submissionId },
+          data: { mode: 'SNAPSHOT', change: null, diff: null },
+        })
+      const generate = vi
+        .fn<FollowUpGenerationPort['generate']>()
+        .mockImplementation(async (r) => questionResponse(r))
+      await processor(async (r) => response(r), database, undefined, generate).handler.process(
+        f.payload,
+      )
+      const queried = await new NoteVerificationQueryService(database).getRun(f.runId, f.userId)
+      if (kind === 'failed-section') {
+        expect(generate).not.toHaveBeenCalled()
+        expect(queried.followUpQuestion).toBeNull()
+        expect(queried.report?.body.followUp).toEqual({
+          status: 'SKIPPED',
+          reason: 'NOTE_CRITERIA_NOT_PASSED',
+        })
+      } else {
+        expect(generate).toHaveBeenCalledOnce()
+        expect(queried.followUpQuestion).not.toBeNull()
+        expect(queried.report?.body.exemptions).toHaveLength(1)
+      }
+    },
+  )
+
+  it('keeps the note report when semantic repair uses both calls and never restores a fresh question budget', async () => {
+    const f = await fixture()
+    const verify = vi
+      .fn<NoteVerificationPort['verify']>()
+      .mockResolvedValueOnce({ candidate: { results: [] }, usage })
+      .mockImplementation(async (r) => response(r))
+    const generate = vi.fn<FollowUpGenerationPort['generate']>()
+    const { handler } = processor(verify, database, undefined, generate)
+    const result = await handler.process(f.payload)
+    expect(result.status).toBe('SUCCEEDED')
+    expect(noteVerificationReportBodySchema.parse((await f.run()).report!.body).followUp).toEqual({
+      status: 'FAILED',
+      code: 'MODEL_CALL_LIMIT_EXCEEDED',
+    })
+    await handler.process(f.payload)
+    expect(verify).toHaveBeenCalledTimes(2)
+    expect(generate).not.toHaveBeenCalled()
+  })
+
+  it('preserves an already frozen R09 configuration without adding a new model step', async () => {
+    const f = await fixture()
+    const verify = vi
+      .fn<NoteVerificationPort['verify']>()
+      .mockImplementation(async (r) => response(r))
+    const generate = vi.fn<FollowUpGenerationPort['generate']>()
+    const { runs, handler } = processor(verify, database, undefined, generate)
+    const prepared = await runs.prepare(f.payload)
+    if (!prepared.ready) throw new Error('fixture-not-ready')
+    const legacy = { ...prepared.configuration }
+    delete legacy.followUp
+    await database.agentRun.update({
+      where: { id: f.runId },
+      data: {
+        executionConfiguration: JSON.parse(JSON.stringify(legacy)) as Prisma.InputJsonValue,
+      },
+    })
+    expect(await handler.process(f.payload)).toMatchObject({ status: 'SUCCEEDED' })
+    const queried = await new NoteVerificationQueryService(database).getRun(f.runId, f.userId)
+    expect(queried.report?.body.followUp).toBeNull()
+    expect(queried.followUpQuestion).toBeNull()
+    expect(verify).toHaveBeenCalledOnce()
+    expect(generate).not.toHaveBeenCalled()
+  })
+})
 
 describe('R09 real note consumer and atomic report', () => {
   it('dispatches through BullMQ, merges checks, queries only as owner and replays without another model call', async () => {

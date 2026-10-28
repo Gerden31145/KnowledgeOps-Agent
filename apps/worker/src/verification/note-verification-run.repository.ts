@@ -1,13 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import {
   NOTE_VERIFICATION_OUTPUT_SCHEMA_VERSION,
   NOTE_VERIFICATION_PROMPT_VERSION,
+  FOLLOW_UP_PROMPT_VERSION,
+  FOLLOW_UP_OUTPUT_SCHEMA_VERSION,
+  noteSemanticCriterionTypeSchema,
 } from '@knowledgeops/agent-core'
 import {
   isAgentRunTerminalState,
-  isRestorableTaskState,
   NOTE_VERIFICATION_WORKFLOW_VERSION,
   noteVerificationReportBodySchema,
-  type AgentRunState,
   type NoteVerificationRequestedPayload,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
@@ -20,6 +22,8 @@ import {
   type NoteExecutionConfiguration,
 } from './note-verification-execution.repository.js'
 import { NoteEvidenceError, parseNoteEvidence } from './parse-note-evidence.js'
+import { canGenerateFollowUp } from './execute-note-verification.js'
+import { validateFollowUpQuestion, FollowUpQuestionError } from './validate-follow-up-question.js'
 
 const include = {
   task: {
@@ -33,11 +37,13 @@ const include = {
   report: true,
 } satisfies Prisma.AgentRunInclude
 type Run = Prisma.AgentRunGetPayload<{ include: typeof include }>
-export type NoteRunResult = {
-  runId: string
-  status: AgentRunState | 'IGNORED' | 'PENDING'
-  reportId: string | null
-}
+import {
+  terminateVerificationRun as terminate,
+  verificationRunSnapshot as snapshot,
+  ignoredVerificationRun as ignored,
+  type VerificationRunResult as NoteRunResult,
+} from './verification-run-lifecycle.js'
+export type { VerificationRunResult as NoteRunResult } from './verification-run-lifecycle.js'
 
 // 领取与最终写入都按 User → Task → Run 加锁；网络/模型调用不放进数据库事务。
 export class NoteVerificationRunRepository {
@@ -122,6 +128,41 @@ export class NoteVerificationRunRepository {
       }
       if (ledger.requestFingerprint !== noteExecutionFingerprint(context.input))
         return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+      const followUp = saved.data.followUp
+      if (context.input.followUp && !followUp)
+        return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+      let question: ReturnType<typeof validateFollowUpQuestion> | undefined
+      if (followUp?.status === 'READY') {
+        const expected = context.input.followUp
+        if (
+          !expected ||
+          !canGenerateFollowUp(expected, saved.data.results) ||
+          followUp.question.criterionId !== expected.criterion.id ||
+          Object.entries({ ...expected.source, ...context.input.note.source }).some(
+            ([key, value]) =>
+              followUp.question.source[key as keyof typeof followUp.question.source] !== value,
+          )
+        )
+          return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+        try {
+          question = validateFollowUpQuestion({
+            ...expected,
+            note: context.input.note,
+            candidate: {
+              question: followUp.question.question,
+              rubric: followUp.question.rubric,
+              citations: followUp.question.citations.map(({ startLine, endLine, excerpt }) => ({
+                startLine,
+                endLine,
+                excerpt,
+              })),
+            },
+          })
+        } catch (error) {
+          if (!(error instanceof FollowUpQuestionError)) throw error
+          return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+        }
+      }
       const semanticIds = new Set(saved.data.results.map((result) => result.criterionId))
       const accounting = saved.data.accounting
       const body = noteVerificationReportBodySchema.parse({
@@ -130,6 +171,7 @@ export class NoteVerificationRunRepository {
         pendingCriterionIds: context.checks.pendingCriterionIds.filter(
           (id) => !semanticIds.has(id),
         ),
+        followUp: followUp?.status === 'READY' ? { status: 'READY' } : (followUp ?? null),
         accounting: {
           knownTotalTokens: accounting.knownTotalTokens,
           knownCostMicrounits: accounting.knownCostMicrounits,
@@ -141,8 +183,14 @@ export class NoteVerificationRunRepository {
       if (run.deadlineAt && run.deadlineAt <= this.clock())
         return terminate(tx, run, 'RUN_DEADLINE_EXCEEDED', this.clock())
       const report = await tx.verificationReport.create({
-        data: { runId: run.id, body: json(body) },
+        data: {
+          ...(config.data.followUp ? { id: config.data.followUp.reportId } : {}),
+          runId: run.id,
+          body: json(body),
+        },
       })
+      if (question)
+        await tx.followUpQuestion.create({ data: { reportId: report.id, body: json(question) } })
       await tx.agentRun.update({
         where: { id: run.id },
         data: {
@@ -152,7 +200,7 @@ export class NoteVerificationRunRepository {
           errorCode: null,
         },
       })
-      // R10 处理追问，R11 才汇总 Task；执行成功不代表标准通过，也不提前解锁任务。
+      // 报告、唯一追问与 Run 终态同事务；回答尚未验收，Task 汇总仍留给 R11。
       return { runId: run.id, status: 'SUCCEEDED', reportId: report.id }
     })
   }
@@ -206,10 +254,6 @@ export class NoteVerificationRunRepository {
         const changed = await this.database.$transaction(async (tx) => {
           const run = await this.lock(tx, message)
           if (!run || run.status !== 'QUEUED') return false
-          await tx.agentRun.update({
-            where: { id: run.id },
-            data: { status: 'RUNNING', startedAt: this.clock() },
-          })
           await terminate(tx, run, 'NOTE_QUEUE_FAILED', this.clock())
           return true
         })
@@ -259,6 +303,16 @@ export class NoteVerificationRunRepository {
         promptVersion: NOTE_VERIFICATION_PROMPT_VERSION,
         outputSchemaVersion: NOTE_VERIFICATION_OUTPUT_SCHEMA_VERSION,
       },
+      followUp: {
+        reportId: randomUUID(),
+        model: {
+          catalogId: model.catalogId,
+          provider: 'openai',
+          modelName: model.modelName,
+          promptVersion: FOLLOW_UP_PROMPT_VERSION,
+          outputSchemaVersion: FOLLOW_UP_OUTPUT_SCHEMA_VERSION,
+        },
+      },
       maxOutputTokens: this.environment.NOTE_VERIFICATION_MAX_OUTPUT_TOKENS,
       budget: {
         maxCalls: 2,
@@ -305,6 +359,38 @@ function material(run: Run, configuration: NoteExecutionConfiguration) {
     throw new NoteEvidenceError('INVALID_EVIDENCE')
   const fixed = { ...evidence, repositoryId: submission.repositoryId, path: submission.targetPath }
   const checks = checkNoteCriteria({ evidence: fixed, criteria: run.task.criteria })
+  const questionCriteria = run.task.criteria.filter(({ type }) => type === 'FOLLOW_UP_ANSWER')
+  if (configuration.followUp && questionCriteria.length > 1)
+    throw new NoteEvidenceError('INVALID_EVIDENCE')
+  const criterion = questionCriteria[0]
+  const semantic = (type: string) => noteSemanticCriterionTypeSchema.safeParse(type).success
+  const followUp =
+    configuration.followUp && criterion
+      ? {
+          source: {
+            taskId: run.taskId,
+            submissionId: submission.id,
+            noteRunId: run.id,
+            reportId: configuration.followUp.reportId,
+          },
+          model: configuration.followUp.model,
+          criterion: {
+            id: criterion.id,
+            type: 'FOLLOW_UP_ANSWER' as const,
+            description: criterion.description,
+          },
+          deterministicPassed: run.task.criteria
+            .filter((c) => c.required && c.type !== 'FOLLOW_UP_ANSWER' && !semantic(c.type))
+            .every(
+              (c) =>
+                checks.results.some((r) => r.criterionId === c.id && r.outcome === 'PASSED') ||
+                checks.exemptions.some((e) => e.criterionId === c.id),
+            ),
+          requiredSemanticIds: run.task.criteria
+            .filter((c) => c.required && semantic(c.type))
+            .map((c) => c.id),
+        }
+      : undefined
   return {
     checks,
     input: {
@@ -313,43 +399,9 @@ function material(run: Run, configuration: NoteExecutionConfiguration) {
       task: { id: run.task.id, title: run.task.title, description: run.task.description },
       criteria: run.task.criteria.map(({ id, type, description }) => ({ id, type, description })),
       note: parseNoteEvidence(fixed),
+      ...(followUp ? { followUp } : {}),
     },
   }
-}
-async function terminate(
-  tx: Prisma.TransactionClient,
-  run: Run,
-  code: string,
-  now: Date,
-): Promise<NoteRunResult> {
-  const status =
-    code === 'RUN_CANCEL_REQUESTED'
-      ? 'CANCELLED'
-      : code === 'RUN_DEADLINE_EXCEEDED'
-        ? 'TIMED_OUT'
-        : 'FAILED'
-  await tx.agentRun.update({
-    where: { id: run.id },
-    data: {
-      status,
-      errorCode: code,
-      finishedAt: now,
-      version: { increment: 1 },
-    },
-  })
-  if (run.expectedTaskVersion !== null && isRestorableTaskState(run.taskStateBeforeRun)) {
-    await tx.task.updateMany({
-      where: { id: run.taskId, state: 'VERIFYING', version: run.expectedTaskVersion },
-      data: { state: run.taskStateBeforeRun, version: { increment: 1 } },
-    })
-  }
-  return { runId: run.id, status, reportId: null }
-}
-function snapshot(run: Run): NoteRunResult {
-  return { runId: run.id, status: run.status, reportId: run.report?.id ?? null }
-}
-function ignored(runId: string): NoteRunResult {
-  return { runId, status: 'IGNORED', reportId: null }
 }
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue

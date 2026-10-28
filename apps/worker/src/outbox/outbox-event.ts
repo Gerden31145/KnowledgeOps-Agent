@@ -1,4 +1,7 @@
 import {
+  ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  answerVerificationRequestedEventPayloadSchema,
+  type AnswerVerificationRequestedPayload,
   NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
   noteVerificationRequestedEventPayloadSchema,
   type NoteVerificationRequestedPayload,
@@ -44,6 +47,27 @@ export interface GitHubEvidenceRetryOutboxMessage {
 export interface NoteVerificationOutboxMessage {
   eventId: string
   payload: NoteVerificationRequestedPayload
+}
+export interface AnswerVerificationOutboxMessage {
+  eventId: string
+  payload: AnswerVerificationRequestedPayload
+}
+export function parseAnswerVerificationOutboxEvent(
+  event: LockedOutboxEvent,
+): AnswerVerificationOutboxMessage {
+  const parsed = answerVerificationRequestedEventPayloadSchema.safeParse(event.payload)
+  if (
+    event.type !== 'ANSWER_VERIFICATION_REQUESTED' ||
+    event.schemaVersion !== ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION ||
+    !parsed.success ||
+    event.aggregateId !== parsed.data.runId ||
+    event.deduplicationKey !== `answer-verification-requested-${parsed.data.runId}`
+  )
+    throw new NonRetryableOutboxDispatchError(
+      'OUTBOX_PAYLOAD_INVALID',
+      'Invalid answer verification intent',
+    )
+  return { eventId: event.id, payload: parsed.data }
 }
 export function parseNoteVerificationOutboxEvent(
   event: LockedOutboxEvent,

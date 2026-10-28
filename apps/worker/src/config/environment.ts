@@ -50,7 +50,7 @@ const workerEnvironmentSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     OPENAI_API_KEY: optionalNonEmptyStringSchema,
     OPENAI_BASE_URL: optionalUrlSchema,
-    // 未配置时不创建验收队列、不认领验收 Outbox；不能凭空猜测单价或默认零成本。
+    // 笔记/追问和回答共用模型目录与额度配置，各 Run 独立冻结；未配置不认领两种验收 Outbox。
     NOTE_VERIFICATION_MODEL_JSON: noteModelConfigurationSchema,
     NOTE_VERIFICATION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(180_000),
     NOTE_VERIFICATION_MAX_TOTAL_TOKENS: z.coerce.number().int().min(1).max(200_000).default(32_000),

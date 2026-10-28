@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { criterionResultSchema, planGenerationModelSnapshotSchema } from '@knowledgeops/contracts'
+import {
+  criterionResultSchema,
+  planGenerationModelSnapshotSchema,
+  followUpQuestionDraftSchema,
+  followUpGenerationStateSchema,
+} from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import { z } from 'zod'
 import {
@@ -10,12 +15,12 @@ import {
 } from './execute-note-verification.js'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
-const accountingSchema = z.object({
+export const verificationAccountingSchema = z.object({
   attempts: z
     .array(
       z.object({
         runId: z.uuid(),
-        stepId: z.literal('NOTE_SEMANTICS'),
+        stepId: z.enum(['NOTE_SEMANTICS', 'GENERATE_FOLLOW_UP', 'ANSWER_VERIFICATION']),
         attempt: z.number().int().min(1).max(2),
         kind: z.enum(['INITIAL', 'RETRY', 'REPAIR']),
         startedAt: z.coerce.date(),
@@ -37,24 +42,36 @@ export const noteExecutionResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('SUCCEEDED'),
     results: z.array(criterionResultSchema).max(6),
-    accounting: accountingSchema,
+    followUp: z
+      .union([
+        followUpGenerationStateSchema.options[1],
+        followUpGenerationStateSchema.options[2],
+        z.object({ status: z.literal('READY'), question: followUpQuestionDraftSchema }).strict(),
+      ])
+      .optional(),
+    accounting: verificationAccountingSchema,
   }),
   z.object({
     status: z.literal('FAILED'),
     code: z.string().min(1).max(64),
-    accounting: accountingSchema,
+    accounting: verificationAccountingSchema,
   }),
 ])
 export const noteExecutionConfigurationSchema = z.object({
   model: planGenerationModelSnapshotSchema,
   budget: noteVerificationBudgetSchema.extend({ deadlineAt: z.coerce.date() }),
   maxOutputTokens: z.number().int().min(1).max(8_192),
+  // 首次领取时预留报告 ID，供出题绑定；旧运行不补出题。
+  followUp: z
+    .object({ reportId: z.uuid(), model: planGenerationModelSnapshotSchema })
+    .strict()
+    .optional(),
 })
 export type NoteExecutionConfiguration = z.infer<typeof noteExecutionConfigurationSchema>
 export type NoteExecutionClaim = { runId: string; claimToken: string; runVersion: number }
-export type NoteExecutionClaimResult =
+export type NoteExecutionClaimResult<T = NoteVerificationExecution> =
   | { status: 'CLAIMED'; claim: NoteExecutionClaim; configuration: NoteExecutionConfiguration }
-  | { status: 'REPLAYED'; result: NoteVerificationExecution }
+  | { status: 'REPLAYED'; result: T }
   | {
       status: 'SKIPPED'
       reason:
@@ -75,9 +92,13 @@ export class NoteVerificationPersistenceError extends Error {
 
 // 这里只管理账本，不改变 AgentRun/Task 业务状态，也不承担用户鉴权和仓库绑定校验。
 // 消费者必须先校验当前绑定、Task 版本和证据；落报告前还需再次复核。
-export class NoteVerificationExecutionRepository {
+export class VerificationExecutionRepository<
+  T extends { status: string; accounting: NoteVerificationAccounting },
+> {
   constructor(
     private readonly database: DatabaseClient,
+    private readonly kind: 'NOTE_VERIFICATION' | 'ANSWER_VERIFICATION',
+    private readonly resultSchema: z.ZodType<T>,
     private readonly clock = () => new Date(),
   ) {}
 
@@ -86,10 +107,10 @@ export class NoteVerificationExecutionRepository {
     taskId: string
     fingerprint: string
     configuration: NoteExecutionConfiguration
-  }): Promise<NoteExecutionClaimResult> {
+  }): Promise<NoteExecutionClaimResult<T>> {
     return this.database.$transaction(async (tx) => {
       const run = await lockRun(tx, input.runId)
-      if (!run || run.taskId !== input.taskId || run.kind !== 'NOTE_VERIFICATION')
+      if (!run || run.taskId !== input.taskId || run.kind !== this.kind)
         throw new NoteVerificationPersistenceError('RUN_NOT_EXECUTABLE')
       if (!isActive(run.status))
         return {
@@ -101,7 +122,7 @@ export class NoteVerificationExecutionRepository {
         if (saved.requestFingerprint !== input.fingerprint || saved.runVersion !== run.version)
           throw new NoteVerificationPersistenceError('EXECUTION_CONTEXT_CHANGED')
         if (saved.result !== null)
-          return { status: 'REPLAYED', result: decode(noteExecutionResultSchema, saved.result) }
+          return { status: 'REPLAYED', result: decode(this.resultSchema, saved.result) }
         // 无论是正在运行还是进程已退出，都不重新获得一份预算；未完成记录交消费者对账处理。
         return {
           status: 'SKIPPED',
@@ -182,9 +203,9 @@ export class NoteVerificationExecutionRepository {
     })
   }
 
-  finish(claim: NoteExecutionClaim, result: NoteVerificationExecution): Promise<void> {
+  finish(claim: NoteExecutionClaim, result: T): Promise<void> {
     return this.write(claim, async (tx, saved) => {
-      const checked = decode(noteExecutionResultSchema, result)
+      const checked = decode(this.resultSchema, result)
       checkedAccounting(claim, checked.accounting)
       if (
         saved.pendingAttempt !== null ||
@@ -212,7 +233,12 @@ export class NoteVerificationExecutionRepository {
   ): Promise<void> {
     await this.database.$transaction(async (tx) => {
       const run = await lockRun(tx, claim.runId)
-      if (!run || !isActive(run.status) || run.version !== claim.runVersion)
+      if (
+        !run ||
+        run.kind !== this.kind ||
+        !isActive(run.status) ||
+        run.version !== claim.runVersion
+      )
         throw new NoteVerificationPersistenceError('RUN_NOT_EXECUTABLE')
       const saved = await tx.noteVerificationExecution.findUnique({ where: { runId: claim.runId } })
       if (
@@ -224,6 +250,13 @@ export class NoteVerificationExecutionRepository {
         throw new NoteVerificationPersistenceError('EXECUTION_CHECKPOINT_CONFLICT')
       await operation(tx, saved)
     })
+  }
+}
+
+// 保留 R09 调用入口；R10 回答共用同一张按 Run 隔离的账本表及写入协议。
+export class NoteVerificationExecutionRepository extends VerificationExecutionRepository<NoteVerificationExecution> {
+  constructor(database: DatabaseClient, clock = () => new Date()) {
+    super(database, 'NOTE_VERIFICATION', noteExecutionResultSchema, clock)
   }
 }
 
@@ -240,7 +273,7 @@ function isActive(status: string) {
   return status === 'QUEUED' || status === 'RUNNING'
 }
 function checkedAccounting(claim: NoteExecutionClaim, value: NoteVerificationAccounting) {
-  const checked = decode(accountingSchema, value)
+  const checked = decode(verificationAccountingSchema, value)
   if (
     checked.attempts.some(
       (attempt, index) => attempt.runId !== claim.runId || attempt.attempt !== index + 1,

@@ -1,6 +1,8 @@
 import {
   LangChainPlanGenerator,
   LangChainNoteVerifier,
+  LangChainFollowUpGenerator,
+  LangChainAnswerVerifier,
   type PlanGenerationPort,
 } from '@knowledgeops/agent-core'
 import { Module, type Provider } from '@nestjs/common'
@@ -20,8 +22,14 @@ import { PlanGenerationJobProcessor } from './plan-generation/plan-generation-jo
 import { PlanGenerationRunRepository } from './plan-generation/plan-generation-run.repository.js'
 import { WorkerRuntimeService } from './worker-runtime.service.js'
 import { NoteVerificationRunRepository } from './verification/note-verification-run.repository.js'
-import { NoteVerificationExecutionRepository } from './verification/note-verification-execution.repository.js'
+import {
+  NoteVerificationExecutionRepository,
+  VerificationExecutionRepository,
+} from './verification/note-verification-execution.repository.js'
 import { NoteVerificationJobProcessor } from './verification/note-verification-job-processor.js'
+import { AnswerVerificationRunRepository } from './verification/answer-verification-run.repository.js'
+import { AnswerVerificationJobProcessor } from './verification/answer-verification-job-processor.js'
+import { answerExecutionResultSchema } from './verification/execute-persisted-answer-verification.js'
 
 export const PLAN_GENERATION_PORT = Symbol('PLAN_GENERATION_PORT')
 
@@ -90,6 +98,40 @@ const noteProcessorProvider: Provider<NoteVerificationJobProcessor> = {
         ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
         ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
       }),
+      new LangChainFollowUpGenerator({
+        structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
+        ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
+        ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
+      }),
+    ),
+}
+
+const answerRunRepositoryProvider: Provider<AnswerVerificationRunRepository> = {
+  provide: AnswerVerificationRunRepository,
+  inject: [DatabaseService, WORKER_ENVIRONMENT],
+  useFactory: (database: DatabaseService, environment: WorkerEnvironment) =>
+    new AnswerVerificationRunRepository(database.client, environment),
+}
+const answerProcessorProvider: Provider<AnswerVerificationJobProcessor> = {
+  provide: AnswerVerificationJobProcessor,
+  inject: [DatabaseService, WORKER_ENVIRONMENT, AnswerVerificationRunRepository],
+  useFactory: (
+    database: DatabaseService,
+    environment: WorkerEnvironment,
+    runs: AnswerVerificationRunRepository,
+  ) =>
+    new AnswerVerificationJobProcessor(
+      runs,
+      new VerificationExecutionRepository(
+        database.client,
+        'ANSWER_VERIFICATION',
+        answerExecutionResultSchema,
+      ),
+      new LangChainAnswerVerifier({
+        structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
+        ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
+        ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
+      }),
     ),
 }
 
@@ -103,6 +145,8 @@ const noteProcessorProvider: Provider<NoteVerificationJobProcessor> = {
     gitHubEvidenceProcessorProvider,
     noteRunRepositoryProvider,
     noteProcessorProvider,
+    answerRunRepositoryProvider,
+    answerProcessorProvider,
     WorkerRuntimeService,
   ],
 })

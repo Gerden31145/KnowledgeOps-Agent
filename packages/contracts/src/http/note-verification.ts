@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { agentRunStateSchema } from '../domain/agent-run-state.js'
-import { criterionResultSchema } from '../domain/note-verification.js'
+import { criterionResultSchema, noteCitationSchema } from '../domain/note-verification.js'
+import { followUpGenerationStateSchema } from '../domain/follow-up-question.js'
 import { entityIdSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const noteVerificationReportBodySchema = z
@@ -16,8 +17,10 @@ export const noteVerificationReportBodySchema = z
           .strict(),
       )
       .max(20),
-    // 追问尚待 R10，不能把这些标准伪装为已通过。
+    // 生成题目不代表回答通过，FOLLOW_UP_ANSWER 仍须保持待验收。
     pendingCriterionIds: z.array(entityIdSchema).max(20),
+    // 兼容 R09 的历史报告，读取时不补发模型请求。
+    followUp: followUpGenerationStateSchema.nullable().default(null),
     accounting: z
       .object({
         knownTotalTokens: z.number().int().nonnegative(),
@@ -46,6 +49,16 @@ export const noteVerificationRunResponseSchema = z
     startedAt: isoDateTimeSchema.nullable(),
     finishedAt: isoDateTimeSchema.nullable(),
     errorCode: z.string().max(64).nullable(),
+    followUpQuestion: z
+      .object({
+        id: entityIdSchema,
+        criterionId: entityIdSchema,
+        question: z.string().min(1).max(1_000),
+        citations: z.array(noteCitationSchema).min(1).max(3),
+      })
+      .strict()
+      .nullable()
+      .default(null),
     report: z
       .object({
         id: entityIdSchema,

@@ -6,6 +6,8 @@ import {
   type ClassifiedOutboxDispatchFailure,
 } from './outbox-dispatch-error.js'
 import {
+  parseAnswerVerificationOutboxEvent,
+  type AnswerVerificationOutboxMessage,
   parseNoteVerificationOutboxEvent,
   type NoteVerificationOutboxMessage,
   parseGitHubPushOutboxEvent,
@@ -26,6 +28,7 @@ export interface OutboxPublisher {
   publishGitHubPush?(message: GitHubPushOutboxMessage): Promise<{ jobId: string }>
   publishGitHubEvidenceRetry?(message: GitHubEvidenceRetryOutboxMessage): Promise<{ jobId: string }>
   publishNoteVerification?(message: NoteVerificationOutboxMessage): Promise<{ jobId: string }>
+  publishAnswerVerification?(message: AnswerVerificationOutboxMessage): Promise<{ jobId: string }>
 }
 
 export type OutboxDispatchResult =
@@ -111,6 +114,7 @@ export class OutboxDispatcher {
                 ${this.publisher.publishGitHubPush ? Prisma.sql`OR "type" = 'GITHUB_PUSH_RECEIVED'` : Prisma.empty}
                 ${this.publisher.publishGitHubEvidenceRetry ? Prisma.sql`OR "type" = 'GITHUB_EVIDENCE_RETRY_REQUESTED'` : Prisma.empty}
                 ${this.publisher.publishNoteVerification ? Prisma.sql`OR "type" = 'NOTE_VERIFICATION_REQUESTED'` : Prisma.empty}
+                ${this.publisher.publishAnswerVerification ? Prisma.sql`OR "type" = 'ANSWER_VERIFICATION_REQUESTED'` : Prisma.empty}
               )
               AND "dead_lettered_at" IS NULL
               AND "available_at" <= ${now}
@@ -129,6 +133,13 @@ export class OutboxDispatcher {
 
         try {
           if (
+            event.type === 'ANSWER_VERIFICATION_REQUESTED' &&
+            this.publisher.publishAnswerVerification
+          ) {
+            published = await this.publisher.publishAnswerVerification(
+              parseAnswerVerificationOutboxEvent(event),
+            )
+          } else if (
             event.type === 'NOTE_VERIFICATION_REQUESTED' &&
             this.publisher.publishNoteVerification
           ) {

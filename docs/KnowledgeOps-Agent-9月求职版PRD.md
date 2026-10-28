@@ -422,6 +422,8 @@ interface CriterionResult {
 
 引用必须能够在对应 Commit 快照中重新定位。引用失效或无法定位时，该条语义结论不得作为通过任务的唯一依据。
 
+回答验收另保存 `answerCitations`，以不可覆盖的 `answerSubmissionId`、起止行号和原文定位用户答案，不为回答伪造 GitHub 路径或 Commit；笔记引用仍遵循上述规则。2026-10-28 单次回答验收入口已实现两类引用的分别核对：通过/失败判断均要求两类非空引用，证据不足可如实缺少对应引文；候选中任何伪造或越界引用均拒绝。同日回答消费与报告保存接入，落库前再次核对引用和来源；当前验证使用真实数据库/队列配模拟模型，不代表真实模型语义判断已被证明正确。
+
 ### 10.4 任务通过规则
 
 - 所有适用的必要确定性标准均为 `PASSED`；唯一的模式例外是 15.5 单点快照重新同步中的 `FILE_CHANGED`。
@@ -439,6 +441,10 @@ interface CriterionResult {
 9 月版本使用受控、可预测的工作流，不实现无限循环的开放式 Agent。
 
 用户等待和 Agent 运行必须分离，不允许 Worker 在等待用户回答期间保持活动。一次笔记提交创建 `NOTE_VERIFICATION` 运行；用户提交追问答案后，再创建独立的 `ANSWER_VERIFICATION` 运行。
+
+2026-10-27 回答受理接入：答案以 `AnswerSubmission` 引用原 `FollowUpQuestion`，沿报告与笔记 Run 追溯固定笔记 Submission；不伪造 GitHub 提交字段。API 根据登录身份、原题来源、最新笔记、任务版本和运行状态确认资格，原子保存答案、Task 新版本、独立回答 Run 和 Outbox 后返回 202。同题同 requestId 且内容/期望版本一致时复用原受理凭据；修改内容后提交使用新请求编号，并要求当前没有活动运行。较新笔记生效后旧题不可新建回答运行，历史受理凭据的重放不产生新执行。本小段只完成受理与所属用户查询；消费者/模型验收尚未接入，回答 Outbox 保留待处理，202 不代表回答已通过。
+
+2026-10-28 消费接入：回答 Outbox 经 BullMQ 交给独立 Processor；领取与最终保存均复查原题、最新笔记、绑定及任务版本。回答 Run 复用执行账本机制，独立冻结模型/价格/预算；已有完整结果可恢复落库而不重复调用，未确认的执行不重新领取额度。报告与 Run 终态原子保存，所属用户可经答案查询接口读取报告与运行状态。合法的不通过判断仍是执行成功，Task 汇总和解锁留给 R11；本次未验证真实回答模型效果或部署 VPS。
 
 笔记验收运行由以下显式步骤组成：
 
@@ -727,8 +733,8 @@ knowledgeops-agent/
 | `Task` | Markdown 任务、依赖、状态和目标路径 |
 | `AcceptanceCriterion` | 验收标准、必要性和执行类型 |
 | `WebhookDelivery` | Delivery 幂等与处理状态 |
-| `Submission` | 一次 GitHub 笔记提交或追问回答提交 |
-| `Evidence` | Diff、文件快照、回答和确定性检查结果 |
+| `Submission` / `AnswerSubmission` | 分别保存一次 GitHub 笔记提交与一次绑定原追问的回答提交 |
+| `Evidence` | 笔记 Diff 与文件快照；回答正文保存在 AnswerSubmission，检查结果进入报告 |
 | `FollowUpQuestion` | 与笔记 Submission 和验收报告绑定的追问及 Rubric |
 | `AgentRun` | 一次 `NOTE_VERIFICATION` 或 `ANSWER_VERIFICATION` 独立执行尝试 |
 | `AgentStep` | 工作流步骤及其输入输出摘要 |

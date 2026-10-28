@@ -1,15 +1,19 @@
 import { createHash } from 'node:crypto'
-import type { NoteVerificationOptions, NoteVerificationPort } from '@knowledgeops/agent-core'
+import type {
+  NoteVerificationOptions,
+  NoteVerificationPort,
+  FollowUpGenerationPort,
+} from '@knowledgeops/agent-core'
 import {
   executeNoteVerification,
   type NoteVerificationBudget,
   type NoteVerificationExecution,
+  type NoteVerificationInput,
 } from './execute-note-verification.js'
 import {
   NoteVerificationExecutionRepository,
   type NoteExecutionClaimResult,
 } from './note-verification-execution.repository.js'
-import type { verifyNoteSemantics } from './verify-note-semantics.js'
 
 export type PersistedNoteVerificationResult =
   | { status: 'EXECUTED' | 'REPLAYED'; result: NoteVerificationExecution }
@@ -19,9 +23,10 @@ export type PersistedNoteVerificationResult =
 export async function executePersistedNoteVerification(
   repository: NoteVerificationExecutionRepository,
   port: NoteVerificationPort,
-  input: Parameters<typeof verifyNoteSemantics>[1],
+  input: NoteVerificationInput,
   options: Pick<NoteVerificationOptions, 'signal' | 'maxOutputTokens'>,
   budget: NoteVerificationBudget,
+  followUpPort?: FollowUpGenerationPort,
 ): Promise<PersistedNoteVerificationResult> {
   const frozen = structuredClone(input)
   const fingerprint = noteExecutionFingerprint(frozen)
@@ -48,12 +53,13 @@ export async function executePersistedNoteVerification(
       reserve: (attempt, accounting) => repository.reserve(claimed.claim, attempt, accounting),
       settle: (attempt, accounting) => repository.settle(claimed.claim, attempt, accounting),
     },
+    followUpPort,
   )
   await repository.finish(claimed.claim, result)
   return { status: 'EXECUTED', result }
 }
 
-export function noteExecutionFingerprint(input: Parameters<typeof verifyNoteSemantics>[1]): string {
+export function noteExecutionFingerprint(input: NoteVerificationInput): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -62,6 +68,8 @@ export function noteExecutionFingerprint(input: Parameters<typeof verifyNoteSema
         model: input.model,
         criteria: input.criteria,
         note: { ...input.note.source, lines: input.note.lines },
+        // 旧 R09 输入不加字段，保持历史指纹；新运行还固定出题配置和资格材料。
+        ...(input.followUp ? { followUp: input.followUp } : {}),
       }),
     )
     .digest('hex')

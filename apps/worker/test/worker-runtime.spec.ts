@@ -13,6 +13,26 @@ import { WorkerRuntimeService } from '../src/worker-runtime.service.js'
 import { NoteVerificationJobProcessor } from '../src/verification/note-verification-job-processor.js'
 import { NoteVerificationRunRepository } from '../src/verification/note-verification-run.repository.js'
 
+import { AnswerVerificationJobProcessor } from '../src/verification/answer-verification-job-processor.js'
+import { AnswerVerificationRunRepository } from '../src/verification/answer-verification-run.repository.js'
+
+const answerQueue = vi.hoisted(() => ({
+  constructed: vi.fn(),
+  start: vi.fn(),
+  close: vi.fn().mockResolvedValue(undefined),
+  isFailed: vi.fn().mockResolvedValue(false),
+}))
+vi.mock('../src/queue/bullmq-answer-verification-queue.js', () => ({
+  BullMqAnswerVerificationQueue: class {
+    constructor(options: unknown) {
+      answerQueue.constructed(options)
+    }
+    start = answerQueue.start
+    close = answerQueue.close
+    isFailed = answerQueue.isFailed
+  },
+}))
+
 const queue = vi.hoisted(() => ({
   constructed: vi.fn(),
   start: vi.fn(),
@@ -83,6 +103,7 @@ describe('Worker runtime dependency injection', () => {
     const closeDatabase = vi.spyOn(DatabaseService.prototype, 'close')
     const reconcile = vi.spyOn(GitHubEvidenceReconciler.prototype, 'reconcile').mockResolvedValue(0)
     vi.spyOn(NoteVerificationRunRepository.prototype, 'reconcile').mockResolvedValue(0)
+    vi.spyOn(AnswerVerificationRunRepository.prototype, 'reconcile').mockResolvedValue(0)
     let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined
 
     try {
@@ -100,6 +121,7 @@ describe('Worker runtime dependency injection', () => {
       )
       expect(evidenceQueue.start).toHaveBeenCalledOnce()
       expect(noteQueue.start).not.toHaveBeenCalled()
+      expect(answerQueue.start).not.toHaveBeenCalled()
       expect(sweep).toHaveBeenCalledWith(expect.any(Number), expect.any(Date))
       expect(dispatch).toHaveBeenCalledWith(expect.any(Number))
       expect(reconcile).toHaveBeenCalledWith(expect.any(Number))
@@ -129,6 +151,8 @@ describe('Worker runtime dependency injection', () => {
       {} as GitHubEvidenceJobProcessor,
       {} as NoteVerificationJobProcessor,
       {} as NoteVerificationRunRepository,
+      {} as AnswerVerificationJobProcessor,
+      {} as AnswerVerificationRunRepository,
     )
     await expect(runtime.onApplicationBootstrap()).rejects.toThrow('fixture-start-failure')
     expect(queue.close).toHaveBeenCalledOnce()
@@ -149,6 +173,8 @@ describe('Worker runtime dependency injection', () => {
       new Error('fixture-unavailable'),
     )
     const noteProcessor = {} as NoteVerificationJobProcessor
+    const answerProcessor = {} as AnswerVerificationJobProcessor
+    const reconcileAnswer = vi.fn().mockResolvedValue(0)
     const runtime = new WorkerRuntimeService(
       readWorkerEnvironment({
         OPENAI_API_KEY: 'fixture',
@@ -166,6 +192,8 @@ describe('Worker runtime dependency injection', () => {
       {} as GitHubEvidenceJobProcessor,
       noteProcessor,
       { reconcile } as unknown as NoteVerificationRunRepository,
+      answerProcessor,
+      { reconcile: reconcileAnswer } as unknown as AnswerVerificationRunRepository,
     )
     try {
       await runtime.onApplicationBootstrap()
@@ -173,12 +201,18 @@ describe('Worker runtime dependency injection', () => {
         expect.objectContaining({ processor: noteProcessor }),
       )
       expect(noteQueue.start).toHaveBeenCalledOnce()
+      expect(answerQueue.constructed).toHaveBeenCalledWith(
+        expect.objectContaining({ processor: answerProcessor }),
+      )
+      expect(answerQueue.start).toHaveBeenCalledOnce()
+      expect(reconcileAnswer).toHaveBeenCalledWith(expect.any(Number), expect.any(Function))
       expect(reconcile).toHaveBeenCalledWith(expect.any(Number), expect.any(Function))
     } finally {
       await runtime.onApplicationShutdown()
       vi.restoreAllMocks()
     }
     expect(noteQueue.close).toHaveBeenCalledOnce()
+    expect(answerQueue.close).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
   })
 })

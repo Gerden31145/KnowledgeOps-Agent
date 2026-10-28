@@ -1,4 +1,7 @@
-import { noteVerificationRunResponseSchema } from '@knowledgeops/contracts'
+import {
+  noteVerificationRunResponseSchema,
+  followUpQuestionDraftSchema,
+} from '@knowledgeops/contracts'
 import type { DatabaseClient } from '@knowledgeops/database'
 import { NotFoundException } from '@nestjs/common'
 
@@ -12,10 +15,12 @@ export class NoteVerificationQueryService {
         kind: 'NOTE_VERIFICATION',
         task: { stage: { plan: { goal: { userId } } } },
       },
-      include: { report: true },
+      include: { report: { include: { followUpQuestion: true } } },
     })
     if (!run)
       throw new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: '验收运行不存在。' })
+    const savedQuestion = run.report?.followUpQuestion
+    const question = savedQuestion ? followUpQuestionDraftSchema.parse(savedQuestion.body) : null
     // 仅返回所属用户的业务快照；不暴露模型凭据、内部配置或完整账本。
     return noteVerificationRunResponseSchema.parse({
       runId: run.id,
@@ -27,6 +32,15 @@ export class NoteVerificationQueryService {
       startedAt: run.startedAt?.toISOString() ?? null,
       finishedAt: run.finishedAt?.toISOString() ?? null,
       errorCode: run.errorCode,
+      followUpQuestion:
+        savedQuestion && question
+          ? {
+              id: savedQuestion.id,
+              criterionId: question.criterionId,
+              question: question.question,
+              citations: question.citations,
+            }
+          : null,
       report: run.report
         ? {
             id: run.report.id,

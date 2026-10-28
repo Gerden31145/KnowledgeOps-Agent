@@ -917,6 +917,99 @@ pnpm verify:r09:live
 
 10/27 AI 已运行一次：Run/报告成功，模型调用 1 次，输入 973、输出 1248、共 2221 Token，估算 ¥0.042728，无记账警告。同 Run 再次处理新增调用 0、返回同报告 ID。语义引用为原文第 4–5、7 行；三个已有检查均通过，一个追问标准待处理，Task 仍 VERIFYING。数据库夹具已清理，后续通过本地 JSON 观察该报告，无需重复付费。此结果验证合成证据经真实队列、模型和数据库生成报告，不代表本轮验证了浏览器/GitHub Push 全流程或已发布至 VPS。
 
+### 5.27 R10 单次追问生成与校验（消费接入见 5.28）
+
+在根目录运行，不需要 WSL、数据库、Redis 或模型凭据：
+
+```powershell
+pnpm exec vitest run apps/worker/test/generate-follow-up-question.spec.ts
+```
+
+测试用合成固定正文和模拟模型响应，观察题目/评分要点/来源一同返回、伪造引用被拒绝且保留用量，以及取消后迟到结果不能成功。适配器协议测试为 packages/agent-core/test/langchain-follow-up-generator.spec.ts，使用真实 LangChain SDK 与模拟 fetch；没有付费请求。
+
+首读 Worker 的 generate-follow-up-question.ts 和 agent-core 的 langchain-follow-up-generator.ts；前者调用模型后继续核验引用，后者组装受约束的单次生成请求，复用现有 SDK 连接和安全错误。运行前需有共享包构建产物；代码变更后可执行 pnpm --filter @knowledgeops/agent-core build。
+
+此单次调用小段没有新的服务启动或环境变量配置步骤。同 Run 预算/账本与问题保存见 5.28，回答受理与消费见 5.29–5.31；Task 状态汇总仍待 R11。
+
+### 5.28 R10 同 Run 共享预算与追问原子保存
+
+本段复用 R09 消费者和集成套件，需要本地 PostgreSQL/Redis；模型只返回合成结果，不产生费用。10/27 已在本机应用增量迁移 `20261027170000_follow_up_question`、生成客户端并构建共享包，无需本机重复迁移。其他环境升级代码后先执行 `pnpm db:migrate:deploy` 和 `pnpm build:packages`，再重启 API/Worker；本轮没有部署 VPS。
+
+```powershell
+pnpm test:integration:r09 --testNamePattern "R10 shared"
+```
+
+预期 9 项通过：一个 Run 中笔记判断与出题合计两次调用；查询返回一道题及固定提交引用，隐藏评分要点；追问写入失败时报告/终态一起回滚，重试不再调用模型；出题期间解绑、版本变化或取消不能发布；R08 必需章节失败不出题、合法全文快照免检允许继续；语义修复耗尽次数仍保留笔记报告；已冻结的 R09 配置不自动追加新步骤。完整 `pnpm test:integration:r09` 当前 34 项，包含旧账本/消费者和未装配回答发布器时的事件保留回归。
+
+按顺序只读两个入口：
+
+1. `apps/worker/src/verification/execute-note-verification.ts`：笔记结果决定是否出题，第二步使用剩余预算；两个步骤都经同一 journal 登记与结算。
+2. `apps/worker/src/verification/note-verification-run.repository.ts` 的 `finalize`：核对固定上下文，将报告、唯一追问和 Run 终态一起提交。`prepare/material` 只需知道负责预留报告 ID、准备资格与材料。
+
+其他改动是既有链路接线：持久化入口保存完整结果/指纹，Processor 和 Nest 工厂传入出题端口，查询接口映射所属用户可见字段，`FollowUpQuestion.reportId` 唯一约束防止一份报告保存多道题。已有完成账本可复用，未保存响应的进程崩溃仍按原未知执行/超时策略处理。
+
+`NOTE_VERIFICATION_MODEL_JSON` 仍是正式消费开关；没有新增环境变量，也没有自动启用本机/VPS 付费消费。启用新版消费者后，新 Run 的笔记判断和出题共享原最多两次调用、Token/费用及截止时间，修复也占这两次。额度不足时在报告 `followUp` 记录 FAILED，笔记不通过时记录 SKIPPED，成功保存题目为 READY；这些是出题状态，不是回答或 Task 通过状态。回答提交/独立验收见 5.29–5.31，Task 汇总仍待 R11。
+
+### 5.29 R10 回答 API 与独立验收 Run 受理
+
+本段使用真实 PostgreSQL、会话与本地随机端口 HTTP，原题/报告为合成夹具，不调用 GitHub、Redis 或模型，不启动全局 Worker。根目录观察命令：
+
+```powershell
+pnpm test:integration:r10
+```
+
+该命令现包括受理与消费共 35 项；只观察本节可运行 `pnpm test:integration:r10 apps/api/test/follow-up-answer.integration.ts`，预期 16 项。重点观察首次提交返回 202 并生成独立 Run、同一 requestId 并发提交仍只有一份答案/Run/Outbox，以及 Outbox 写入失败时答案/Run/Task 版本全部回滚。还覆盖登录和 Origin、双用户隔离、输入长度、原绑定/版本/计划变化、伪造来源、活动 Run、较新笔记使旧题失效，以及失败后修改答案产生新记录。
+
+本机已应用 `20261027210000_answer_submission` 并生成客户端。其他环境先 `pnpm db:migrate:deploy`、`pnpm build:packages`，再构建并重启 API/Worker；本轮没有部署 VPS。
+
+接口约定：
+
+- `POST /follow-up-questions/:questionId/answers`：需要登录 Cookie 与正确 Origin；请求体 `{ requestId, expectedTaskVersion, answer }`。requestId 是同一次提交的 UUID，网络重试复用；答案去除首尾空白后限制 1–8000 字符。返回 202 的 `{ status: 'ACCEPTED', answerSubmissionId, runId, taskId, taskVersion }` 是受理凭据，重放仍返回原凭据，不保证 Run 仍在排队。
+- `GET /answer-submissions/:answerSubmissionId`：仅所属用户能读取答案、初始 Run 状态和已完成的回答报告；刷新无需重交，不返回原题 rubric。不存在与越权统一 404，旧题/任务版本/同请求不同内容冲突为 409。
+
+首读 `follow-up-answer.controller.ts` 的提交入口，再读 `follow-up-answer.service.ts` 的 `submit`：按 User → Task 锁定，先查请求幂等，再核对原题及最新笔记/运行，最后事务保存 AnswerSubmission、Task 新版本、ANSWER_VERIFICATION Run 与 Outbox。`get` 只做所属用户查询。该 API 复用全局身份守卫，不信任请求体中的用户身份或评分结论。
+
+Task 汇总尚未由 R11 接入：受理支持 NEEDS_EVIDENCE，也支持笔记 Run 已完成、版本匹配且无活动 Run 时遗留的 VERIFYING；并非允许正在验收时随意提交。消费者在领取和发布前再次复核原题/笔记和版本，见 5.31。本节受理测试不装配消费者，Outbox 保持待处理、Run 为 QUEUED；不能把受理成功当成模型已经验收或浏览器表单已上线。
+
+原消费者回归仍用 `pnpm test:integration:r09`，现共 34 项，其中一项专门确认没有回答发布器时新 Outbox 类型不会被计划/笔记 Dispatcher 误消费。测试只清理各自随机数据，无需手动建立真实任务或重复付费出题。
+
+### 5.30 R10 单次回答验收与两类引用
+
+本段仅用合成原题、固定笔记、回答和模拟模型响应，无需启动 PostgreSQL/Redis，不发生真实模型费用。根目录观察命令：
+
+```powershell
+pnpm exec vitest run apps/worker/test/verify-follow-up-answer.spec.ts --reporter verbose
+```
+
+预期 24 项通过。重点看三类现象：合法候选返回带原题/答案 ID 的单项判断；回答错误或不充分时返回 FAILED/INSUFFICIENT_EVIDENCE 与建议；模型引用了答案里不存在的文字时抛 INVALID_ANSWER_CITATION，并保留可得 Token 用量。这里是预设模型输出的程序行为验证，不是模型准确率评测。
+
+首读 `apps/worker/src/verification/verify-follow-up-answer.ts`：输入沿 AnswerSubmission → FollowUpQuestion → 原笔记准备，函数复制材料、检查对应关系、单次调用端口，再逐行核对笔记/回答引用。返回 `{ result, usage }`，不写数据库。笔记 `citations` 绑定仓库/Commit/路径/正文哈希；`answerCitations` 绑定已保存的答案 ID，行号从 1 开始，引用按 LF 拼接并保留空行。通过/失败必须有两类引用；证据不足允许如实缺少引用，不能为填字段编造文字。Schema 和引用核对不能代替语义正确性评测。
+
+再读 `packages/agent-core/src/answer-verification/langchain-answer-verifier.ts`：使用原题 Rubric 和两份分开的逐行材料生成结构化判断，复用既有 SDK 调用、输出格式、用量和安全错误。适配器观察命令为 `pnpm exec vitest run packages/agent-core/test/langchain-answer-verifier.spec.ts`，预期 12 项；SDK 请求由模拟 fetch 截获。新检出代码需先构建 contracts、再构建 agent-core；本次本地已经构建。
+
+正式回答消费者已按 5.31 接入此入口，外层负责资格/预算/账本及最终报告；单次函数本身不自行重试、不变更 Task，也不新增环境变量。
+
+### 5.31 R10 回答消费者、独立账本与报告保存
+
+主要观察结果：提交回答后，Worker 能读取原题和固定笔记完成回答验收，所属用户可查询报告。需要本地 PostgreSQL/Redis；测试使用随机数据和独立队列，模型响应为合成数据，没有付费调用。根目录执行：
+
+```powershell
+pnpm test:integration:r10
+```
+
+预期 **35 项通过**：16 项回答受理与 19 项消费/恢复检查。新增部分覆盖真实 Outbox → BullMQ → Processor → 账本 → 报告查询、回答不通过仍保存有效报告、重复消费不重复调用、报告写入失败后复用账本，以及调用期间解绑/版本变化/取消/新笔记使旧结果失效。故障注入时出现 `verification_job_failed` WARN 属于预期，最终以用例结果为准。既有笔记链路回归 `pnpm test:integration:r09` 为 34 项。
+
+首读集中在两个入口，约 20 至 30 分钟计入 R10 原预算，无新手写：
+
+1. `apps/worker/src/verification/answer-verification-job-processor.ts`：prepare 领取并准备材料 → 持久化执行 → finalize 发布结果。已完成 Run 直接返回；正在执行的重复 Job 不能冒充完成。
+2. `apps/worker/src/verification/answer-verification-run.repository.ts` 的 prepare/finalize：两端按 User → Task → Run 加锁，确认原题、最新笔记、仓库绑定和任务版本。模型在事务外调用；保存前还核对冻结配置、账本指纹及两类引用，将报告与 Run SUCCEEDED 一起提交。写入失败时事务回滚，后续重试或 reconcile 读取已完成账本，不重新付费调用模型。
+
+其他文件复用已学机制：`execute-persisted-answer-verification.ts` 为独立回答 Run claim/reserve/settle/finish；`verification-budget.ts` 与共享执行仓库统一笔记/出题/回答的预算和持久化规则；数据库沿用历史名 `NoteVerificationExecution`，每条仍只属于一个 Run，不与原笔记合并预算。两个验收队列共用 BullMQ 接线；Dispatcher、Nest 装配和定时 reconcile 接入回答类型。没有新增迁移。
+
+配置继续使用 `NOTE_VERIFICATION_MODEL_JSON` 与 `NOTE_VERIFICATION_*` 限制：同一模型配置启用笔记与回答两个消费者，每个 Run 独立冻结配置和预算，回答至多两次调用，队列重试不新增额度。为空时对应 Outbox 保留待处理。本段没有修改本机 `.env`、发起真实模型请求或发布 VPS；启用后待处理回答可能产生实际模型调用。
+
+`GET /answer-submissions/:id` 现返回答案、Run 的状态/安全错误码/时间，以及 nullable report；报告包含原题来源、回答结果、两类引用与用量摘要，不返回 Rubric。合法的 FAILED/INSUFFICIENT_EVIDENCE 判断同样意味着 Run 执行成功；超时、取消或执行错误才走失败收束。Task 仍暂留 VERIFYING，R11 负责汇总通过/需补充并解锁，R12 再接表单和页面。本段集成通过不代表真实模型效果、浏览器闭环或生产部署已验收。
+
 ## 6. 启动应用
 
 ```powershell

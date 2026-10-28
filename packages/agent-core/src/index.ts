@@ -43,3 +43,25 @@ export {
   LangChainNoteVerifier,
   NoteVerificationModelError,
 } from './note-verification/langchain-note-verifier.js'
+export {
+  followUpQuestionCandidateSchema,
+  followUpGenerationRequestSchema,
+  FOLLOW_UP_PROMPT_VERSION,
+  FOLLOW_UP_OUTPUT_SCHEMA_VERSION,
+  type FollowUpQuestionCandidate,
+  type FollowUpGenerationRequest,
+  type FollowUpGenerationOptions,
+  type FollowUpGenerationPort,
+} from './note-verification/follow-up-question.js'
+export { LangChainFollowUpGenerator } from './note-verification/langchain-follow-up-generator.js'
+export {
+  ANSWER_VERIFICATION_PROMPT_VERSION,
+  ANSWER_VERIFICATION_OUTPUT_SCHEMA_VERSION,
+  answerVerificationCandidateSchema,
+  answerVerificationRequestSchema,
+  type AnswerVerificationCandidate,
+  type AnswerVerificationRequest,
+  type AnswerVerificationOptions,
+  type AnswerVerificationPort,
+} from './answer-verification/answer-verification.js'
+export { LangChainAnswerVerifier } from './answer-verification/langchain-answer-verifier.js'

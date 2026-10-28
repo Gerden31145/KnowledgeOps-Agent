@@ -110,6 +110,28 @@ export {
   type NoteVerificationReportBody,
 } from './http/note-verification.js'
 export {
+  submitFollowUpAnswerInputSchema,
+  followUpAnswerAcceptedResponseSchema,
+  followUpAnswerResponseSchema,
+  answerVerificationReportBodySchema,
+  type SubmitFollowUpAnswerInput,
+  type FollowUpAnswerAcceptedResponse,
+} from './http/follow-up-answer.js'
+export {
+  ANSWER_VERIFICATION_WORKFLOW_VERSION,
+  ANSWER_VERIFICATION_QUEUE_NAME,
+  ANSWER_VERIFICATION_JOB_NAME,
+  buildAnswerVerificationJobId,
+  ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  answerVerificationRequestedEventPayloadSchema,
+  type AnswerVerificationRequestedPayload,
+} from './events/answer-verification.js'
+export {
+  followUpQuestionDraftSchema,
+  followUpGenerationStateSchema,
+  type FollowUpGenerationState,
+} from './domain/follow-up-question.js'
+export {
   ERROR_CODES,
   apiErrorResponseSchema,
   errorCodeSchema,
@@ -202,6 +224,11 @@ export {
   buildGitHubEvidenceRetryKey,
   type GitHubEvidenceRetryPayload,
 } from './events/github-push.js'
+export {
+  answerCitationSchema,
+  answerVerificationResultSchema,
+  type AnswerVerificationResult,
+} from './domain/answer-verification.js'
 export {
   MODEL_CATALOG_ID_PATTERN,
   entityIdSchema,

@@ -22,6 +22,9 @@ import { BullMqGitHubEvidenceQueue } from './queue/bullmq-github-evidence-queue.
 import { BullMqNoteVerificationQueue } from './queue/bullmq-note-verification-queue.js'
 import { NoteVerificationJobProcessor } from './verification/note-verification-job-processor.js'
 import { NoteVerificationRunRepository } from './verification/note-verification-run.repository.js'
+import { BullMqAnswerVerificationQueue } from './queue/bullmq-answer-verification-queue.js'
+import { AnswerVerificationJobProcessor } from './verification/answer-verification-job-processor.js'
+import { AnswerVerificationRunRepository } from './verification/answer-verification-run.repository.js'
 
 @Injectable()
 export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -30,6 +33,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
   private queue: BullMqPlanGenerationQueue | undefined
   private evidenceQueue: BullMqGitHubEvidenceQueue | undefined
   private noteQueue: BullMqNoteVerificationQueue | undefined
+  private answerQueue: BullMqAnswerVerificationQueue | undefined
   private timeoutSweepLoop: PlanGenerationTimeoutSweepLoop | undefined
 
   constructor(
@@ -44,6 +48,10 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
     @Inject(NoteVerificationJobProcessor)
     private readonly noteProcessor: NoteVerificationJobProcessor,
     @Inject(NoteVerificationRunRepository) private readonly noteRuns: NoteVerificationRunRepository,
+    @Inject(AnswerVerificationJobProcessor)
+    private readonly answerProcessor: AnswerVerificationJobProcessor,
+    @Inject(AnswerVerificationRunRepository)
+    private readonly answerRuns: AnswerVerificationRunRepository,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -79,6 +87,16 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
           redisUrl: this.environment.REDIS_URL,
         })
         this.noteQueue.start()
+        this.answerQueue = new BullMqAnswerVerificationQueue({
+          concurrency: this.environment.WORKER_CONCURRENCY,
+          jobOptions: {
+            attempts: this.environment.BULLMQ_JOB_ATTEMPTS,
+            backoffDelayMs: this.environment.BULLMQ_JOB_BACKOFF_MS,
+          },
+          processor: this.answerProcessor,
+          redisUrl: this.environment.REDIS_URL,
+        })
+        this.answerQueue.start()
       }
 
       this.timeoutSweepLoop = new PlanGenerationTimeoutSweepLoop(
@@ -91,6 +109,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
       const planQueue = this.queue
       const evidenceQueue = this.evidenceQueue
       const noteQueue = this.noteQueue
+      const answerQueue = this.answerQueue
       const dispatcher = new OutboxDispatcher(
         this.database.client,
         {
@@ -102,6 +121,13 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
                 publishNoteVerification: (
                   message: import('./outbox/outbox-event.js').NoteVerificationOutboxMessage,
                 ) => noteQueue.publish(message),
+              }
+            : {}),
+          ...(answerQueue
+            ? {
+                publishAnswerVerification: (
+                  message: import('./outbox/outbox-event.js').AnswerVerificationOutboxMessage,
+                ) => answerQueue.publish(message),
               }
             : {}),
         },
@@ -129,6 +155,14 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
             } catch {
               this.logger.warn({ event: 'note_verification_reconcile_unavailable' })
             }
+            try {
+              await this.answerRuns.reconcile(
+                this.environment.OUTBOX_BATCH_SIZE,
+                answerQueue ? (message) => answerQueue.isFailed(message) : undefined,
+              )
+            } catch {
+              this.logger.warn({ event: 'answer_verification_reconcile_unavailable' })
+            }
           }
         },
       )
@@ -153,6 +187,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
       this.queue = undefined
       this.evidenceQueue = undefined
       this.noteQueue = undefined
+      this.answerQueue = undefined
       this.timeoutSweepLoop = undefined
       throw error
     }
@@ -171,7 +206,11 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
   private async closeQueues(): Promise<void> {
     try {
       try {
-        await this.noteQueue?.close()
+        try {
+          await this.answerQueue?.close()
+        } finally {
+          await this.noteQueue?.close()
+        }
       } finally {
         await this.evidenceQueue?.close()
       }
