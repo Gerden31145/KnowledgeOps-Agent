@@ -1233,6 +1233,92 @@ pnpm exec vitest run apps/worker/test/r11-evaluation.spec.ts --reporter verbose
 
 本段统计单元用例 9 项、Worker 类型及目标 lint/格式通过。10/29 用户已确认结果观察与代码导读理解，并正确区分业务规则校验和模型判断的固定评测；AI 补充标准 ID、引用核对及预期标签需复核的边界，本段短复述通过。R11 具备单元收尾条件，DONE 随本次本地提交成功生效；M4 阶段记录/W3 独立收尾，R12 页面未开始。
 
+### 5.39 R12 首段：从任务页查看笔记验收报告
+
+2026-10-29 已获 M5 首次实现授权。本段新增只读报告接入：任务页的笔记运行可点击，URL 的 `runId` 保存所选运行；缺省时显示该任务最新笔记运行。报告显示执行状态、逐项结果/原因/建议、引用摘录及追问。当前提供手动刷新，完整正文/Diff 引用定位、回答表单/回答报告和后续恢复交互仍未完成；不重做 C2。
+
+先观察已有结果，不需重新 Push 或调用模型：
+
+1. 登录本地 `http://127.0.0.1:3000`，从学习计划进入已有任务详情。R11 的首任务已通过，因此不再出现在今日待办列表；应从计划进入。
+2. 在“历次运行”选择一条笔记验收，查看下方报告、引用摘录与追问。回答验收目前仅保留摘要，不作为笔记查询目标。
+3. 点击另一条笔记记录，再刷新浏览器，核对仍选中 URL 中的运行。点击“刷新报告”只重读结果，不重新验收。
+4. 对照运行状态、单项结果和页面顶部 Task 状态：执行完成不等于任务通过；请求失败也不等于 Run FAILED。运行中且无报告时提示稍后刷新，执行失败时显示已结束但无报告，全文快照的 FILE_CHANGED 免检不显示为通过。
+
+首读三个入口，按数据流阅读新增部分：
+
+- `apps/web/app/pages/app/tasks/[taskId].vue`：任务的运行列表与 URL 选择；只把属于当前任务的笔记 runId 传给报告组件。
+- `apps/web/app/composables/use-workspace-queries.ts` 的 `useNoteVerificationRunQuery`：查询键、请求取消、响应身份核对，以及请求状态与数据的分离。
+- `apps/web/app/components/NoteVerificationPanel.vue`：区分加载/读取失败/没有报告，展示服务器已保存的结果；HTTP 失败时隐藏缓存报告，服务端文本使用 Vue 插值展示。
+
+其余为 API 方法、查询键和已有契约的类型导出，不要求逐行阅读。查询取消采用 TanStack Query 的 [AbortSignal 机制](https://tanstack.com/query/latest/docs/framework/vue/guides/query-cancellation)，实际隔离行为由项目用例验证。验证命令不连接数据库、不调用模型：
+
+```powershell
+pnpm exec vitest run apps/web/test/knowledge-ops-api.spec.ts apps/web/test/use-note-verification-run-query.spec.ts --reporter verbose
+```
+
+本段 22 项用例、Contracts 构建、Web 类型及目标 lint/格式检查通过。隔离浏览器合成响应检查成功、等待、执行失败、单项失败、网络/401/404、错误恢复、切换与非法选中、加载/空列表、免检及引用转义；桌面 1440px/手机 390px 无横向溢出，新增触控目标至少 44px，键盘焦点/Enter 展开及文本对比度通过检查。用户已确认页面观察，并在导读后明确“我明白了”；当前进入首段短复述，实际耗时待报告，未标记 R12 DONE。
+
+首段复述已收到：用户正确说明 GET 请求错误不改 Run/Task，AI 纠正 refetch 会清缓存的误解。已有数据可在刷新失败后保留，当前组件通过优先显示错误分支隐藏报告；不宣称物理删除缓存。这里的网络用例模拟请求发出后失败，不等于浏览器已知离线时的暂停状态；后者及联网恢复提示留在既定 R15 断网回归中检查。尚未报告本段耗时，不重复运行已经通过的检查。
+
+用户随后以“ok”确认纠正，首段学习关卡收尾；不将讲解后的理解改记为首次独立答对。下一小段为固定正文/Diff 与引用定位，整个 R12 的回答入口、后续验证和提交仍未完成。
+
+### 5.40 R12 第二段：固定正文、Diff 与引用定位
+
+本段复用 R06 已保存的 `Submission → Evidence`，不访问 GitHub 最新分支，不重新验收。学习目标约 25 至 35 分钟计入 R12 原预算，无新增手写。
+
+先在已登录的本地页面观察原有数据：
+
+1. 打开 `http://127.0.0.1:3000/app/tasks/52c157ed-0add-4396-9ef0-78753c59d8d6?runId=32abdfa9-17ef-4109-a461-c0158d8ccd5c`，或从学习计划进入任务并选择成功的笔记运行。
+2. 展开“查看引用摘录”，点击“定位原文第 … 行”。正文应展开，目标行高亮、滚入视野并获得键盘焦点；追问的“追问依据”也可定位。这里是正文行号，不是 Diff 的屏幕行数。
+3. 核对正文 Commit 与下方 Diff 的 before → after。原有真实记录是 `c25ee0806f21f6a24feb1ffa9256841b0bf2323c`，共 92 行；只读核对 11 条报告/追问引用均匹配。查看旧运行不会读取当前仓库的新正文。
+4. “查看固定正文与 Diff”也能单独展开证据。全文快照明确没有 Diff；没有 Diff 文本不等于没有修改。读取失败时隐藏已缓存正文，但不把 Run 或 Task 改成失败。
+
+首读三个核心入口，其余接线文件按职责说明即可：
+
+- `apps/api/src/verification/note-verification-query.service.ts` 的 `getEvidence`：登录用户的 Run → 原 Submission → 固定 Evidence；核对所属关系、提交来源、内容哈希和行数。历史阅读不要求绑定仍启用，不等于允许解绑后的旧任务继续验收。
+- `apps/web/app/lib/note-evidence.ts`：与 Worker 一致的换行拆分，以及引用的仓库、SHA、路径、哈希、行号、摘录核对；不匹配就不定位。
+- `apps/web/app/components/NoteEvidencePanel.vue`：使用 Query 读取证据，等证据和引用都就绪再切页、高亮、滚动和聚焦。正文每页 100 行；异步定位在失效后不再操作旧页面。
+
+调用位置：`NoteVerificationPanel.vue` 的 `locate` 保存点选引用并展开面板；`useNoteRunEvidenceQuery` 用独立查询键隔离任务和运行、传递 AbortSignal、核对响应身份；Controller 复用登录身份，证据响应为 `private, no-store`。正文与 Diff 按文本转义，不执行 Markdown HTML。
+
+验证命令（合成夹具，不调用模型）：
+
+```powershell
+pnpm exec vitest run apps/web/test/knowledge-ops-api.spec.ts apps/web/test/use-note-verification-run-query.spec.ts apps/web/test/note-evidence.spec.ts --reporter verbose
+pnpm test:integration:r09 apps/worker/test/note-verification-consumer.integration.ts -t "R12 fixed evidence read" --reporter verbose
+```
+
+前端共 42 项通过（含首段回归），新增数据库读取 7 项通过；Contracts/API 构建、Web 类型及目标 lint/格式检查通过。隔离浏览器合成响应验证按需读取、行号/跨页定位、引用不匹配拒绝、全文快照、网络/401/404 隐藏正文、迟到响应隔离、追问定位与 HTML 转义；桌面与 390px 手机无横向溢出，按钮至少 44px，键盘 Enter 定位及 2px 焦点可见。合成 UI 检查与真实只读核对分别记录；用户随后独立反馈“已观察，30分钟”，导读及纠正后复述已收尾。保留其将 stale 与旧读取结果隔离混淆的原答，以及后续职责、分页与 nextTick 讲解，不改记为首次独立完整答对。R12 回答入口及单元提交仍未完成，已观察的本段不用重跑。
+
+### 5.41 R12 第三段：追问回答提交与验收结果
+
+本段复用 R10 的回答受理/读取接口，重点是把一次提交命令保存好，并把受理状态与验收结果分开。无新增手写，观察、导读和复述目标 30 至 40 分钟计入 R12 原预算。
+
+本地服务已更新。登录后打开原已通过任务的笔记报告，在追问下方可看到“已保存的回答”、回答验收状态、结论、建议及引用：
+
+```text
+http://127.0.0.1:3000/app/tasks/52c157ed-0add-4396-9ef0-78753c59d8d6?runId=32abdfa9-17ef-4109-a461-c0158d8ccd5c
+```
+
+该任务已 PASSED，因此展示已保存结果，不提供新回答表单；这不是入口缺失。尚需回答、当前无运行的最新笔记追问下才展示提交表单。刷新报告也能从服务端找回最近 20 次已保存回答；URL 的 answerId 可保留所选回答。这里的列表仅含 ID/时间，正文与报告按需查询。
+
+定向观察命令（模拟 API，不触发模型费用）：
+
+```bash
+pnpm exec vitest run apps/web/test/use-follow-up-answer.spec.ts --reporter verbose
+```
+
+重点看“响应丢失后用原命令重发”和“刷新恢复原命令但不自动发送”：命令包含 requestId、expectedTaskVersion、answer，按用户/任务/追问保存在当前标签页的 sessionStorage。命令未确认时锁定编辑；明确拒绝后先刷新上下文，用户再次提交新回答才生成新 ID。202 表示回答及验收意图已保存，不等于模型执行完成或 Task 通过。
+
+首读两处：
+
+1. `apps/web/app/composables/use-follow-up-answer.ts`：表单草稿 → 校验/保存命令 → POST → 保留凭据或原命令；离开页面后不修改新页面。
+2. `apps/web/app/components/FollowUpAnswerPanel.vue`：提交资格、选择已有回答、手动刷新、分别展示读取错误/运行状态/回答结论；笔记引用交回原证据面板定位。
+
+配套代码：`useFollowUpAnswerQuery` 处理查询键、取消和身份核对；`NoteVerificationQueryService.getRun` 只补原追问下最近 20 个回答入口，提交事务与验收消费者沿用既有实现，无需重读整个后端。
+
+前端相关 69 项及回答 API 集成 18 项通过，构建/类型/目标 lint/格式检查通过。合成浏览器验证提交防重、响应丢失/刷新、409、历史查询、请求错误、转义与切换隔离；桌面和 390px 手机无横向溢出，44px 控件、键盘与焦点检查通过。真实数据仅只读确认已有回答和来源，没有新提交或付费模型调用；未更新 VPS。用户随后确认导读理解，并正确复述从 sessionStorage 恢复原命令、后端查询已有回答/Run 避免重复创建；AI 补充原版本字段、复合键及内容核对，保留原答与补充的区别。用户追问并理解 questionId 的持久化来源及传递链路后，明确“本次耗时15分钟，已观察”，本段学习记录收尾。R12 DONE 随本次本地提交成功生效；固定证据段约 30 分钟，首段未报，不推算精确总时长。持续恢复、取消/关联重试及已知离线暂停仍留 R15，本轮不重跑已通过检查。
+
 ## 6. 启动应用
 
 ```powershell

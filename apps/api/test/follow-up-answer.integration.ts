@@ -4,6 +4,7 @@ import { createDatabaseClient, type DatabaseClient } from '@knowledgeops/databas
 import {
   followUpAnswerAcceptedResponseSchema,
   followUpAnswerResponseSchema,
+  noteVerificationRunResponseSchema,
 } from '@knowledgeops/contracts'
 import { Test } from '@nestjs/testing'
 import type { INestApplication } from '@nestjs/common'
@@ -304,6 +305,37 @@ afterAll(async () => {
 })
 
 describe('R10 authenticated answer intake and atomic outbox', () => {
+  it('R12 restores saved answer links from the original note report with owner-only metadata', async () => {
+    const read = (token = f.token) =>
+      fetch(`${baseUrl}/agent-runs/${f.noteRunId}`, { headers: headers(token) })
+    const before = noteVerificationRunResponseSchema.parse(await (await read()).json())
+    expect(before.followUpQuestion?.answers).toEqual([])
+    const created = await accepted()
+    await database.task.update({ where: { id: f.taskId }, data: { state: 'PASSED', version: 8 } })
+    const visible = noteVerificationRunResponseSchema.parse(await (await read()).json())
+    expect(visible.followUpQuestion?.answers).toEqual([
+      { id: created.answerSubmissionId, createdAt: expect.any(String) },
+    ])
+    expect(JSON.stringify(visible)).not.toContain('rubric')
+    expect(JSON.stringify(visible.followUpQuestion?.answers)).not.toContain('expectedTaskVersion')
+    expect((await read(f.otherToken)).status).toBe(404)
+  })
+  it('R12 bounds saved answer links to the latest twenty in deterministic order', async () => {
+    const ids = Array.from({ length: 22 }, () => randomUUID())
+    await database.answerSubmission.createMany({
+      data: ids.map((id, index) => ({
+        id,
+        questionId: f.questionId,
+        requestId: randomUUID(),
+        expectedTaskVersion: 6,
+        content: '合成历史回答',
+        createdAt: new Date(Date.UTC(2026, 9, 29, 0, 0, index)),
+      })),
+    })
+    const response = await fetch(`${baseUrl}/agent-runs/${f.noteRunId}`, { headers: headers() })
+    const visible = noteVerificationRunResponseSchema.parse(await response.json())
+    expect(visible.followUpQuestion?.answers.map((a) => a.id)).toEqual(ids.slice(2).reverse())
+  })
   it('accepts one answer with an independent Run, permits owner refresh and stores the outbox intent', async () => {
     const input = command()
     const result = await accepted(input)

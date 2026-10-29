@@ -69,6 +69,80 @@ const questionResponse = (request: FollowUpGenerationRequest) => ({
 })
 
 const fixture = () => createNoteVerificationFixture(database, (value) => fixtures.push(value))
+
+describe('R12 fixed evidence read', () => {
+  it('reads the original Submission even after the task path and repository binding change', async () => {
+    const f = await fixture()
+    const queries = new NoteVerificationQueryService(database)
+    const original = await queries.getEvidence(f.runId, f.userId)
+    await database.task.update({
+      where: { id: f.taskId },
+      data: { targetPath: 'notes/new.md', version: { increment: 1 } },
+    })
+    await database.repository.update({ where: { id: f.repositoryId }, data: { enabled: false } })
+    expect(await queries.getEvidence(f.runId, f.userId)).toEqual(original)
+    expect(original).toMatchObject({
+      submissionId: f.submissionId,
+      path: 'notes/event-loop.md',
+      sourceCommitSha: 'b'.repeat(40),
+      lineCount: 3,
+    })
+    expect(original.content).toContain('先清空微任务队列')
+    expect(original.diff).toContain('@@')
+    expect(Object.keys(original)).not.toContain('repository')
+  })
+
+  it('returns the same 404 for another owner, a missing run, and a missing evidence record', async () => {
+    const f = await fixture()
+    const queries = new NoteVerificationQueryService(database)
+    await expect(queries.getEvidence(f.runId, randomUUID())).rejects.toMatchObject({ status: 404 })
+    await expect(queries.getEvidence(randomUUID(), f.userId)).rejects.toMatchObject({ status: 404 })
+    await database.evidence.delete({ where: { submissionId: f.submissionId } })
+    await expect(queries.getEvidence(f.runId, f.userId)).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('reads SNAPSHOT without inventing a Diff', async () => {
+    const f = await fixture()
+    await database.evidence.update({
+      where: { submissionId: f.submissionId },
+      data: { mode: 'SNAPSHOT', change: null, diff: null },
+    })
+    expect(
+      await new NoteVerificationQueryService(database).getEvidence(f.runId, f.userId),
+    ).toMatchObject({ mode: 'SNAPSHOT', diff: null, change: null })
+  })
+
+  it.each([{ sourceCommitSha: 'c'.repeat(40) }, { content: 'tampered' }, { lineCount: 99 }])(
+    'does not publish inconsistent saved metadata %j',
+    async (data) => {
+      const f = await fixture()
+      await database.evidence.update({ where: { submissionId: f.submissionId }, data })
+      await expect(
+        new NoteVerificationQueryService(database).getEvidence(f.runId, f.userId),
+      ).rejects.toMatchObject({ status: 500 })
+    },
+  )
+
+  it('refuses an accidentally cross-linked Submission', async () => {
+    const a = await fixture(),
+      b = await fixture()
+    await database.agentRun.update({ where: { id: b.runId }, data: { submissionId: null } })
+    await database.agentRun.update({
+      where: { id: a.runId },
+      data: { submissionId: b.submissionId },
+    })
+    try {
+      await expect(
+        new NoteVerificationQueryService(database).getEvidence(a.runId, a.userId),
+      ).rejects.toMatchObject({ status: 404 })
+    } finally {
+      await database.agentRun.update({
+        where: { id: a.runId },
+        data: { submissionId: a.submissionId },
+      })
+    }
+  })
+})
 function processor(
   verify: NoteVerificationPort['verify'],
   db: DatabaseClient = database,

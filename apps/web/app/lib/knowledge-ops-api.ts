@@ -37,6 +37,15 @@ import {
   retryRepositoryEvidenceResponseSchema,
   type RetryRepositoryEvidenceInput,
   type RetryRepositoryEvidenceResponse,
+  noteVerificationRunResponseSchema,
+  type NoteVerificationRunResponse,
+  noteRunEvidenceResponseSchema,
+  type NoteRunEvidenceResponse,
+  followUpAnswerAcceptedResponseSchema,
+  followUpAnswerResponseSchema,
+  type FollowUpAnswerAcceptedResponse,
+  type FollowUpAnswerResponse,
+  type SubmitFollowUpAnswerInput,
 } from '@knowledgeops/contracts'
 import { z, type ZodType } from 'zod'
 
@@ -92,11 +101,35 @@ export interface KnowledgeOpsApi {
   confirmPlan(planId: string): Promise<ConfirmPlanResponse>
   getTodayTasks(signal?: AbortSignal): Promise<TodayTasksResponse>
   getTask(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse>
+  getNoteVerificationRun(runId: string, signal?: AbortSignal): Promise<NoteVerificationRunResponse>
+  getNoteRunEvidence(runId: string, signal?: AbortSignal): Promise<NoteRunEvidenceResponse>
+  submitFollowUpAnswer(
+    questionId: string,
+    input: SubmitFollowUpAnswerInput,
+  ): Promise<FollowUpAnswerAcceptedResponse>
+  getFollowUpAnswer(
+    answerSubmissionId: string,
+    signal?: AbortSignal,
+  ): Promise<FollowUpAnswerResponse>
   startTask(taskId: string, input: StartTaskInput): Promise<StartTaskResponse>
 }
 
 export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   return {
+    submitFollowUpAnswer: (questionId, input) =>
+      request(
+        baseUrl,
+        `/follow-up-questions/${encodeURIComponent(questionId)}/answers`,
+        followUpAnswerAcceptedResponseSchema,
+        { ...jsonRequest('POST', input), signal: AbortSignal.timeout(30_000) },
+      ),
+    getFollowUpAnswer: (id, signal) =>
+      request(
+        baseUrl,
+        `/answer-submissions/${encodeURIComponent(id)}`,
+        followUpAnswerResponseSchema,
+        { signal: repositorySignal(signal) },
+      ),
     resyncRepositoryEvidence: (repositoryId, deliveryId, input) =>
       request(
         baseUrl,
@@ -186,6 +219,24 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
       request(baseUrl, `/tasks/${encodeURIComponent(taskId)}`, taskDetailResponseSchema, {
         signal,
       }),
+    getNoteVerificationRun: (runId, signal) => {
+      const timeout = AbortSignal.timeout(10_000)
+      return request(
+        baseUrl,
+        `/agent-runs/${encodeURIComponent(runId)}`,
+        noteVerificationRunResponseSchema,
+        { signal: signal ? AbortSignal.any([signal, timeout]) : timeout },
+      )
+    },
+    getNoteRunEvidence: (runId, signal) =>
+      request(
+        baseUrl,
+        `/agent-runs/${encodeURIComponent(runId)}/evidence`,
+        noteRunEvidenceResponseSchema,
+        {
+          signal: repositorySignal(signal),
+        },
+      ),
     startTask: (taskId, input) =>
       request(
         baseUrl,

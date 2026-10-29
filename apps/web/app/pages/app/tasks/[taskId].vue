@@ -19,6 +19,17 @@ const taskId = computed(() => {
   return typeof value === 'string' ? value : null
 })
 const task = useTaskQuery(taskId)
+const noteRuns = computed(
+  () => task.data.value?.runs.filter((run) => run.kind === 'NOTE_VERIFICATION') ?? [],
+)
+const selectedRunId = computed(() => {
+  if (task.data.value?.id !== taskId.value) return null
+  const requested = route.query.runId
+  if (requested === undefined) return noteRuns.value[0]?.id ?? null
+  return typeof requested === 'string' && noteRuns.value.some((run) => run.id === requested)
+    ? requested
+    : null
+})
 const targetPath = ref('')
 const targetPathError = ref<string | null>(null)
 const startError = ref<string | null>(null)
@@ -176,7 +187,7 @@ async function startTask() {
               历次运行
             </h2>
             <p v-if="task.data.value.runs.length === 0" class="mt-6 text-muted">
-              尚未产生验收运行。GitHub 接入后，运行记录会展示在这里。
+              尚未产生验收运行。将目标笔记推送到绑定仓库后，可在这里查看记录。
             </p>
             <ul v-else class="mt-6 border-t border-hairline">
               <li
@@ -184,15 +195,42 @@ async function startTask() {
                 :key="run.id"
                 class="flex flex-wrap justify-between gap-4 border-b border-hairline py-5"
               >
-                <span class="font-mono text-caption tracking-label text-muted uppercase">
-                  {{ run.kind }}
-                </span>
+                <NuxtLink
+                  v-if="run.kind === 'NOTE_VERIFICATION'"
+                  class="inline-flex min-h-11 items-center text-link underline underline-offset-4 aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                  :to="{
+                    path: route.path,
+                    query: { ...route.query, runId: run.id, answerId: undefined },
+                    hash: '#note-report',
+                  }"
+                  :aria-current="selectedRunId === run.id ? 'true' : undefined"
+                  >笔记验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN')
+                  }}<span v-if="selectedRunId === run.id"> · 当前查看</span></NuxtLink
+                >
+                <span v-else class="inline-flex min-h-11 items-center text-sm text-muted"
+                  >回答验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN') }}</span
+                >
                 <span class="font-mono text-caption tracking-label uppercase">{{
                   run.status
                 }}</span>
               </li>
             </ul>
           </section>
+
+          <NoteVerificationPanel
+            v-if="selectedRunId && taskId"
+            :key="`${taskId}:${selectedRunId}`"
+            :task-id="taskId"
+            :run-id="selectedRunId"
+            :criteria="task.data.value.criteria"
+            :task="task.data.value"
+          />
+          <AsyncStatePanel
+            v-else-if="route.query.runId !== undefined"
+            title="无法选择此笔记运行"
+            description="这条运行不在当前任务的笔记验收列表中，请从上方记录重新选择。"
+            tone="warning"
+          />
         </div>
 
         <aside class="border-t border-hairline pt-8 lg:border-t-0 lg:border-l lg:pl-8 lg:pt-0">
@@ -242,13 +280,16 @@ async function startTask() {
             </button>
           </form>
 
-          <div
-            v-else-if="task.data.value.state === 'IN_PROGRESS'"
-            class="mt-10 border-t border-hairline pt-8"
-          >
+          <div v-else-if="task.data.value.targetPath" class="mt-10 border-t border-hairline pt-8">
             <p class="font-mono text-caption tracking-label text-muted uppercase">当前目标路径</p>
             <p class="mt-3 break-all text-body">{{ task.data.value.targetPath }}</p>
-            <p class="mt-5 text-sm leading-6 text-muted">GitHub Push 自动验收将在下一阶段接入。</p>
+            <p class="mt-5 text-sm leading-6 text-muted">
+              {{
+                task.data.value.state === 'IN_PROGRESS'
+                  ? '修改此文件并推送到绑定仓库后，系统会取证并自动验收。可在历次运行中查看报告。'
+                  : '历次验收关联各次提交的笔记内容，当前仓库文件可能已经不同。'
+              }}
+            </p>
           </div>
         </aside>
       </div>

@@ -1,7 +1,79 @@
 import { createKnowledgeOpsApi, KnowledgeOpsApiError } from '../app/lib/knowledge-ops-api.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { noteRun, noteEvidence, runId } from './fixtures/note-verification'
+import { answerResponse, answerId, questionId, receipt } from './fixtures/follow-up-answer'
 
 describe('KnowledgeOps API client', () => {
+  it('submits a stable answer command and reads its saved result using authenticated bounded requests', async () => {
+    const command = { requestId: runId, expectedTaskVersion: 5, answer: '我的答案' }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(receipt(), { status: 202 }))
+      .mockResolvedValueOnce(Response.json(answerResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createKnowledgeOpsApi('https://knowledgeops.example/api')
+    expect(await api.submitFollowUpAnswer(questionId, command)).toEqual(receipt())
+    const request = fetchMock.mock.calls[0]!
+    expect(request[0].pathname).toBe(`/api/follow-up-questions/${questionId}/answers`)
+    expect(request[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      signal: expect.any(AbortSignal),
+    })
+    expect(JSON.parse(request[1].body)).toEqual(command)
+    const controller = new AbortController()
+    expect(await api.getFollowUpAnswer(answerId, controller.signal)).toEqual(answerResponse())
+    expect(fetchMock.mock.calls[1]![0].pathname).toBe(`/api/answer-submissions/${answerId}`)
+    controller.abort()
+    expect(fetchMock.mock.calls[1]![1].signal.aborted).toBe(true)
+  })
+  it('reads fixed evidence by run with credentials and abort support', async () => {
+    const saved = noteEvidence()
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(saved))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    expect(
+      await createKnowledgeOpsApi('https://knowledgeops.example/api').getNoteRunEvidence(
+        runId,
+        controller.signal,
+      ),
+    ).toEqual(saved)
+    expect(fetchMock.mock.calls[0]![0].pathname).toBe(`/api/agent-runs/${runId}/evidence`)
+    expect(fetchMock.mock.calls[0]![1].credentials).toBe('include')
+    controller.abort()
+    expect(fetchMock.mock.calls[0]![1].signal.aborted).toBe(true)
+  })
+  it('reads a note report with credentials, proxy prefix and cancellation without treating failed criteria as failed execution', async () => {
+    const saved = noteRun()
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(saved))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    const result = await createKnowledgeOpsApi(
+      'https://knowledgeops.example/api',
+    ).getNoteVerificationRun(runId, controller.signal)
+    expect(result.status).toBe('SUCCEEDED')
+    expect(result.report?.body.results[0]?.outcome).toBe('FAILED')
+    expect(fetchMock.mock.calls[0]![0].pathname).toBe(`/api/agent-runs/${runId}`)
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ credentials: 'include' })
+    controller.abort()
+    expect(fetchMock.mock.calls[0]![1].signal.aborted).toBe(true)
+  })
+
+  it('rejects a malformed report instead of publishing unvalidated results', async () => {
+    const saved = noteRun()
+    saved.report!.body.results[0]!.outcome = 'UNKNOWN' as never
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(saved)))
+    await expect(
+      createKnowledgeOpsApi('https://knowledgeops.example/api').getNoteVerificationRun(runId),
+    ).rejects.toMatchObject({ name: 'ZodError' })
+  })
+
+  it.each([401, 404])('keeps HTTP %i separate from the persisted Run state', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({}, { status })))
+    await expect(
+      createKnowledgeOpsApi('https://knowledgeops.example/api').getNoteVerificationRun(runId),
+    ).rejects.toMatchObject({ name: 'KnowledgeOpsApiError', status })
+  })
   it('posts explicit snapshot resync without accepting a client-chosen SHA or task', async () => {
     const id = '2359b0ab-c51e-40df-ac45-7e52e79c8380'
     const accepted = { deliveryId: id, retryEventId: id, status: 'ACCEPTED' }

@@ -107,7 +107,10 @@ export {
 export {
   noteVerificationReportBodySchema,
   noteVerificationRunResponseSchema,
+  noteRunEvidenceResponseSchema,
+  type NoteRunEvidenceResponse,
   type NoteVerificationReportBody,
+  type NoteVerificationRunResponse,
 } from './http/note-verification.js'
 export {
   submitFollowUpAnswerInputSchema,
@@ -116,6 +119,7 @@ export {
   answerVerificationReportBodySchema,
   type SubmitFollowUpAnswerInput,
   type FollowUpAnswerAcceptedResponse,
+  type FollowUpAnswerResponse,
 } from './http/follow-up-answer.js'
 export {
   ANSWER_VERIFICATION_WORKFLOW_VERSION,

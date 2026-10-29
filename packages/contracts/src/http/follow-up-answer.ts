@@ -62,3 +62,5 @@ export const followUpAnswerResponseSchema = z
       .nullable(),
   })
   .strict()
+
+export type FollowUpAnswerResponse = z.infer<typeof followUpAnswerResponseSchema>

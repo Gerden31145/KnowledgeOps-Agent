@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, ParseUUIDPipe } from '@nestjs/common'
+import { Controller, Get, Header, Inject, Param, ParseUUIDPipe } from '@nestjs/common'
 import { CURRENT_ACTOR, type CurrentActor } from '../identity/current-actor.js'
 import { NoteVerificationQueryService } from './note-verification-query.service.js'
 
@@ -12,5 +12,11 @@ export class NoteVerificationQueryController {
   @Get(':runId')
   getRun(@Param('runId', new ParseUUIDPipe({ version: '4' })) runId: string) {
     return this.queries.getRun(runId, this.actor.userId)
+  }
+
+  @Get(':runId/evidence')
+  @Header('Cache-Control', 'private, no-store')
+  getEvidence(@Param('runId', new ParseUUIDPipe({ version: '4' })) runId: string) {
+    return this.queries.getEvidence(runId, this.actor.userId)
   }
 }
