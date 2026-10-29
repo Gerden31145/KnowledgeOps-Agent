@@ -23,6 +23,9 @@ import {
 } from './note-verification-execution.repository.js'
 import { NoteEvidenceError, parseNoteEvidence } from './parse-note-evidence.js'
 import { AnswerVerificationError, validateAnswerVerification } from './verify-follow-up-answer.js'
+import { collectTaskAssessment, TaskAssessmentError } from './collect-task-assessment.js'
+import { deriveTaskState } from './derive-task-state.exercise.js'
+import { unlockDependentTasks } from './unlock-dependent-tasks.js'
 import {
   terminateVerificationRun as terminate,
   verificationRunSnapshot as snapshot,
@@ -181,11 +184,37 @@ export class AnswerVerificationRunRepository {
           warnings: accounting.warnings,
         },
       })
+      let taskState: ReturnType<typeof deriveTaskState>
+      try {
+        const question = run.answerSubmission!.question
+        taskState = deriveTaskState(
+          collectTaskAssessment({
+            criteria: run.task.criteria,
+            source: context.question.source,
+            evidenceMode: question.report.run.submission!.evidence!.mode as 'DIFF' | 'SNAPSHOT',
+            noteReport: question.report.body,
+            answer: {
+              questionId: question.id,
+              questionBody: question.body,
+              answerSubmissionId: context.answer.id,
+              report: body,
+            },
+          }),
+        )
+      } catch (error) {
+        if (!(error instanceof TaskAssessmentError)) throw error
+        return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+      }
       if (run.deadlineAt && run.deadlineAt <= this.clock())
         return terminate(tx, run, 'RUN_DEADLINE_EXCEEDED', this.clock())
       const report = await tx.verificationReport.create({
         data: { runId: run.id, body: json(body) },
       })
+      await tx.task.update({
+        where: { id: run.taskId, state: 'VERIFYING', version: run.task.version },
+        data: { state: taskState, version: { increment: 1 } },
+      })
+      if (taskState === 'PASSED') await unlockDependentTasks(tx, run.taskId, run.task.stage.planId)
       await tx.agentRun.update({
         where: { id: run.id },
         data: {
@@ -195,7 +224,7 @@ export class AnswerVerificationRunRepository {
           errorCode: null,
         },
       })
-      // 回答 FAILED/不足也是有效报告；Run 成功不代表 Task 通过，Task 汇总由 R11 接入。
+      // 回答 FAILED/不足也是有效报告：Run 成功，Task 仍需补证；仅通过时解锁后续任务。
       return { runId: run.id, status: 'SUCCEEDED', reportId: report.id }
     })
   }
@@ -304,6 +333,7 @@ export class AnswerVerificationRunRepository {
         catalogId: model.catalogId,
         provider: 'openai',
         modelName: model.modelName,
+        ...(model.reasoningEffort ? { reasoningEffort: model.reasoningEffort } : {}),
         promptVersion: ANSWER_VERIFICATION_PROMPT_VERSION,
         outputSchemaVersion: ANSWER_VERIFICATION_OUTPUT_SCHEMA_VERSION,
       },

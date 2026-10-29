@@ -25,7 +25,7 @@ export const followUpQuestionCandidateSchema = z
 
 export type FollowUpQuestionCandidate = z.infer<typeof followUpQuestionCandidateSchema>
 
-export const FOLLOW_UP_PROMPT_VERSION = 'follow-up-v1'
+export const FOLLOW_UP_PROMPT_VERSION = 'follow-up-v2'
 export const FOLLOW_UP_OUTPUT_SCHEMA_VERSION = 'follow-up-output-v1'
 
 // 复用固定笔记/任务/模型的形状；出题只接收一个 FOLLOW_UP_ANSWER 标准。

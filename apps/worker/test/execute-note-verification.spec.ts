@@ -127,6 +127,23 @@ describe('bounded note verification execution', () => {
     expect(invoke).toHaveBeenCalledTimes(2)
   })
 
+  it('accounts for truncated output and stops without spending a second identical call', async () => {
+    const verify = vi
+      .fn()
+      .mockRejectedValue(new NoteVerificationModelError('MODEL_OUTPUT_TRUNCATED', { usage }))
+    expect(await executeNoteVerification({ verify }, input(), options(), budget())).toMatchObject({
+      status: 'FAILED',
+      code: 'MODEL_OUTPUT_TRUNCATED',
+      accounting: {
+        knownTotalTokens: 200,
+        knownCostMicrounits: 280,
+        usageComplete: true,
+        attempts: [{ attempt: 1, errorCode: 'MODEL_OUTPUT_TRUNCATED', usage }],
+      },
+    })
+    expect(verify).toHaveBeenCalledOnce()
+  })
+
   it('never returns a partial report or calls a third time when both candidates are invalid', async () => {
     const verify = vi.fn().mockResolvedValue(forged())
     const result = await executeNoteVerification({ verify }, input(), options(), budget())

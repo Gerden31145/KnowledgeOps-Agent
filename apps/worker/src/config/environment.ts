@@ -16,6 +16,7 @@ const noteModelSchema = z
   .object({
     catalogId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
     modelName: z.string().trim().min(1).max(160),
+    reasoningEffort: z.enum(['low', 'high', 'max']).optional(),
     currency: z.enum(['CNY', 'USD']),
     inputMicrounitsPerMillionTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     outputMicrounitsPerMillionTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),

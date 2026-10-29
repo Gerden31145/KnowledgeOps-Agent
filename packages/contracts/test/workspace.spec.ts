@@ -80,47 +80,50 @@ describe('workspace HTTP contracts', () => {
     ).toThrow()
   })
 
-  it('keeps today and task-detail views inside their intended state boundaries', () => {
-    expect(
-      todayTasksResponseSchema.parse({
-        plan: { id: ids.plan, status: 'ACTIVE' },
-        tasks: [
-          {
-            id: ids.task,
-            planId: ids.plan,
-            title: task.title,
-            description: task.description,
-            estimatedMinutes: task.estimatedMinutes,
-            targetPath: task.targetPath,
-            state: 'IN_PROGRESS',
-            updatedAt: '2026-09-04T08:05:00.000Z',
-            stage: { id: ids.stage, title: 'JavaScript foundations', position: 0 },
-          },
-        ],
-      }).tasks,
-    ).toHaveLength(1)
-
-    expect(
-      taskDetailResponseSchema.parse({
-        ...task,
-        stage: {
-          id: ids.stage,
-          title: 'JavaScript foundations',
-          position: 0,
+  it.each(['IN_PROGRESS', 'VERIFYING'])(
+    'keeps a %s task visible in today and task-detail views',
+    (state) => {
+      expect(
+        todayTasksResponseSchema.parse({
           plan: { id: ids.plan, status: 'ACTIVE' },
-        },
-        runs: [
-          {
-            id: ids.run,
-            kind: 'NOTE_VERIFICATION',
-            status: 'QUEUED',
-            errorCode: null,
-            queuedAt: '2026-09-04T08:06:00.000Z',
-            startedAt: null,
-            finishedAt: null,
+          tasks: [
+            {
+              id: ids.task,
+              planId: ids.plan,
+              title: task.title,
+              description: task.description,
+              estimatedMinutes: task.estimatedMinutes,
+              targetPath: task.targetPath,
+              state,
+              updatedAt: '2026-09-04T08:05:00.000Z',
+              stage: { id: ids.stage, title: 'JavaScript foundations', position: 0 },
+            },
+          ],
+        }).tasks,
+      ).toHaveLength(1)
+
+      expect(
+        taskDetailResponseSchema.parse({
+          ...task,
+          stage: {
+            id: ids.stage,
+            title: 'JavaScript foundations',
+            position: 0,
+            plan: { id: ids.plan, status: 'ACTIVE' },
           },
-        ],
-      }).runs,
-    ).toHaveLength(1)
-  })
+          runs: [
+            {
+              id: ids.run,
+              kind: 'NOTE_VERIFICATION',
+              status: 'QUEUED',
+              errorCode: null,
+              queuedAt: '2026-09-04T08:06:00.000Z',
+              startedAt: null,
+              finishedAt: null,
+            },
+          ],
+        }).runs,
+      ).toHaveLength(1)
+    },
+  )
 })

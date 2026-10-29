@@ -6,7 +6,7 @@ import {
   type NoteVerificationUsage,
 } from '../note-verification/note-verification.js'
 
-export const ANSWER_VERIFICATION_PROMPT_VERSION = 'answer-verification-v1'
+export const ANSWER_VERIFICATION_PROMPT_VERSION = 'answer-verification-v2'
 export const ANSWER_VERIFICATION_OUTPUT_SCHEMA_VERSION = 'answer-verification-output-v1'
 
 const boundedResult = noteVerificationCandidateSchema.shape.results.element

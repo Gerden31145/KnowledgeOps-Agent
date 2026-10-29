@@ -1,4 +1,5 @@
 import {
+  CURRENT_TASK_STATES,
   contentMinimumConfigSchema,
   planDetailResponseSchema,
   sectionPresentConfigSchema,
@@ -174,7 +175,7 @@ export class PlanRepository {
             tasks: {
               where: {
                 state: {
-                  in: ['READY', 'IN_PROGRESS', 'NEEDS_REVISION', 'NEEDS_EVIDENCE'],
+                  in: ['READY', ...CURRENT_TASK_STATES],
                 },
               },
               orderBy: { position: 'asc' },

@@ -41,7 +41,7 @@ export const noteVerificationCandidateSchema = z
 
 export type NoteVerificationCandidate = z.infer<typeof noteVerificationCandidateSchema>
 
-export const NOTE_VERIFICATION_PROMPT_VERSION = 'note-verification-v1'
+export const NOTE_VERIFICATION_PROMPT_VERSION = 'note-verification-v2'
 export const NOTE_VERIFICATION_OUTPUT_SCHEMA_VERSION = 'note-verification-output-v1'
 
 export const noteVerificationRequestSchema = z

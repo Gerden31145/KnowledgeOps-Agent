@@ -1,6 +1,7 @@
 import type { PlanGenerationOutput } from '@knowledgeops/agent-core'
 import type { PlanGenerationRunState } from '@knowledgeops/contracts'
 import type { DatabaseClient } from '@knowledgeops/database'
+import { ensureRequiredFollowUpCriterion } from '../verification/ensure-required-follow-up-criterion.js'
 
 export interface FinalizePlanGenerationRunCommand {
   candidate: PlanGenerationOutput
@@ -168,6 +169,8 @@ export class FinalizePlanGenerationRun implements PlanGenerationSuccessFinalizer
                 },
               })
             }
+            // 模型提供笔记标准；唯一必答追问由服务端补齐，与整份计划同事务。
+            await ensureRequiredFollowUpCriterion(tx, taskResult.id)
           }
         }
 

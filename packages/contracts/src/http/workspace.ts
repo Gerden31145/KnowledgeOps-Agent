@@ -8,7 +8,7 @@ import {
   planStatusSchema,
   taskTypeSchema,
 } from '../domain/plan.js'
-import { taskStateSchema } from '../domain/task-state.js'
+import { CURRENT_TASK_STATES, taskStateSchema } from '../domain/task-state.js'
 import { entityIdSchema, isoDateSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const acceptanceCriterionSummarySchema = z
@@ -66,12 +66,7 @@ export const planDetailResponseSchema = z
   })
   .strict()
 
-const todayTaskStateSchema = taskStateSchema.extract([
-  'READY',
-  'IN_PROGRESS',
-  'NEEDS_REVISION',
-  'NEEDS_EVIDENCE',
-])
+const todayTaskStateSchema = taskStateSchema.extract(['READY', ...CURRENT_TASK_STATES])
 
 export const todayTasksResponseSchema = z
   .object({

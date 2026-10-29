@@ -64,6 +64,7 @@ export class LangChainPlanGenerator implements PlanGenerationPort {
     const chatModel = this.createChatModel({
       apiKey,
       modelName: request.model.modelName,
+      ...(request.model.reasoningEffort ? { reasoningEffort: request.model.reasoningEffort } : {}),
       ...(this.configuration.baseUrl ? { baseUrl: this.configuration.baseUrl } : {}),
     })
     const method = this.configuration.structuredOutputMethod ?? 'jsonSchema'

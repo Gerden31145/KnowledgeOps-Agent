@@ -19,14 +19,14 @@ const today = useTodayTasksQuery()
         今日学习
       </h1>
       <p class="mt-5 max-w-2xl leading-7 text-body">
-        这里只展示可开始、正在执行、需要修订或等待回答的任务。服务端任务状态是唯一事实。
+        这里展示可开始、进行中、验收中、需要修订或等待回答的任务。
       </p>
     </header>
 
     <AsyncStatePanel
       v-if="today.isPending.value"
       title="正在读取今日任务"
-      description="从当前活动计划恢复可操作任务。"
+      description="从当前活动计划读取任务及验收状态。"
     />
 
     <AsyncStatePanel
@@ -64,7 +64,7 @@ const today = useTodayTasksQuery()
     <AsyncStatePanel
       v-else-if="today.data.value.tasks.length === 0"
       title="当前没有待处理任务"
-      description="活动计划存在，但暂时没有可开始、进行中或需要反馈的任务。"
+      description="活动计划存在，但暂时没有可开始、进行中、验收中或需要反馈的任务。"
     />
 
     <section v-else aria-labelledby="today-list-title">
@@ -73,7 +73,7 @@ const today = useTodayTasksQuery()
           id="today-list-title"
           class="font-display text-3xl font-normal tracking-display uppercase"
         >
-          可操作任务
+          当前任务
         </h2>
         <span class="font-mono text-caption tracking-label text-muted uppercase">
           {{ today.data.value.tasks.length }} Items

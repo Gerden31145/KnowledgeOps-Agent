@@ -139,6 +139,31 @@ afterEach(async () => {
 afterAll(() => database.$disconnect())
 
 describe('R10 shared note/question execution and atomic persistence', () => {
+  it('freezes reasoning effort at first claim and retains it after a configuration change', async () => {
+    const f = await fixture()
+    const configured = (reasoningEffort: 'low' | 'max') => ({
+      ...environment,
+      NOTE_VERIFICATION_MODEL_JSON: {
+        ...environment.NOTE_VERIFICATION_MODEL_JSON!,
+        reasoningEffort,
+      },
+    })
+    const first = await new NoteVerificationRunRepository(database, configured('low')).prepare(
+      f.payload,
+    )
+    expect(first.ready).toBe(true)
+    if (!first.ready) throw new Error('expected ready')
+    expect(first.configuration.model.reasoningEffort).toBe('low')
+    expect(first.configuration.followUp?.model.reasoningEffort).toBe('low')
+    const resumed = await new NoteVerificationRunRepository(database, configured('max')).prepare(
+      f.payload,
+    )
+    expect(resumed).toEqual(first)
+    expect((await f.run()).executionConfiguration).toMatchObject({
+      model: { reasoningEffort: 'low' },
+    })
+  })
+
   it('leaves answer verification intents pending until an answer publisher is installed', async () => {
     const f = await fixture()
     await database.outboxEvent.update({
@@ -218,7 +243,7 @@ describe('R10 shared note/question execution and atomic persistence', () => {
     expect(verify).toHaveBeenCalledOnce()
     expect(generate).toHaveBeenCalledOnce()
     expect(await database.followUpQuestion.count({ where: { reportId: result.reportId } })).toBe(1)
-    expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: 6 })
+    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: 7 })
   })
 
   it('rolls back report and terminal state if the question write fails, then reuses both saved model results', async () => {
@@ -413,7 +438,7 @@ describe('R09 real note consumer and atomic report', () => {
     await expect(handler.process(f.payload)).resolves.toEqual(result)
     expect(verify).toHaveBeenCalledOnce()
     expect(await database.verificationReport.count({ where: { runId: f.runId } })).toBe(1)
-    expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: 6 })
+    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: 7 })
   })
 
   it('rolls back report + terminal status together and recovers the saved result without paying again', async () => {
@@ -628,7 +653,7 @@ describe('R09 real note consumer and atomic report', () => {
     expect(
       noteVerificationReportBodySchema.parse((await f.run()).report!.body).results[2]?.outcome,
     ).toBe('FAILED')
-    expect((await f.task()).state).toBe('VERIFYING')
+    expect(await f.task()).toMatchObject({ state: 'NEEDS_REVISION', version: 7 })
   })
 
   it('leaves intents pending without a configured consumer and dead-letters inconsistent envelopes', async () => {

@@ -33,7 +33,7 @@ export class LangChainFollowUpGenerator implements FollowUpGenerationPort {
     const input = checked.data
     if (
       input.model.provider !== 'openai' ||
-      input.model.promptVersion !== FOLLOW_UP_PROMPT_VERSION ||
+      ![FOLLOW_UP_PROMPT_VERSION, 'follow-up-v1'].includes(input.model.promptVersion) ||
       input.model.outputSchemaVersion !== FOLLOW_UP_OUTPUT_SCHEMA_VERSION
     ) {
       throw new NoteVerificationModelError('MODEL_CONFIGURATION_ERROR')
@@ -47,21 +47,34 @@ export class LangChainFollowUpGenerator implements FollowUpGenerationPort {
     if (options.repairReason && !Object.hasOwn(repairPrompts, options.repairReason)) {
       throw new NoteVerificationModelError('MODEL_INPUT_INVALID')
     }
+    const numbered = input.model.promptVersion === FOLLOW_UP_PROMPT_VERSION
+    const prompt = numbered
+      ? SYSTEM_PROMPT.replace(
+          'The note.lines array preserves every original line: index 0 is line 1, including blank lines.',
+          'Each note.lines entry contains an authoritative 1-based lineNumber and exact text, including blank lines. Copy startLine/endLine from these lineNumber fields; do not count array positions. Copy only text into excerpt.',
+        )
+      : SYSTEM_PROMPT
     return invokeStructuredNoteModel(
       this.configuration,
       this.createChatModel,
       {
         modelName: input.model.modelName,
+        ...(input.model.reasoningEffort ? { reasoningEffort: input.model.reasoningEffort } : {}),
         schema: followUpQuestionCandidateSchema,
         name: 'knowledgeops_follow_up',
         systemPrompt: options.repairReason
-          ? `${SYSTEM_PROMPT}\n${repairPrompts[options.repairReason]}`
-          : SYSTEM_PROMPT,
+          ? `${prompt}\n${repairPrompts[options.repairReason]}`
+          : prompt,
         payload: {
           runId: input.runId,
           task: input.task,
           criterion: input.criterion,
-          note: input.note,
+          note: {
+            ...input.note,
+            lines: numbered
+              ? input.note.lines.map((text, index) => ({ lineNumber: index + 1, text }))
+              : input.note.lines,
+          },
         },
       },
       options,

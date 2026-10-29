@@ -17,6 +17,7 @@ export class NoteVerificationModelError extends Error {
       | 'MODEL_LIMIT_EXCEEDED'
       | 'MODEL_CONFIGURATION_ERROR'
       | 'MODEL_OUTPUT_INVALID'
+      | 'MODEL_OUTPUT_TRUNCATED'
       | 'MODEL_UPSTREAM_ERROR'
       | 'MODEL_ABORTED',
     details: { usage?: NoteVerificationUsage | null; retryable?: boolean } = {},
@@ -40,6 +41,7 @@ export async function invokeStructuredNoteModel<T>(
   createChatModel: LangChainChatModelFactory,
   input: {
     modelName: string
+    reasoningEffort?: 'low' | 'high' | 'max'
     schema: z.ZodType<T>
     name: string
     systemPrompt: string
@@ -65,6 +67,7 @@ export async function invokeStructuredNoteModel<T>(
       modelName: input.modelName,
       ...(configuration.baseUrl ? { baseUrl: configuration.baseUrl } : {}),
       maxOutputTokens: options.maxOutputTokens,
+      ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
     })
     const method = configuration.structuredOutputMethod ?? 'jsonSchema'
     const structured = model.withStructuredOutput(input.schema, {
@@ -91,6 +94,12 @@ export async function invokeStructuredNoteModel<T>(
         }
       : null
     if (options.signal.aborted) throw new NoteVerificationModelError('MODEL_ABORTED', { usage })
+    const truncated = z
+      .object({ response_metadata: z.object({ finish_reason: z.literal('length') }) })
+      .safeParse(response.raw)
+    // 输出额度耗尽不能靠相同额度的 JSON 修复解决；保留用量，交外层收束该次执行。
+    // 即使 SDK 容错解析出了对象，也不把被截断的响应当作完整结果。
+    if (truncated.success) throw new NoteVerificationModelError('MODEL_OUTPUT_TRUNCATED', { usage })
     const parsed = input.schema.safeParse(response.parsed)
     if (!parsed.success) throw new NoteVerificationModelError('MODEL_OUTPUT_INVALID', { usage })
     return { candidate: parsed.data, usage }

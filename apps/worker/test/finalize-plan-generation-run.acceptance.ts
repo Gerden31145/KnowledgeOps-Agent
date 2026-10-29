@@ -181,7 +181,7 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
         expect(plan.stages.flatMap((stage) => stage.tasks)).toHaveLength(3)
         expect(
           plan.stages.flatMap((stage) => stage.tasks.flatMap((task) => task.criteria)),
-        ).toHaveLength(3)
+        ).toHaveLength(6)
         expect(
           plan.stages.flatMap((stage) => stage.tasks.flatMap((task) => task.prerequisites)),
         ).toHaveLength(3)
@@ -202,9 +202,16 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
               version: 0,
             })
             expect(savedTask.id).not.toBe(task.id)
-            expect(savedTask.criteria).toMatchObject(
+            expect(savedTask.criteria).toHaveLength(task.acceptanceCriteria.length + 1)
+            expect(savedTask.criteria.slice(0, -1)).toMatchObject(
               task.acceptanceCriteria.map((criterion, position) => ({ ...criterion, position })),
             )
+            expect(savedTask.criteria.at(-1)).toMatchObject({
+              type: 'FOLLOW_UP_ANSWER',
+              required: true,
+              position: task.acceptanceCriteria.length,
+              config: null,
+            })
           })
         })
         const savedTasks = plan.stages.flatMap((stage) => stage.tasks)
@@ -507,6 +514,39 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
           },
         }),
       ).resolves.toMatchObject({ config: { minCharacters: 200 } })
+    } finally {
+      await database.user.delete({ where: { id: ids.userId } })
+    }
+  })
+
+  it('rolls back the whole plan if the server-owned required follow-up cannot be saved', async () => {
+    const ids = await createRun()
+    const failingDatabase = database.$extends({
+      query: {
+        acceptanceCriterion: {
+          async create({ args, query }) {
+            if (args.data.type === 'FOLLOW_UP_ANSWER') throw new Error('fixture-follow-up-write')
+            return query(args)
+          },
+        },
+      },
+    }) as unknown as typeof database
+    try {
+      await expect(
+        new FinalizePlanGenerationRun(failingDatabase).execute({
+          candidate,
+          expectedRunVersion: 1,
+          finishedAt,
+          generationRunId: ids.generationRunId,
+          goalId: ids.goalId,
+        }),
+      ).rejects.toThrow('fixture-follow-up-write')
+      expect(await database.plan.count({ where: { goalId: ids.goalId } })).toBe(0)
+      expect(
+        await database.planGenerationRun.findUniqueOrThrow({
+          where: { id: ids.generationRunId },
+        }),
+      ).toMatchObject({ status: 'RUNNING', version: 1 })
     } finally {
       await database.user.delete({ where: { id: ids.userId } })
     }

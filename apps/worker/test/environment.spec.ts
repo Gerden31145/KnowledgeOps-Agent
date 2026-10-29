@@ -18,6 +18,18 @@ describe('Worker environment', () => {
       NOTE_VERIFICATION_MODEL_JSON: JSON.stringify(model),
     }
     expect(readWorkerEnvironment(source).NOTE_VERIFICATION_MODEL_JSON).toEqual(model)
+    expect(
+      readWorkerEnvironment({
+        ...source,
+        NOTE_VERIFICATION_MODEL_JSON: JSON.stringify({ ...model, reasoningEffort: 'low' }),
+      }).NOTE_VERIFICATION_MODEL_JSON,
+    ).toMatchObject({ reasoningEffort: 'low' })
+    expect(() =>
+      readWorkerEnvironment({
+        ...source,
+        NOTE_VERIFICATION_MODEL_JSON: JSON.stringify({ ...model, reasoningEffort: 'disabled' }),
+      }),
+    ).toThrow('NOTE_VERIFICATION_MODEL_JSON')
     expect(() => readWorkerEnvironment({ ...source, OPENAI_API_KEY: '' })).toThrow('OPENAI_API_KEY')
     expect(() =>
       readWorkerEnvironment({ ...source, NOTE_VERIFICATION_MODEL_JSON: '{broken' }),

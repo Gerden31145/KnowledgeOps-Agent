@@ -95,7 +95,7 @@ export class FollowUpAnswerService {
         task.version !== input.expectedTaskVersion ||
         task.targetPath !== note.targetPath ||
         task.stage.plan.status !== 'ACTIVE' ||
-        // R11 尚未汇总状态：兼容已完成笔记 Run、版本未变化的 VERIFYING；运行中另行拒绝。
+        // 新报告由 R11 写回 NEEDS_EVIDENCE；兼容升级前已完成但遗留 VERIFYING 的旧报告。
         !(
           task.state === 'NEEDS_EVIDENCE' ||
           (task.state === 'VERIFYING' && task.version === noteRun.expectedTaskVersion)

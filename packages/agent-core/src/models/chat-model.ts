@@ -12,6 +12,7 @@ export interface LangChainChatModelFactoryInput {
   baseUrl?: string
   modelName: string
   maxOutputTokens?: number
+  reasoningEffort?: 'low' | 'high' | 'max'
 }
 
 export type LangChainChatModelFactory = (input: LangChainChatModelFactoryInput) => BaseChatModel
@@ -23,6 +24,7 @@ export function createOpenAiChatModel(input: LangChainChatModelFactoryInput): Ba
     model: input.modelName,
     maxRetries: 0,
     temperature: 0,
+    ...(input.reasoningEffort ? { modelKwargs: { reasoning_effort: input.reasoningEffort } } : {}),
     ...(input.maxOutputTokens === undefined ? {} : { maxTokens: input.maxOutputTokens }),
     ...(input.baseUrl ? { configuration: { baseURL: input.baseUrl } } : {}),
   })

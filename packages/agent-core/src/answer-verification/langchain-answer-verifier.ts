@@ -36,7 +36,9 @@ export class LangChainAnswerVerifier implements AnswerVerificationPort {
     const input = checked.data
     if (
       input.model.provider !== 'openai' ||
-      input.model.promptVersion !== ANSWER_VERIFICATION_PROMPT_VERSION ||
+      ![ANSWER_VERIFICATION_PROMPT_VERSION, 'answer-verification-v1'].includes(
+        input.model.promptVersion,
+      ) ||
       input.model.outputSchemaVersion !== ANSWER_VERIFICATION_OUTPUT_SCHEMA_VERSION
     )
       throw new NoteVerificationModelError('MODEL_CONFIGURATION_ERROR')
@@ -48,25 +50,41 @@ export class LangChainAnswerVerifier implements AnswerVerificationPort {
     }
     if (options.repairReason && !Object.hasOwn(repairPrompts, options.repairReason))
       throw new NoteVerificationModelError('MODEL_INPUT_INVALID')
+    const numbered = input.model.promptVersion === ANSWER_VERIFICATION_PROMPT_VERSION
+    const prompt = numbered
+      ? SYSTEM_PROMPT.replace(
+          'The note.lines and answer.lines arrays preserve blank lines; index 0 is line 1.',
+          'The note.lines and answer.lines entries contain authoritative 1-based lineNumber and exact text, including blank lines. Each source has its own numbering. Copy startLine/endLine from these lineNumber fields; do not count array positions. Copy only text into excerpt.',
+        )
+      : SYSTEM_PROMPT
+    const answerLines = input.answer.content.split(/\r\n|\n|\r/)
     return invokeStructuredNoteModel(
       this.configuration,
       this.createChatModel,
       {
         modelName: input.model.modelName,
+        ...(input.model.reasoningEffort ? { reasoningEffort: input.model.reasoningEffort } : {}),
         schema: answerVerificationCandidateSchema,
         name: 'knowledgeops_answer_verification',
         systemPrompt: options.repairReason
-          ? `${SYSTEM_PROMPT}\n${repairPrompts[options.repairReason]}`
-          : SYSTEM_PROMPT,
+          ? `${prompt}\n${repairPrompts[options.repairReason]}`
+          : prompt,
         payload: {
           runId: input.runId,
           task: input.task,
           question: input.question,
-          note: input.note,
+          note: {
+            ...input.note,
+            lines: numbered
+              ? input.note.lines.map((text, index) => ({ lineNumber: index + 1, text }))
+              : input.note.lines,
+          },
           answer: {
             id: input.answer.id,
             questionId: input.answer.questionId,
-            lines: input.answer.content.split(/\r\n|\n|\r/),
+            lines: numbered
+              ? answerLines.map((text, index) => ({ lineNumber: index + 1, text }))
+              : answerLines,
           },
         },
       },

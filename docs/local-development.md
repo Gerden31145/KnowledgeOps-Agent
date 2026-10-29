@@ -902,7 +902,7 @@ pnpm test:integration:r06 apps/worker/test/github-evidence-processing.integratio
 
 实际 `.env` 与 VPS 本轮未修改；10/27 随后的独立真实模型 smoke 见下文。启用正式消费者前先核对数据库中的待办：Worker 启动后会自动消费符合条件的历史验收 Outbox。配置更新后重启 Worker；预算、单价和截止时间在首次领取 Run 时冻结，重启不刷新已有 Run 额度。额度超出或用量未知时保留已校验的合法结果及 warnings，不再追加调用；过期或取消仍不能发布报告。
 
-报告由 `GET /agent-runs/:runId` 查询（API 本身无 `/api` 全局前缀，部署代理规则另计），要求有效登录且归属当前用户。返回 Run 状态、报告单项结果、免检项、待追问标准及费用估算，不返回凭据/内部配置。报告和 `SUCCEEDED` 同事务落库；失败或超时只恢复版本仍匹配的 Task。报告成功不代表 Task 通过；追问、Task 汇总和产品页面仍按 R10/R11/R12 接入。
+报告由 `GET /agent-runs/:runId` 查询（API 本身无 `/api` 全局前缀，部署代理规则另计），要求有效登录且归属当前用户。返回 Run 状态、报告单项结果、免检项、待追问标准及费用估算，不返回凭据/内部配置。报告和 `SUCCEEDED` 同事务落库；失败或超时只恢复版本仍匹配的 Task。报告成功不代表 Task 通过；追问见 5.28，Task 汇总写回见 5.35，产品页面留待 R12。
 
 队列重投不重复调用模型；已有完整账本允许补报告，未完成账本不重新计费尝试，等待原截止时间收束。恢复扫描复用 Outbox 轮询器：数据库恢复后可补报告/终态，首次领取前耗尽队列重试的 Run 还会核对失败 Job。Redis 数据被删除后的自动重建不在本段范围。队列失败日志为安全代码，数据库 `errorCode` 与队列投递错误应分开理解。
 
@@ -929,7 +929,7 @@ pnpm exec vitest run apps/worker/test/generate-follow-up-question.spec.ts
 
 首读 Worker 的 generate-follow-up-question.ts 和 agent-core 的 langchain-follow-up-generator.ts；前者调用模型后继续核验引用，后者组装受约束的单次生成请求，复用现有 SDK 连接和安全错误。运行前需有共享包构建产物；代码变更后可执行 pnpm --filter @knowledgeops/agent-core build。
 
-此单次调用小段没有新的服务启动或环境变量配置步骤。同 Run 预算/账本与问题保存见 5.28，回答受理与消费见 5.29–5.31；Task 状态汇总仍待 R11。
+此单次调用小段没有新的服务启动或环境变量配置步骤。同 Run 预算/账本与问题保存见 5.28，回答受理与消费见 5.29–5.31；Task 状态汇总见 5.35。
 
 ### 5.28 R10 同 Run 共享预算与追问原子保存
 
@@ -948,7 +948,7 @@ pnpm test:integration:r09 --testNamePattern "R10 shared"
 
 其他改动是既有链路接线：持久化入口保存完整结果/指纹，Processor 和 Nest 工厂传入出题端口，查询接口映射所属用户可见字段，`FollowUpQuestion.reportId` 唯一约束防止一份报告保存多道题。已有完成账本可复用，未保存响应的进程崩溃仍按原未知执行/超时策略处理。
 
-`NOTE_VERIFICATION_MODEL_JSON` 仍是正式消费开关；没有新增环境变量，也没有自动启用本机/VPS 付费消费。启用新版消费者后，新 Run 的笔记判断和出题共享原最多两次调用、Token/费用及截止时间，修复也占这两次。额度不足时在报告 `followUp` 记录 FAILED，笔记不通过时记录 SKIPPED，成功保存题目为 READY；这些是出题状态，不是回答或 Task 通过状态。回答提交/独立验收见 5.29–5.31，Task 汇总仍待 R11。
+`NOTE_VERIFICATION_MODEL_JSON` 仍是正式消费开关；没有新增环境变量，也没有自动启用本机/VPS 付费消费。启用新版消费者后，新 Run 的笔记判断和出题共享原最多两次调用、Token/费用及截止时间，修复也占这两次。额度不足时在报告 `followUp` 记录 FAILED，笔记不通过时记录 SKIPPED，成功保存题目为 READY；这些是出题状态，不是回答或 Task 通过状态。回答提交/独立验收见 5.29–5.31，Task 汇总见 5.35。
 
 ### 5.29 R10 回答 API 与独立验收 Run 受理
 
@@ -969,7 +969,7 @@ pnpm test:integration:r10
 
 首读 `follow-up-answer.controller.ts` 的提交入口，再读 `follow-up-answer.service.ts` 的 `submit`：按 User → Task 锁定，先查请求幂等，再核对原题及最新笔记/运行，最后事务保存 AnswerSubmission、Task 新版本、ANSWER_VERIFICATION Run 与 Outbox。`get` 只做所属用户查询。该 API 复用全局身份守卫，不信任请求体中的用户身份或评分结论。
 
-Task 汇总尚未由 R11 接入：受理支持 NEEDS_EVIDENCE，也支持笔记 Run 已完成、版本匹配且无活动 Run 时遗留的 VERIFYING；并非允许正在验收时随意提交。消费者在领取和发布前再次复核原题/笔记和版本，见 5.31。本节受理测试不装配消费者，Outbox 保持待处理、Run 为 QUEUED；不能把受理成功当成模型已经验收或浏览器表单已上线。
+Task 汇总现已接入（见 5.35）：受理支持 NEEDS_EVIDENCE，也兼容笔记 Run 已完成、版本匹配且无活动 Run 时遗留的 VERIFYING；并非允许正在验收时随意提交。消费者在领取和发布前再次复核原题/笔记和版本，见 5.31。本节受理测试不装配消费者，Outbox 保持待处理、Run 为 QUEUED；不能把受理成功当成模型已经验收或浏览器表单已上线。
 
 原消费者回归仍用 `pnpm test:integration:r09`，现共 34 项，其中一项专门确认没有回答发布器时新 Outbox 类型不会被计划/笔记 Dispatcher 误消费。测试只清理各自随机数据，无需手动建立真实任务或重复付费出题。
 
@@ -1008,7 +1008,230 @@ pnpm test:integration:r10
 
 配置继续使用 `NOTE_VERIFICATION_MODEL_JSON` 与 `NOTE_VERIFICATION_*` 限制：同一模型配置启用笔记与回答两个消费者，每个 Run 独立冻结配置和预算，回答至多两次调用，队列重试不新增额度。为空时对应 Outbox 保留待处理。本段没有修改本机 `.env`、发起真实模型请求或发布 VPS；启用后待处理回答可能产生实际模型调用。
 
-`GET /answer-submissions/:id` 现返回答案、Run 的状态/安全错误码/时间，以及 nullable report；报告包含原题来源、回答结果、两类引用与用量摘要，不返回 Rubric。合法的 FAILED/INSUFFICIENT_EVIDENCE 判断同样意味着 Run 执行成功；超时、取消或执行错误才走失败收束。Task 仍暂留 VERIFYING，R11 负责汇总通过/需补充并解锁，R12 再接表单和页面。本段集成通过不代表真实模型效果、浏览器闭环或生产部署已验收。
+`GET /answer-submissions/:id` 现返回答案、Run 的状态/安全错误码/时间，以及 nullable report；报告包含原题来源、回答结果、两类引用与用量摘要，不返回 Rubric。合法的 FAILED/INSUFFICIENT_EVIDENCE 判断同样意味着 Run 执行成功；超时、取消或执行错误才走失败收束。R11 已在 Finalizer 接入 Task 汇总写回（见 5.35）及依赖解锁（见 5.36），R12 再接表单和页面。本段集成通过不代表真实模型效果、浏览器闭环或生产部署已验收。
+
+### 5.32 R11 从报告整理逐项验收事实
+
+此纯函数的独立观察不依赖 PostgreSQL/Redis，也不调用模型。它为结果推导准备输入，现已被正式 Finalizer 调用（见 5.35），函数自身不写数据库。根目录执行：
+
+```powershell
+pnpm exec vitest run apps/worker/test/collect-task-assessment.spec.ts --reporter verbose
+```
+
+预期 **7 项通过**。先观察前两项：笔记两项通过、题目已经生成，但未回答时输出结论为 `[PASSED, PASSED, null]`；加入对应回答报告后，最后一项才出现回答判断，回答 FAILED 不会改写前两项笔记结论。其他测试覆盖跨题/跨笔记回答、缺失结果、可选失败、快照免检与冲突数据。结果只是验收事实，不是 Task 状态或模型准确率。
+
+只读两个入口：`apps/worker/src/verification/collect-task-assessment.ts` 及其测试的前两项。调用方在 Finalizer 的事务中复核运行/绑定/版本，再提供当前标准与固定来源；整理函数核对报告形状和对应关系，按标准清单返回 `{ id, type, required, outcome, exemption }`。outcome 为 null 表示没有该项结论；快照 FILE_CHANGED 另外保留免检原因，不能改写为 PASSED。真正决定 NEEDS_REVISION / NEEDS_EVIDENCE / PASSED 的纯函数由 R11 小手写完成，见 5.33。
+
+本段启动时发现真实计划缺少服务端自动补入的唯一必答 FOLLOW_UP_ANSWER 标准；5.34 已补齐新计划与新一轮验收的入口，本整理函数仍拒绝缺少唯一必答标准的输入。旧 Run、绑定或 Task 版本失效的判断归事务层，不能把本纯函数的来源相等检查当成数据库资格已核实。Task 原子更新见 5.35，依赖解锁见 5.36；真实完整闭环与评测尚未完成。
+
+### 5.33 R11 结果推导小手写
+
+材料整理与手写业务导读已完成；用户实现已通过 Review，本段短复述通过，正式接线见 5.35。
+`apps/worker/src/verification/derive-task-state.exercise.ts` 的输入为
+collectTaskAssessment 整理好的事实，输出为 NEEDS_REVISION / NEEDS_EVIDENCE / PASSED。
+题面、业务例子与按需提示见 [R11 小手写](handwrite/r11-task-state.md)；原估编码 25 至 35 分钟，实际手写约 20 分钟、数据流理解另约 20 分钟，本段合计约 40 分钟。
+
+```powershell
+pnpm test:handwrite:r11-task-state
+```
+
+6 项专用验收覆盖必要项全部通过、必要笔记失败优先于缺证、缺失/不足的笔记证据、
+未答或未通过的追问、可选标准与合法快照免检，另检查输入不变与顺序不影响判断。
+当前预期 6 项全部通过，材料整理回归 7 项及 Worker 类型/lint/格式检查也已通过；无须启动数据库、Redis 或模型。
+专用验收与默认测试分开，不改旧 test:handwrite:task-state 练习。用户实现保留，AI 只整理格式；
+真实任务必答标准补齐见 5.34；两个 Finalizer 已调用本函数并原子写回 Task，见 5.35；通过后的依赖解锁见 5.36。
+
+### 5.34 R11 服务端保证唯一必答追问标准
+
+2026-10-28 用户已确认本段导读理解，并正确复述运行中的 Run 不临时补齐标准，短复述通过；AI 工程验证已通过，10/29 用户补充确认下方 9 项用例已运行并观察，不要求重跑。
+
+本段补齐真实任务缺少 FOLLOW_UP_ANSWER 的入口。模型仍只生成笔记标准，服务端在新 Plan 落库事务中
+为每个 Task 追加一条 required=true 的追问标准。它只是“需要回答追问”的验收要求，具体问题仍由笔记验收后的出题步骤生成。
+旧任务在新一轮有效 NOTE_VERIFICATION Run 首次领取、冻结配置前补齐；已有唯一必答标准复用，已开始或结束的 Run 保留原上下文。
+不批量改写旧记录，不改变模型的标准数量上限或输出白名单，也不修改已通过的小手写。
+
+用户观察本段 9 项兼容测试，在项目根目录执行：
+
+```powershell
+pnpm test:integration:r11 apps/worker/test/required-follow-up-criterion.integration.ts --reporter verbose
+```
+
+需要本地 PostgreSQL；仅使用随机夹具和合成模型响应，不调用供应商。重点看前两项：旧任务并发领取只补一条，
+补齐后现有执行器能生成并保存绑定同一标准、同一份笔记的追问。其他测试检查重复/可选标准拒绝、失效运行不修复、
+冻结的 R09/R10 Run 保留、异常 QUEUED 不重置配置以及领取失败完整回滚。
+
+完整回归命令 `pnpm test:integration:r11`，当前 41 项通过：17 项计划落库验收、9 项标准补齐、5.35 的 7 项状态写回及 5.36 的 8 项解锁。
+R09/R10 回归 34/35 项、Worker 类型与构建、目标 lint/格式检查已通过。C1 验收更新为“每个任务的原笔记标准 + 一条服务端必答标准”，
+原子回滚、并发与版本保护仍保留，无需重做 C1 手写。
+
+首读 `apps/worker/src/verification/ensure-required-follow-up-criterion.ts` 与
+`apps/worker/src/verification/note-verification-run.repository.ts` 的 prepare。
+新计划调用位置在 `apps/worker/src/plan-generation/finalize-plan-generation-run.ts` 的每个 Task 标准写入后。
+Task 行锁保证并发补齐不会重复；必答标准写入失败会与计划或领取事务一起回滚，数据异常不会静默改成可通过。
+collectTaskAssessment/deriveTaskState 的 Finalizer 接线与 Task 写回见 5.35，依赖解锁见 5.36；测试出题成功不能当成完整闭环上线。
+
+### 5.35 R11 报告与 Task 状态原子写回
+
+本段把已完成的结果推导接入两个 Finalizer，不新增手写。观察/导读目标 15 至 20 分钟计入 R11 原预算。
+需要本地 PostgreSQL；使用随机测试资料与合成模型响应，不发起付费模型调用，不需要更新 VPS。
+
+```powershell
+pnpm test:integration:r11 apps/worker/test/task-assessment-finalization.integration.ts -t "R11 atomic report and Task publication" --reporter verbose
+```
+
+预期 **7 项通过**，同文件的解锁用例因名称过滤跳过。第一项通过真实 Processor、回答提交 Service 与数据库串起同一任务：
+
+| 事件 | Task 状态与版本 | Run 的含义 |
+| --- | --- | --- |
+| 笔记验收中 | VERIFYING，v6 | 正在执行 |
+| 必要笔记标准通过、题目已保存 | NEEDS_EVIDENCE，v7 | 笔记 Run SUCCEEDED，但还没有回答 |
+| 提交回答 | VERIFYING，v8 | 创建独立回答 Run |
+| 回答判断 FAILED | NEEDS_EVIDENCE，v9 | 回答 Run SUCCEEDED，已得到有效的不通过报告 |
+| 修正后重新提交 | VERIFYING，v10 | 新回答对应新 Run |
+| 回答判断 PASSED | PASSED，v11 | 必要笔记与回答标准全部通过 |
+
+其余用例覆盖必要笔记 FAILED/INSUFFICIENT_EVIDENCE、Task 写入失败全事务回滚、
+重试复用已保存账本、冻结旧 Run 不追加标准、发布前必答标准异常拒绝。
+重复消费已结束 Run 直接返回已有结果，不重新写 Task，也不覆盖已通过状态。
+
+首轮只读这两个入口的 finalize 新增部分：
+
+- `apps/worker/src/verification/note-verification-run.repository.ts`：原资格与指纹检查后，整理待发布笔记报告、推导 Task，原子保存报告、追问、Task 状态/版本与 Run 终态。
+- `apps/worker/src/verification/answer-verification-run.repository.ts`：读取原题关联的笔记报告，合入本次回答报告，推导状态并在原事务中一起保存。
+
+两处都先锁行并核对 Task 版本，再用本轮 VERIFYING/版本条件写入；任何数据库写入失败都会回滚发布事务，执行账本仍可复用。
+旧冻结 Run 若原本缺少必答标准，保留已生成的合法报告，恢复启动前的稳定状态并增加版本，不临时补标准，也不误判通过；后续新 Push 首次领取时才补齐。
+发布期间材料/资格已变化则按原失败收束规则处理，不能走旧 Run 兼容路径覆盖新 Task。
+
+本小段接线时 AI 已验证 R11 集成 33 项、受影响的 R09/R10 集成 34/35 项、Worker 类型与构建及目标 lint；新增解锁后的完整回归见 5.36。
+用户已完成本段专用命令观察、两个 Finalizer 导读理解确认及事务回滚/账本复用的简短复述；重试发布仍需重新核对运行资格。依赖解锁见 5.36，真实完整闭环、评测及报告页面仍未完成。
+
+### 5.36 R11 任务通过后解锁后续任务
+
+本段只接入依赖解锁，观察/导读目标 15 至 20 分钟计入 R11 原预算，无新增手写。
+本地 PostgreSQL 已启动时，在根目录执行：
+
+```powershell
+pnpm test:integration:r11 apps/worker/test/task-assessment-finalization.integration.ts -t "R11 dependent Task unlocking" --reporter verbose
+```
+
+预期 **8 项通过、7 项跳过**；跳过的是上一段状态写回用例，名称过滤所致。全部是合成模型响应及随机测试资料，不调用供应商。
+第一项观察 A→B→C，且同一 Plan 的另一 Stage 中 D 也依赖 A：A 笔记通过时 B/D 仍 BLOCKED，
+回答通过后 A 为 PASSED，B/D 为 READY、版本只加一，C 仍 BLOCKED。随后调用既有 startTask，B 才进入 IN_PROGRESS。
+再次消费 A 的回答 Run 不重置已开始的 B，也不重复递增 D 的版本。
+
+第二项观察多前置：B 同时依赖 A/X，只有 A 通过时 B 不解锁；X 也通过后才为 READY。
+同时检查无关任务、已有非 BLOCKED 状态和异常跨计划依赖。其余用例检查并发发布、未通过回答、晚到的过期版本/解绑结果，
+以及解锁已执行但事务未提交时出错：报告、当前 Task 与后续 Task 全部回滚，重试复用账本。
+
+首读两个入口：
+
+- `apps/worker/src/verification/unlock-dependent-tasks.ts`：some 找到直接依赖当前任务的后续任务，every 要求所有前置均为同计划的 PASSED；只更新 BLOCKED→READY 并递增版本。
+- `apps/worker/src/verification/answer-verification-run.repository.ts`：当前 Task 写为 PASSED 后，在原事务里调用解锁；调用方已持有用户行锁，和其他 Finalizer/开始任务协调。
+
+TaskDependency 的 taskId 是等待解锁的后续任务，prerequisiteTaskId 是它的前置任务。
+解锁不按 position 顺序猜测、不递归通过任务、不自动开始或创建 Run；用户仍在可开始任务中选择。
+无前置任务仍由确认 Plan 的原逻辑开放；笔记 Finalizer 因必答追问尚未完成，不会单独通过 Task 或触发解锁。
+
+工程验证：`pnpm test:integration:r11` 共 41 项、`pnpm test:integration:r10` 共 35 项通过；Worker 类型/build、目标 lint 检查通过。
+2026-10-29 用户已确认本段 8 项用例运行观察、导读理解及 some/every 业务条件复述通过，无需重复运行。真实 GitHub Push 到任务通过及解锁的完整链路、固定模型评测、报告页与 VPS 更新仍未验收。
+
+### 5.37 R11 真实完整链路的本地准备
+
+2026-10-29：原本地库仍有 R06 时生成的活动计划，其中 SECTION_PRESENT、CONTENT_MINIMUM 的 config 为 null，并有历史待验收 Run。旧规则不能凭描述猜测或改写为通过，因此本轮使用独立库重新登录、生成计划并走真实 Push。此准备不是完整闭环验收通过。
+
+本轮环境：PostgreSQL `knowledgeops_r11_smoke`（同一开发用户拥有），Redis DB 11（首次启用前已确认空），Web `http://127.0.0.1:3000`，API `http://127.0.0.1:4000`。原 `.env`、原业务库和原 Redis DB 保留。不要同时启动普通 `pnpm dev`，端口相同。
+
+本机专用库已通过 WSL PostgreSQL 管理用户创建，16 项迁移已应用；后续恢复运行：
+
+```powershell
+pnpm local:r11 check
+pnpm local:r11 migrate
+pnpm build:packages
+pnpm --filter @knowledgeops/api build
+pnpm --filter @knowledgeops/worker build
+pnpm local:r11 start
+```
+
+`scripts/r11-local.mjs` 只覆盖当前进程和子进程的数据库、Redis、回调及模型配置，不写 `.env`，不造业务数据。API/Worker 运行构建产物，修改它们后需要重新构建并重启；Web 使用开发服务器。终端 Ctrl+C 停止整组服务。普通 `pnpm dev` 仍使用原库。
+
+这组服务启用真实笔记/追问及回答模型消费，使用已确认的 GLM-5.3 普通输入 ¥8/百万、输出 ¥28/百万 Token 估算费用，缓存折扣未单独计入。每个验收 Run 的预估额度为 ¥1、总 Token 上限 16000，单次输出上限 4096，显式使用 `reasoningEffort: low` 并在首次领取时随 Run 冻结。实际超额结果沿既有规则保留并记录警告；这不是供应商侧硬扣费上限。新建计划、Push、提交回答均可能触发付费调用，不批量重试。
+
+下一步按顺序观察：
+
+1. 在 GitHub App 的 Callback URLs 中加入 `http://127.0.0.1:4000/auth/github/callback`，保留 VPS 的回调；从本地页面登录并绑定学习仓库。GitHub App 支持多个回调，代码已发送 redirect_uri，参见 [GitHub 官方说明](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-user-authorization-callback-url)。
+2. 通过页面生成短计划，检查目标文件和验收规则，确认计划并开始首个任务；本次应至少有一项依赖首任务的后续任务，便于观察解锁。
+3. 按 R06 的本地 Webhook 转发方式，将真实 GitHub 请求送到 `/webhooks/github`。如果 App 仍指向 VPS，先记录原 Webhook URL，再临时切换到本地转发入口，观察结束后恢复；本次尚未改动 GitHub App 或 VPS。
+4. 用户提交目标文件，观察 Delivery/Submission/Evidence、笔记报告、追问及 Task 状态；回答表单在 R12 接入，本段通过已有认证 API 提交用户回答，保留同一 requestId 处理重发。
+5. 记录真实答案报告、Task PASSED 和后续 Task READY 的关联 ID/版本、Token 与费用估算。模型未通过则按真实结果修订，不直接改库或伪造结论。
+
+本轮准备验证：专用库/Redis 协议检查、迁移、API/Worker 构建及启动、API ready 200（两项依赖均 up）、Web 200、脚本 lint/format 通过。真实 GitHub 登录/Push/回答闭环、固定评测仍待观察，不据此宣布 R11 完成。
+
+10/29 用户已完成本地登录及绑定；只读核对专用库中的 `Gerden31145/my-study-record`、`main` 分支绑定 enabled=true，尚无新计划或生成 Run。下一步由用户通过计划表单生成短计划，核对规则、依赖及目标路径后再开始任务；Webhook 是否已转向本地尚待确认。
+
+随后用户已完成新计划生成。只读核对计划为 DRAFT，共 4 个任务：首任务「梳理 transition 四要素与触发条件」，目标 `notes/css-transition/01-basics-trigger.md`；第二项依赖第一项，第三项依赖第一、二项，第四项依赖第三项。首任务通过后应仅解锁第二项，第三项仍 BLOCKED。首任务有两个精确标题规则（`transition 四要素`、`触发条件与示例`）、400 字符下限、覆盖 hover/class/JS 修改样式三种方式及代码示例的语义规则，以及唯一必答追问；规则 config 完整。
+
+AI 已在 Git 忽略目录准备 `apps/worker/.local/r11-css-transition-note.md`，明确标注为 AI 辅助的链路验证样本，不冒充用户独立手写或模型准确率评测样本。用现有 AST 工具本地预检确认两个标题匹配、正文与代码 2073 个非空白字符；这只验证确定性条件，未调用语义模型、未写验收报告。学习仓库对应目标文件检查时不存在，AI 未修改该仓库或提交/推送。
+
+用户确认 App Webhook 仍指向 VPS。下一步：页面确认计划并开始首任务；用户保留原 Webhook URL，临时改为 Smee 通道，用 `pnpm dlx smee-client@5.0.0 --url "<自己的 Smee 通道 URL>" --target "http://127.0.0.1:4000/webhooks/github"` 保持本地转发（参见 [smee-client 参数实现](https://github.com/probot/smee-client/blob/v5.0.0/bin/smee.js)）；再将样本放到首任务的完整目标路径，普通提交并推送到 main。转发和开始任务需先就绪再 Push；只读核对本机 Delivery/Run 后继续用户回答环节，观察结束后恢复 VPS Webhook。当前尚无这些后续操作的完成证据。
+
+10/29 转发启动排查：用户原命令的 `--path /webhooks/github` 在 Git Bash 下被转换成 `D:/Git/webhooks/github`。已本地复现参数转换；smee-client 5.0.0 将 port 与 path 直接拼接，导致目标 URL 无效，错误发生在建立网络连接之前。改用完整 `--target` 后，已验证 Git Bash 保留该参数且 URL 可解析；实际 Smee 联通及转发仍待用户观察，不把参数校验成功记为转发成功。
+
+随后用户 Push 后报告“已忽略”。本地验证库已收到 main 的真实 Push（after SHA 前缀 `9d210af`），Delivery 为 IGNORED / TARGET_NOT_CHANGED，后台已尝试 1 次且没有取证错误；尚无 Submission/AgentRun。计划已 ACTIVE，首任务 IN_PROGRESS / version 2，目标仍为 `notes/css-transition/01-basics-trigger.md`。只读文件检查发现学习仓库实际文件为 `notes/css-transition/01-basic-trigger.md`，basic 少了一个 s；正确目标文件不存在。下一步由用户将文件改为完整正确路径并普通提交/推送新 Commit；重投原通知不会修正原提交中的路径。本次只定位并记录，未改学习仓库或绕过路径校验；该真实接收记录已证明本地转发和验签可达，完整验收仍未通过。
+
+用户修正路径并 Push 后取证成功（SHA 前缀 `4ed4265`，Delivery PROCESSED），随后观察到今日任务短暂消失再出现。只读核对：Task IN_PROGRESS v2→VERIFYING v3；笔记 Run 执行失败后恢复为 IN_PROGRESS v4。Run 错误为 MODEL_CALL_LIMIT_EXCEEDED；账本两次均为 NOTE_SEMANTICS，第一次 INITIAL、第二次 REPAIR，均 MODEL_OUTPUT_INVALID，每次输出 4096 Token，合计 12173 Token、估算 ¥0.261224。此时尚无正式报告或追问；输出达到上限最初只是截断线索，账本没有 finish_reason，随后通过下面的独立诊断确认原因。
+
+10/29 模型排查与修复（独立诊断，不改写业务账本/终态）：
+
+- [GLM-5.3 官方说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)列出默认 `reasoning_effort=max`。对同一份已取证正文发起一次原配置诊断，HTTP 200、`finish_reason=length`、正文长度 0、输出 4096 Token，确认思考消耗完输出额度而没有完整 JSON。原适配器将其归为普通格式错误，又按同样额度修复，最终耗尽两次调用机会。
+- 新增可选模型快照字段 `reasoningEffort`；R11 启动脚本明确选 low，笔记/追问/回答首次领取时冻结，实际请求发送 `reasoning_effort`。旧 Run 不自动改配置；调用次数、总 Token 和费用额度保持原值。识别 `MODEL_OUTPUT_TRUNCATED` 并保存用量，禁止按相同配置再进行格式修复；即使 SDK 容错解析出了对象也不能接受截断结果。
+- low 的前两次诊断均返回完整 JSON（分别 581/575 输出 Token），但引用校验失败。只记录引用位置与匹配结果后确认：文字存在，模型给出的行号偏移；没有放宽引用校验。笔记、追问、回答适配器升级 v2 提示词，传入 `{ lineNumber, text }`，含空行，两个来源分别编号；旧 v1 Run 继续使用原提示与原输入格式。
+- 最后一次 low + v2 诊断通过：输入 2630、输出 617、共 3247 Token，`finish_reason=stop`，三处引用逐字及行号校验均通过，语义结果 PASSED。四次诊断总计 14448 Token、估算 ¥0.232964（按普通输入/输出价格，含失败调用），单独于原业务 Run 的 ¥0.261224；未保存原始思考内容、未把诊断写成正式报告，也不计作固定模型评测。
+- 工程验证：SDK/执行器等 109 项、R09 集成 35 项、R10 集成 36 项、R11 集成 41 项通过，相关 build/typecheck/lint 通过；覆盖截断保留用量且不重复调用、请求参数透传、旧 v1 兼容及首次配置冻结后环境变化不影响恢复。本地服务已重启。现有失败 Run 保持失败、Task 保持 IN_PROGRESS；下一步由用户对目标笔记作真实修改后普通提交/Push，创建新一轮 Run，再继续观察正式报告、追问、回答与解锁。未更新 VPS。
+
+本轮同时修复今日任务列表遗漏：查询与 HTTP 契约统一使用 READY + CURRENT_TASK_STATES，包含 VERIFYING，继续排除 BLOCKED/PASSED；页面复用“验收中”状态标签，并将列表标题改为“当前任务”。验收中的任务保留查看入口，不开放开始操作；未新增轮询或 SSE。PostgreSQL 回归覆盖 IN_PROGRESS→VERIFYING→NEEDS_EVIDENCE 全程可见、阻塞任务排除及归属隔离；契约/Controller 6 项、仓储集成 1 项通过，API 构建、Web 类型与目标 lint 通过。本地服务已重启加载修改。该修复不代表模型失败已解决或完整闭环完成。
+
+10/29 用户补充 duration/delay 说明并 Push 后，真实提交 `c25ee0806f21f6a24feb1ffa9256841b0bf2323c` 的验收已完成（只读核对，未手工改写状态）：
+
+- Delivery `ad15a07e-d343-11f1-84aa-1bba1e3f66c9` 为 PROCESSED；笔记 Run `32abdfa9-17ef-4109-a461-c0158d8ccd5c` 为 SUCCEEDED，无错误码，冻结 low / note-verification-v2。
+- 正式报告 `9aa5f8bd-5a71-4261-9d10-65824bece4d5`：两个标题、400 字符下限（实测 2245 个非空白字符）及三种触发方式覆盖共 4 项 PASSED，引用校验通过；唯一 FOLLOW_UP_ANSWER 仍待回答，followUp READY。
+- 追问 `cb6073f0-848e-4424-965b-72402cd54bfb` 已持久化，询问基础样式与 hover 中配置 transition 的区别，以及 300ms duration / 150ms delay 和状态变化的关系。仅向用户展示问题，不提供内部 rubric 或代答。
+- 首任务 IN_PROGRESS v4→VERIFYING v5→NEEDS_EVIDENCE v6，表示笔记已通过但尚缺追问回答；第二至第四任务仍 BLOCKED v0。笔记/追问分别一次调用，输出 575/608 Token，合计 6491 Token、估算 ¥0.075588，用量完整、无预算警告。原失败 Run 保持失败。
+- R12 回答表单尚未接入；用户理解当前需通过已有 API 验证后，明确要求“答案你来发吧”。据此由 AI 提供参考答案，用于工程链路观察，不作为用户独立回答、掌握程度或模型准确率评测样本。之后使用当前登录会话提交已有回答 API，继续验证回答报告、Task PASSED 和依赖解锁；当前尚未创建 AnswerSubmission、不标记真实完整闭环通过。用户提出的动态额度优化暂不纳入开发计划。
+
+10/29 用户在已登录的本地页面 Console 执行 `apps/worker/.local/r11-submit-answer.js`（AI 参考答案，命令先存 localStorage，重发复用 requestId），并反馈真实 HTTP 202 / ACCEPTED：
+
+- AnswerSubmission `d37ffd9b-38af-47d4-acad-11563c36955a`，回答 Run `7f55961d-2e1f-4984-9e62-d0d91ebbfc94`，受理时 Task VERIFYING v7。API 使用现有会话与 Origin 校验，没有伪造用户会话或直接写业务数据。
+- 只读核对 Run 已 SUCCEEDED，回答报告 `69820602-1828-4e03-a966-4aaf24c9b77a` 为 PASSED，笔记与回答引用均通过校验；来源仍固定为原追问、原笔记报告及 Commit `c25ee080`。首次模型调用成功，输入 4328、输出 660、合计 4988 Token，估算 ¥0.053104，用量完整且无预算警告。
+- 首任务最终 PASSED v8；第二项「记录 transition 与 transform 的配合」READY v1；第三项仍依赖尚未通过的第二项，第三、四项均 BLOCKED v0。没有自动开始第二项或提前通过其他任务。
+- 本轮成功的笔记验收、追问、回答验收共 3 次真实调用、11479 Token、估算 ¥0.128692；不包含先前失败和独立诊断费用。记录为真实后端业务闭环观察，不作为 AI 验收准确率或用户独立学习成果。
+- 用户随后明确“ok，已观察”，确认首任务通过、第二项可开始及其他仍锁定的页面状态；今日学习排除已通过的首任务属于预期筛选。本地真实业务闭环和本段页面观察完成，无需重复 Push、模型调用或已通过回归。R11 固定评测、累计耗时及单元收尾仍待完成，R12 报告/回答页面尚未接入，未更新 VPS、不提前标记整个 R11 DONE。
+
+### 5.38 R11 固定评测：区分格式、引用与判断正确性
+
+15 份合成 Markdown 材料、16 项预期已固定，分别使用同一 GLM-5.3 low 配置运行 v1/v2 提示词，每份一次、共 30 次真实调用。实测及统计口径见 [R11 固定评测记录](evaluation/r11-fixed-evaluation.md)：v1 结论一致性 14/16、引用可定位 20/21；v2 分别为 15/16、21/21。两版均有一项把含糊表达判为明确错误，保留失败，不将批次完成等同于全部判断正确。按普通输入/输出价格估算两轮合计 ¥0.450940，与真实业务和先前诊断分开。
+
+本段观察/导读目标 15 至 20 分钟，计入 R11 原 5 小时预算；用户已报告累计投入约 3.5 小时，不追加手写。先查看已保存结果即可，不需要重跑付费评测：
+
+```powershell
+pnpm eval:r11 --results
+```
+
+首读两个入口：
+
+1. `apps/worker/scripts/r11-evaluation/cases.ts`：材料、验收要求及预期结果；重点看含糊笔记、易错行号、多标准和部分正确回答。
+2. `apps/worker/scripts/r11-evaluation/evaluate.ts`：`prepareCase` 不泄漏预期，`evaluateCase` 复用正式验收/引用校验，`summarize` 保留失败与费用后统计。链路为“固定样本 → 一次模型判断 → 结构/引用校验 → 与预期比较 → 汇总”，不创建业务 Run 或改变 Task。
+
+CLI `apps/worker/scripts/evaluate-verification.ts` 只负责选版本、串行执行和逐条保存；单元测试验证统计分母、坏引用及未知用量，不需要逐行阅读。以下命令不调用付费模型，也不连接数据库：
+
+```powershell
+pnpm eval:r11
+pnpm exec vitest run apps/worker/test/r11-evaluation.spec.ts --reporter verbose
+```
+
+只有明确执行 `pnpm eval:r11 --run v1` 或 `pnpm eval:r11 --run v2` 才会调用真实模型，默认命令/CI 不调用；本轮已经各完成一次。手动运行会产生新结果文件，不覆盖先前记录；存在不一致时退出码为 1 是评测发现，不代表需要重试。每版最多 15 次、不自动修复；未知用量或已知费用达到 ¥2 时不继续下一条，不能将此停止阈值说成供应商侧硬限额。
+
+本段统计单元用例 9 项、Worker 类型及目标 lint/格式通过。10/29 用户已确认结果观察与代码导读理解，并正确区分业务规则校验和模型判断的固定评测；AI 补充标准 ID、引用核对及预期标签需复核的边界，本段短复述通过。R11 具备单元收尾条件，DONE 随本次本地提交成功生效；M4 阶段记录/W3 独立收尾，R12 页面未开始。
 
 ## 6. 启动应用
 

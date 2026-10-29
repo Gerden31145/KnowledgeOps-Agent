@@ -127,6 +127,18 @@ describe('08-11 workspace repositories against PostgreSQL', () => {
         plan: { id: planId, status: 'ACTIVE' },
         tasks: [{ id: readyTaskId, state: 'READY' }],
       })
+      // Push 后进入验收、报告生成后等待回答：整个过程都应保留今日任务入口。
+      for (const state of ['IN_PROGRESS', 'VERIFYING', 'NEEDS_EVIDENCE'] as const) {
+        await database.task.update({ where: { id: readyTaskId }, data: { state } })
+        const today = await plans.findTodayTasksForUser(userId)
+        expect(today.tasks.map((task) => ({ id: task.id, state: task.state }))).toEqual([
+          { id: readyTaskId, state },
+        ])
+      }
+      await expect(plans.findTodayTasksForUser(randomUUID())).resolves.toEqual({
+        plan: null,
+        tasks: [],
+      })
       await expect(plans.findTaskDetailForUser(readyTaskId, userId)).resolves.toMatchObject({
         id: readyTaskId,
         stage: { id: stageId, plan: { id: planId, status: 'ACTIVE' } },

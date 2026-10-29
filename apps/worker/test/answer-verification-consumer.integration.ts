@@ -102,7 +102,7 @@ async function fixture() {
   })
   const command = {
     requestId: randomUUID(),
-    expectedTaskVersion: 6,
+    expectedTaskVersion: (await f.task()).version,
     answer: '微任务队列需要清空，再执行后续宏任务。',
   }
   const accepted = await new FollowUpAnswerService(database).submit(f.userId, question.id, command)
@@ -195,6 +195,30 @@ afterEach(async () => {
 afterAll(() => database.$disconnect())
 
 describe('R10 answer consumer, durable budget and atomic report', () => {
+  it('freezes reasoning effort at first claim and retains it after a configuration change', async () => {
+    const f = await fixture()
+    const configured = (reasoningEffort: 'low' | 'max') => ({
+      ...environment,
+      NOTE_VERIFICATION_MODEL_JSON: {
+        ...environment.NOTE_VERIFICATION_MODEL_JSON!,
+        reasoningEffort,
+      },
+    })
+    const first = await new AnswerVerificationRunRepository(database, configured('low')).prepare(
+      f.payload,
+    )
+    expect(first.ready).toBe(true)
+    if (!first.ready) throw new Error('expected ready')
+    expect(first.configuration.model.reasoningEffort).toBe('low')
+    const resumed = await new AnswerVerificationRunRepository(database, configured('max')).prepare(
+      f.payload,
+    )
+    expect(resumed).toEqual(first)
+    expect((await f.run()).executionConfiguration).toMatchObject({
+      model: { reasoningEffort: 'low' },
+    })
+  })
+
   it('runs a saved answer through outbox/BullMQ, returns an owner-only report and replays without another call', async () => {
     const f = await fixture()
     const verify = vi
@@ -234,7 +258,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
     expect(await query.submit(f.userId, f.questionId, f.command)).toMatchObject({ runId: f.runId })
     expect(verify).toHaveBeenCalledOnce()
     expect(await database.verificationReport.count({ where: { runId: f.runId } })).toBe(1)
-    expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: 7 })
+    expect(await f.task()).toMatchObject({ state: 'PASSED', version: f.taskVersion + 1 })
   })
 
   it.each(['FAILED', 'INSUFFICIENT_EVIDENCE'] as const)(
@@ -253,7 +277,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       expect(
         answerVerificationReportBodySchema.parse((await f.run()).report!.body).result.outcome,
       ).toBe(outcome)
-      expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: 7 })
+      expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: f.taskVersion + 1 })
     },
   )
 
@@ -284,6 +308,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       report: null,
       modelExecution: { result: { status: 'SUCCEEDED' } },
     })
+    expect(await f.task()).toMatchObject({ state: 'VERIFYING', version: f.taskVersion })
     // 即使队列访问出错，已保存结果的恢复也先在数据库完成。
     await processor(verify).runs.reconcile(100, async () => {
       throw new Error('fixture-redis-unavailable')
@@ -292,6 +317,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       status: 'SUCCEEDED',
     })
     expect(verify).toHaveBeenCalledOnce()
+    expect(await f.task()).toMatchObject({ state: 'PASSED', version: f.taskVersion + 1 })
   })
 
   it('does not complete a concurrent duplicate or reset the first claim budget', async () => {
@@ -336,7 +362,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
         if (change === 'version')
           await database.task.update({
             where: { id: f.taskId },
-            data: { version: 8, state: 'IN_PROGRESS' },
+            data: { version: f.taskVersion + 1, state: 'IN_PROGRESS' },
           })
         if (change === 'cancel')
           await database.agentRun.update({
@@ -346,7 +372,12 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
         if (change === 'new-note') {
           const old = await database.submission.findUniqueOrThrow({ where: { id: f.submissionId } })
           await database.submission.create({
-            data: { ...old, id: randomUUID(), taskVersion: 7, afterCommitSha: 'c'.repeat(40) },
+            data: {
+              ...old,
+              id: randomUUID(),
+              taskVersion: f.taskVersion,
+              afterCommitSha: 'c'.repeat(40),
+            },
           })
         }
         return response(r)
@@ -357,7 +388,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       })
       expect(await f.task()).toMatchObject({
         state: change === 'version' ? 'IN_PROGRESS' : 'NEEDS_EVIDENCE',
-        version: 8,
+        version: f.taskVersion + 1,
       })
     },
   )
@@ -463,7 +494,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       errorCode: 'MODEL_CALL_LIMIT_EXCEEDED',
       modelExecution: { attemptCount: 2 },
     })
-    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: 8 })
+    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: f.taskVersion + 1 })
   })
 
   it('recovers an unfinished claim by timeout without repeating an unknown model call', async () => {
@@ -508,7 +539,7 @@ describe('R10 answer consumer, durable budget and atomic report', () => {
       errorCode: 'ANSWER_QUEUE_FAILED',
       modelExecution: null,
     })
-    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: 8 })
+    expect(await f.task()).toMatchObject({ state: 'NEEDS_EVIDENCE', version: f.taskVersion + 1 })
     expect(verify).not.toHaveBeenCalled()
   })
 })

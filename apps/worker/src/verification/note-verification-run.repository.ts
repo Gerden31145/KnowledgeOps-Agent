@@ -8,9 +8,11 @@ import {
 } from '@knowledgeops/agent-core'
 import {
   isAgentRunTerminalState,
+  isRestorableTaskState,
   NOTE_VERIFICATION_WORKFLOW_VERSION,
   noteVerificationReportBodySchema,
   type NoteVerificationRequestedPayload,
+  type TaskState,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import type { WorkerEnvironment } from '../config/environment.js'
@@ -24,6 +26,12 @@ import {
 import { NoteEvidenceError, parseNoteEvidence } from './parse-note-evidence.js'
 import { canGenerateFollowUp } from './execute-note-verification.js'
 import { validateFollowUpQuestion, FollowUpQuestionError } from './validate-follow-up-question.js'
+import {
+  ensureRequiredFollowUpCriterion,
+  InvalidFollowUpCriterionError,
+} from './ensure-required-follow-up-criterion.js'
+import { collectTaskAssessment, TaskAssessmentError } from './collect-task-assessment.js'
+import { deriveTaskState } from './derive-task-state.exercise.js'
 
 const include = {
   task: {
@@ -59,7 +67,25 @@ export class NoteVerificationRunRepository {
       if (!run) return { ready: false as const, result: ignored(message.runId) }
       if (isAgentRunTerminalState(run.status))
         return { ready: false as const, result: snapshot(run) }
+      const invalid = eligibility(run, this.clock())
+      if (invalid)
+        return { ready: false as const, result: await terminate(tx, run, invalid, this.clock()) }
       if (run.status === 'QUEUED') {
+        // 仅修复还没开始的新一轮验收；冻结的旧配置/账本不能在重试时改变。
+        if (run.executionConfiguration !== null || run.modelExecution !== null)
+          return {
+            ready: false as const,
+            result: await terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock()),
+          }
+        try {
+          await ensureRequiredFollowUpCriterion(tx, run.taskId)
+        } catch (error) {
+          if (!(error instanceof InvalidFollowUpCriterionError)) throw error
+          return {
+            ready: false as const,
+            result: await terminate(tx, run, 'INVALID_EVIDENCE', this.clock()),
+          }
+        }
         const configuration = this.newConfiguration()
         run = await tx.agentRun.update({
           where: { id: run.id },
@@ -73,9 +99,6 @@ export class NoteVerificationRunRepository {
           include,
         })
       }
-      const invalid = eligibility(run, this.clock())
-      if (invalid)
-        return { ready: false as const, result: await terminate(tx, run, invalid, this.clock()) }
       const configuration = noteExecutionConfigurationSchema.safeParse(run.executionConfiguration)
       if (
         !configuration.success ||
@@ -180,17 +203,51 @@ export class NoteVerificationRunRepository {
           warnings: accounting.warnings,
         },
       })
+      const reportId = config.data.followUp?.reportId ?? randomUUID()
+      let taskState: TaskState
+      if (!run.task.criteria.some((criterion) => criterion.type === 'FOLLOW_UP_ANSWER')) {
+        // 指纹已确认材料未变：这是缺少必答标准的冻结旧 Run。
+        // 保留原报告，恢复启动前的稳定状态；下一次新 Push 才补齐要求，不能误判通过。
+        if (!isRestorableTaskState(run.taskStateBeforeRun))
+          return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+        taskState = run.taskStateBeforeRun
+      } else {
+        try {
+          taskState = deriveTaskState(
+            collectTaskAssessment({
+              criteria: run.task.criteria,
+              source: {
+                taskId: run.taskId,
+                submissionId: run.submissionId!,
+                noteRunId: run.id,
+                reportId,
+                ...context.input.note.source,
+              },
+              evidenceMode: run.submission!.evidence!.mode as 'DIFF' | 'SNAPSHOT',
+              noteReport: body,
+            }),
+          )
+        } catch (error) {
+          if (!(error instanceof TaskAssessmentError)) throw error
+          return terminate(tx, run, 'EXECUTION_CONTEXT_CHANGED', this.clock())
+        }
+      }
       if (run.deadlineAt && run.deadlineAt <= this.clock())
         return terminate(tx, run, 'RUN_DEADLINE_EXCEEDED', this.clock())
       const report = await tx.verificationReport.create({
         data: {
-          ...(config.data.followUp ? { id: config.data.followUp.reportId } : {}),
+          id: reportId,
           runId: run.id,
           body: json(body),
         },
       })
       if (question)
         await tx.followUpQuestion.create({ data: { reportId: report.id, body: json(question) } })
+      // 与报告、追问、Run 终态同事务；即使持有行锁，仍明确限定本轮占据的 Task 版本。
+      await tx.task.update({
+        where: { id: run.taskId, state: 'VERIFYING', version: run.task.version },
+        data: { state: taskState, version: { increment: 1 } },
+      })
       await tx.agentRun.update({
         where: { id: run.id },
         data: {
@@ -200,7 +257,7 @@ export class NoteVerificationRunRepository {
           errorCode: null,
         },
       })
-      // 报告、唯一追问与 Run 终态同事务；回答尚未验收，Task 汇总仍留给 R11。
+      // 笔记通过后仍需回答追问；此处不会凭笔记报告将 Task 判为 PASSED。
       return { runId: run.id, status: 'SUCCEEDED', reportId: report.id }
     })
   }
@@ -300,6 +357,7 @@ export class NoteVerificationRunRepository {
         catalogId: model.catalogId,
         provider: 'openai',
         modelName: model.modelName,
+        ...(model.reasoningEffort ? { reasoningEffort: model.reasoningEffort } : {}),
         promptVersion: NOTE_VERIFICATION_PROMPT_VERSION,
         outputSchemaVersion: NOTE_VERIFICATION_OUTPUT_SCHEMA_VERSION,
       },
@@ -309,6 +367,7 @@ export class NoteVerificationRunRepository {
           catalogId: model.catalogId,
           provider: 'openai',
           modelName: model.modelName,
+          ...(model.reasoningEffort ? { reasoningEffort: model.reasoningEffort } : {}),
           promptVersion: FOLLOW_UP_PROMPT_VERSION,
           outputSchemaVersion: FOLLOW_UP_OUTPUT_SCHEMA_VERSION,
         },
