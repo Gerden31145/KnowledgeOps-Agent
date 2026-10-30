@@ -184,7 +184,7 @@ export class FollowUpAnswerService {
     })
   }
 
-  async get(userId: string, answerSubmissionId: string) {
+  async get(userId: string, answerSubmissionId: string, runId?: string) {
     const answer = await this.database.answerSubmission.findFirst({
       where: {
         id: answerSubmissionId,
@@ -192,12 +192,25 @@ export class FollowUpAnswerService {
       },
       include: {
         runs: {
-          where: { retryOfRunId: null },
+          // 保留原入口语义：未指定时读取首次运行；显式选择必须属于这份回答，不回退。
+          where: {
+            kind: 'ANSWER_VERIFICATION',
+            ...(runId ? { id: runId } : { retryOfRunId: null }),
+          },
+          orderBy: [{ expectedTaskVersion: 'desc' }, { queuedAt: 'desc' }, { id: 'desc' }],
+          take: 1,
           select: {
             id: true,
             taskId: true,
             status: true,
             version: true,
+            retryOfRunId: true,
+            retries: {
+              where: { kind: 'ANSWER_VERIFICATION', answerSubmissionId },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              take: 1,
+              select: { id: true },
+            },
             errorCode: true,
             queuedAt: true,
             startedAt: true,
@@ -220,6 +233,8 @@ export class FollowUpAnswerService {
         taskId: run.taskId,
         status: run.status,
         version: run.version,
+        retryOfRunId: run.retryOfRunId,
+        retryRunId: run.retries[0]?.id ?? null,
         errorCode: run.errorCode,
         queuedAt: run.queuedAt.toISOString(),
         startedAt: run.startedAt?.toISOString() ?? null,

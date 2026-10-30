@@ -4,6 +4,18 @@ import { agentRunStateSchema } from '../domain/agent-run-state.js'
 import { answerVerificationResultSchema } from '../domain/answer-verification.js'
 import { followUpQuestionDraftSchema } from '../domain/follow-up-question.js'
 import { noteVerificationReportBodySchema } from './note-verification.js'
+import {
+  retryNoteVerificationInputSchema,
+  retryNoteVerificationResponseSchema,
+} from './note-verification-retry.js'
+
+export const retryAnswerVerificationInputSchema = retryNoteVerificationInputSchema
+export type RetryAnswerVerificationInput = z.infer<typeof retryAnswerVerificationInputSchema>
+export const retryAnswerVerificationResponseSchema = retryNoteVerificationResponseSchema.extend({
+  answerSubmissionId: entityIdSchema,
+})
+export type RetryAnswerVerificationResponse = z.infer<typeof retryAnswerVerificationResponseSchema>
+export const followUpAnswerQuerySchema = z.object({ runId: entityIdSchema.optional() }).strict()
 
 export const answerVerificationReportBodySchema = z
   .object({
@@ -46,6 +58,8 @@ export const followUpAnswerResponseSchema = z
         taskId: entityIdSchema,
         status: agentRunStateSchema,
         version: z.number().int().nonnegative(),
+        retryOfRunId: entityIdSchema.nullable().default(null),
+        retryRunId: entityIdSchema.nullable().default(null),
         errorCode: z.string().max(64).nullable(),
         queuedAt: isoDateTimeSchema,
         startedAt: isoDateTimeSchema.nullable(),

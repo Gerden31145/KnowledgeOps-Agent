@@ -1,9 +1,38 @@
-import type { NoteVerificationRunResponse, NoteRunEvidenceResponse } from '@knowledgeops/contracts'
+import type {
+  NoteVerificationRunResponse,
+  NoteRunEvidenceResponse,
+  TaskDetailResponse,
+} from '@knowledgeops/contracts'
 
 export const taskId = '2359b0ab-c51e-40df-ac45-7e52e79c8380'
 export const runId = 'abfe5ca9-5873-49df-bbf0-f45667a41d55'
 export const otherRunId = '69057518-5456-4e20-a956-1c2c021452f3'
 export const criterionId = 'fedfb2e2-8f0e-4830-8240-f198cecabd95'
+
+export function taskDetail(overrides: Partial<TaskDetailResponse> = {}): TaskDetailResponse {
+  return {
+    id: taskId,
+    title: '理解 CSS transition',
+    description: '说明 duration 和 delay 的区别。',
+    position: 0,
+    type: 'MARKDOWN_NOTE',
+    estimatedMinutes: 30,
+    suggestedSteps: ['阅读并解释示例。'],
+    targetPath: 'notes/transition.md',
+    state: 'IN_PROGRESS',
+    version: 2,
+    prerequisiteTaskIds: [],
+    criteria: [],
+    stage: {
+      id: criterionId,
+      title: 'CSS 基础',
+      position: 0,
+      plan: { id: criterionId, status: 'ACTIVE' },
+    },
+    runs: [],
+    ...overrides,
+  }
+}
 
 export function noteEvidence(
   overrides: Partial<NoteRunEvidenceResponse> = {},
@@ -36,6 +65,8 @@ export function noteRun(
     runId,
     submissionId: taskId,
     status: 'SUCCEEDED',
+    retryOfRunId: null,
+    retryRunId: null,
     version: 2,
     queuedAt: '2026-10-29T00:00:00.000Z',
     startedAt: '2026-10-29T00:00:01.000Z',

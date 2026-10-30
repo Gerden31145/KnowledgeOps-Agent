@@ -44,6 +44,8 @@ export const noteVerificationRunResponseSchema = z
     runId: entityIdSchema,
     taskId: entityIdSchema,
     submissionId: entityIdSchema.nullable(),
+    retryOfRunId: entityIdSchema.nullable().default(null),
+    retryRunId: entityIdSchema.nullable().default(null),
     status: agentRunStateSchema,
     version: z.number().int().nonnegative(),
     queuedAt: isoDateTimeSchema,

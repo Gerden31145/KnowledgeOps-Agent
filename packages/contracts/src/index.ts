@@ -120,6 +120,11 @@ export {
   type SubmitFollowUpAnswerInput,
   type FollowUpAnswerAcceptedResponse,
   type FollowUpAnswerResponse,
+  retryAnswerVerificationInputSchema,
+  retryAnswerVerificationResponseSchema,
+  followUpAnswerQuerySchema,
+  type RetryAnswerVerificationInput,
+  type RetryAnswerVerificationResponse,
 } from './http/follow-up-answer.js'
 export {
   ANSWER_VERIFICATION_WORKFLOW_VERSION,
@@ -195,6 +200,12 @@ export {
   type TodayTasksResponse,
 } from './http/workspace.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'
+export {
+  cancelVerificationRunInputSchema,
+  cancelVerificationRunResponseSchema,
+  type CancelVerificationRunInput,
+  type CancelVerificationRunResponse,
+} from './http/verification-cancel.js'
 export { sessionResponseSchema, type SessionResponse } from './http/session.js'
 export {
   githubIdSchema,
@@ -246,3 +257,9 @@ export {
   serviceNameSchema,
   type ServiceName,
 } from './service-name.js'
+export {
+  retryNoteVerificationInputSchema,
+  retryNoteVerificationResponseSchema,
+  type RetryNoteVerificationInput,
+  type RetryNoteVerificationResponse,
+} from './http/note-verification-retry.js'

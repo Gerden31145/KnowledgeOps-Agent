@@ -11,7 +11,7 @@ export const knowledgeOpsQueryKeys = {
     ['knowledgeops', 'tasks', taskId, 'note-verification-runs', runId] as const,
   noteRunEvidence: (taskId: string, runId: string) =>
     ['knowledgeops', 'tasks', taskId, 'note-verification-runs', runId, 'evidence'] as const,
-  followUpAnswer: (taskId: string, questionId: string, answerId: string) =>
+  followUpAnswer: (taskId: string, questionId: string, answerId: string, runId?: string | null) =>
     [
       'knowledgeops',
       'tasks',
@@ -20,5 +20,6 @@ export const knowledgeOpsQueryKeys = {
       questionId,
       'answers',
       answerId,
+      runId ?? 'initial',
     ] as const,
 }

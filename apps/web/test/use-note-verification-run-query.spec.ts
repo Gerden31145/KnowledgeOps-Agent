@@ -23,6 +23,7 @@ vi.mock('@tanstack/vue-query', async (original) => {
   const library = await original<typeof import('@tanstack/vue-query')>()
   return {
     ...library,
+    useQueryClient: () => ports.client,
     useQuery: (options: Parameters<typeof library.useQuery>[0]) =>
       library.useQuery(options, ports.client),
   }
@@ -154,6 +155,64 @@ describe('Note report query isolation', () => {
       expect(query.data.value).toBeUndefined()
     },
   )
+
+  it('isolates two Runs of the same saved answer and rejects a late response from the previous Run', async () => {
+    let finish!: (value: ReturnType<typeof answerResponse>) => void
+    ports.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const selected = ref<string | null>(answerResponse().run.runId)
+    const query = scope.run(() =>
+      useFollowUpAnswerQuery(taskId, questionId, runId, answerId, selected),
+    )!
+    const signal = ports.read.mock.calls[0]![1] as AbortSignal
+    const newer = answerResponse({ report: null })
+    newer.run = {
+      ...newer.run,
+      runId: otherRunId,
+      status: 'QUEUED',
+      version: 0,
+      retryOfRunId: selected.value,
+    }
+    ports.read.mockResolvedValueOnce(newer)
+    selected.value = otherRunId
+    await vi.waitFor(() => expect(query.data.value?.run.runId).toBe(otherRunId))
+    expect(signal.aborted).toBe(true)
+    expect(ports.read.mock.calls[1]![2]).toBe(otherRunId)
+    finish(answerResponse())
+    await nextTick()
+    expect(query.data.value?.run.status).toBe('QUEUED')
+    expect(query.data.value?.report).toBeNull()
+  })
+
+  it('does not fall back to the initial answer Run when an explicit Run differs', async () => {
+    ports.read.mockResolvedValue(answerResponse())
+    const query = scope.run(() =>
+      useFollowUpAnswerQuery(taskId, questionId, runId, answerId, otherRunId),
+    )!
+    await vi.waitFor(() => expect(query.isError.value).toBe(true))
+    expect(query.data.value).toBeUndefined()
+  })
+
+  it('refreshes the successor link while keeping the same terminal Run selected', async () => {
+    const saved = answerResponse({ report: null })
+    saved.run.status = 'FAILED'
+    ports.read.mockResolvedValue(saved)
+    const query = scope.run(() =>
+      useFollowUpAnswerQuery(taskId, questionId, runId, answerId, saved.run.runId),
+    )!
+    await vi.waitFor(() => expect(query.isSuccess.value).toBe(true))
+    ports.read.mockResolvedValue({ ...saved, run: { ...saved.run, retryRunId: otherRunId } })
+    await query.refetch()
+    expect(query.data.value?.run).toMatchObject({
+      runId: saved.run.runId,
+      status: 'FAILED',
+      retryRunId: otherRunId,
+    })
+  })
 
   it('does not read an answer until there is a saved answer id', async () => {
     const selected = ref<string | null>(null)

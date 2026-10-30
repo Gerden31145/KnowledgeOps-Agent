@@ -46,6 +46,15 @@ import {
   type FollowUpAnswerAcceptedResponse,
   type FollowUpAnswerResponse,
   type SubmitFollowUpAnswerInput,
+  cancelVerificationRunResponseSchema,
+  type CancelVerificationRunInput,
+  type CancelVerificationRunResponse,
+  retryNoteVerificationResponseSchema,
+  type RetryNoteVerificationInput,
+  type RetryNoteVerificationResponse,
+  retryAnswerVerificationResponseSchema,
+  type RetryAnswerVerificationInput,
+  type RetryAnswerVerificationResponse,
 } from '@knowledgeops/contracts'
 import { z, type ZodType } from 'zod'
 
@@ -63,6 +72,19 @@ export class KnowledgeOpsApiError extends Error {
 }
 
 export interface KnowledgeOpsApi {
+  retryAnswerVerification(
+    answerSubmissionId: string,
+    runId: string,
+    input: RetryAnswerVerificationInput,
+  ): Promise<RetryAnswerVerificationResponse>
+  retryNoteVerification(
+    runId: string,
+    input: RetryNoteVerificationInput,
+  ): Promise<RetryNoteVerificationResponse>
+  cancelVerificationRun(
+    runId: string,
+    input: CancelVerificationRunInput,
+  ): Promise<CancelVerificationRunResponse>
   getSession(): Promise<SessionResponse>
   logout(): Promise<null>
   getRepositoryBinding(signal?: AbortSignal): Promise<RepositoryBindingResponse>
@@ -110,12 +132,37 @@ export interface KnowledgeOpsApi {
   getFollowUpAnswer(
     answerSubmissionId: string,
     signal?: AbortSignal,
+    runId?: string,
   ): Promise<FollowUpAnswerResponse>
   startTask(taskId: string, input: StartTaskInput): Promise<StartTaskResponse>
 }
 
 export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   return {
+    retryAnswerVerification: (answerId, runId, input) =>
+      request(
+        baseUrl,
+        `/answer-submissions/${encodeURIComponent(answerId)}/runs/${encodeURIComponent(runId)}/retry`,
+        retryAnswerVerificationResponseSchema,
+        { ...jsonRequest('POST', input), signal: repositorySignal() },
+      ),
+    retryNoteVerification: (runId, input) =>
+      request(
+        baseUrl,
+        `/agent-runs/${encodeURIComponent(runId)}/retry`,
+        retryNoteVerificationResponseSchema,
+        { ...jsonRequest('POST', input), signal: repositorySignal() },
+      ),
+    cancelVerificationRun: (runId, input) =>
+      request(
+        baseUrl,
+        `/agent-runs/${encodeURIComponent(runId)}/cancel`,
+        cancelVerificationRunResponseSchema,
+        {
+          ...jsonRequest('POST', input),
+          signal: repositorySignal(),
+        },
+      ),
     submitFollowUpAnswer: (questionId, input) =>
       request(
         baseUrl,
@@ -123,10 +170,10 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         followUpAnswerAcceptedResponseSchema,
         { ...jsonRequest('POST', input), signal: AbortSignal.timeout(30_000) },
       ),
-    getFollowUpAnswer: (id, signal) =>
+    getFollowUpAnswer: (id, signal, runId) =>
       request(
         baseUrl,
-        `/answer-submissions/${encodeURIComponent(id)}`,
+        `/answer-submissions/${encodeURIComponent(id)}${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`,
         followUpAnswerResponseSchema,
         { signal: repositorySignal(signal) },
       ),

@@ -1,9 +1,74 @@
 import { createKnowledgeOpsApi, KnowledgeOpsApiError } from '../app/lib/knowledge-ops-api.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { noteRun, noteEvidence, runId } from './fixtures/note-verification'
+import { noteRun, noteEvidence, runId, taskId } from './fixtures/note-verification'
 import { answerResponse, answerId, questionId, receipt } from './fixtures/follow-up-answer'
 
 describe('KnowledgeOps API client', () => {
+  it('retries a saved answer without resubmitting content and reads an explicitly selected Run', async () => {
+    const result = { ...receipt(), retryOfRunId: runId }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(result, { status: 202 }))
+      .mockResolvedValueOnce(Response.json(answerResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createKnowledgeOpsApi('https://knowledgeops.example/api')
+    const input = { expectedRunVersion: 1, expectedTaskVersion: 9 }
+    expect(await api.retryAnswerVerification(answerId, runId, input)).toEqual(result)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url.pathname).toBe(`/api/answer-submissions/${answerId}/runs/${runId}/retry`)
+    expect(init).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      signal: expect.any(AbortSignal),
+    })
+    expect(JSON.parse(init.body)).toEqual(input)
+    await api.getFollowUpAnswer(answerId, undefined, result.runId)
+    expect(fetchMock.mock.calls[1]![0].searchParams.get('runId')).toBe(result.runId)
+  })
+  it('requests a linked retry with observed versions and parses its immutable source identity', async () => {
+    const result = {
+      status: 'ACCEPTED',
+      runId: taskId,
+      retryOfRunId: runId,
+      taskId,
+      taskVersion: 8,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(result, { status: 202 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const input = { expectedRunVersion: 2, expectedTaskVersion: 7 }
+    expect(
+      await createKnowledgeOpsApi('https://knowledgeops.example/api').retryNoteVerification(
+        runId,
+        input,
+      ),
+    ).toEqual(result)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url.pathname).toBe(`/api/agent-runs/${runId}/retry`)
+    expect(init).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      signal: expect.any(AbortSignal),
+    })
+    expect(JSON.parse(init.body)).toEqual(input)
+  })
+  it('cancels with only the selected Run version and accepts a terminal race response', async () => {
+    const receipt = { runId, taskId, status: 'SUCCEEDED', version: 3 }
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(receipt, { status: 202 }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(
+      await createKnowledgeOpsApi('https://knowledgeops.example/api').cancelVerificationRun(runId, {
+        expectedRunVersion: 1,
+      }),
+    ).toEqual(receipt)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url.pathname).toBe(`/api/agent-runs/${runId}/cancel`)
+    expect(init).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      signal: expect.any(AbortSignal),
+    })
+    expect(JSON.parse(init.body)).toEqual({ expectedRunVersion: 1 })
+  })
   it('submits a stable answer command and reads its saved result using authenticated bounded requests', async () => {
     const command = { requestId: runId, expectedTaskVersion: 5, answer: '我的答案' }
     const fetchMock = vi

@@ -32,6 +32,8 @@ export function answerResponse(
       taskId,
       status: 'SUCCEEDED',
       version: 2,
+      retryOfRunId: null,
+      retryRunId: null,
       errorCode: null,
       queuedAt: '2026-10-29T00:00:00.000Z',
       startedAt: '2026-10-29T00:00:01.000Z',

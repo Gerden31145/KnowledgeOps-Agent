@@ -88,6 +88,12 @@ export class NoteVerificationQueryService {
         task: { stage: { plan: { goal: { userId } } } },
       },
       include: {
+        retries: {
+          where: { kind: 'NOTE_VERIFICATION' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: { id: true },
+        },
         report: {
           include: {
             followUpQuestion: {
@@ -112,6 +118,8 @@ export class NoteVerificationQueryService {
       runId: run.id,
       taskId: run.taskId,
       submissionId: run.submissionId,
+      retryOfRunId: run.retryOfRunId,
+      retryRunId: run.retries[0]?.id ?? null,
       status: run.status,
       version: run.version,
       queuedAt: run.queuedAt.toISOString(),

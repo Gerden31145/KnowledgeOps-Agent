@@ -7,6 +7,7 @@ import { definePageMeta, useHead, useRoute } from '#imports'
 import { useKnowledgeOpsApi } from '../../../composables/use-knowledge-ops-api'
 import { useTaskQuery } from '../../../composables/use-workspace-queries'
 import { knowledgeOpsQueryKeys } from '../../../lib/query-keys'
+import { isTransientReadError } from '../../../lib/verification-polling'
 
 definePageMeta({ layout: 'workspace' })
 useHead({ title: '任务详情 · KnowledgeOps Agent' })
@@ -87,14 +88,23 @@ async function startTask() {
     </NuxtLink>
 
     <AsyncStatePanel
-      v-if="task.isPending.value"
+      v-if="task.isPaused.value && !task.data.value"
+      class="mt-8"
+      title="网络离线，任务同步已暂停"
+      description="恢复网络后会重新读取任务及运行记录。"
+      tone="warning"
+    />
+    <AsyncStatePanel
+      v-else-if="task.isPending.value"
       class="mt-8"
       title="正在读取任务"
       description="任务状态与验收信息来自服务端。"
     />
 
     <AsyncStatePanel
-      v-else-if="task.isError.value"
+      v-else-if="
+        task.isError.value && (!task.data.value || !isTransientReadError(task.error.value))
+      "
       class="mt-8"
       title="任务读取失败"
       :description="task.error.value?.message ?? '请检查网络或 API 服务。'"
@@ -112,6 +122,17 @@ async function startTask() {
     </AsyncStatePanel>
 
     <article v-else-if="task.data.value" class="mt-8">
+      <p
+        v-if="task.isPaused.value || task.isError.value"
+        class="mb-8 border border-warning/60 bg-surface-soft p-6 leading-7 text-body"
+        role="status"
+      >
+        {{
+          task.isPaused.value
+            ? '网络离线，任务同步已暂停。当前展示上次读取的内容，联网后会重新同步。'
+            : '任务更新失败，当前展示上次读取的内容。可点击「更新运行记录」重试；后台验收不受影响。'
+        }}
+      </p>
       <header
         class="grid gap-8 border-b border-hairline pb-10 lg:grid-cols-[1fr_auto] lg:items-end"
       >
@@ -180,12 +201,37 @@ async function startTask() {
           </section>
 
           <section aria-labelledby="runs-title">
-            <h2
-              id="runs-title"
-              class="font-display text-3xl font-normal tracking-display uppercase"
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <h2
+                id="runs-title"
+                class="font-display text-3xl font-normal tracking-display uppercase"
+              >
+                历次运行
+              </h2>
+              <button
+                type="button"
+                class="min-h-11 px-3 text-sm text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                :disabled="task.isFetching.value || task.isPaused.value"
+                @click="task.refetch()"
+              >
+                更新运行记录
+              </button>
+            </div>
+            <NuxtLink
+              v-if="route.query.runId !== undefined"
+              class="mt-3 inline-flex min-h-11 items-center text-sm text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+              :to="{
+                path: route.path,
+                query: {
+                  ...route.query,
+                  runId: undefined,
+                  answerId: undefined,
+                  answerRunId: undefined,
+                },
+                hash: '#note-report',
+              }"
+              >跟随最新笔记运行</NuxtLink
             >
-              历次运行
-            </h2>
             <p v-if="task.data.value.runs.length === 0" class="mt-6 text-muted">
               尚未产生验收运行。将目标笔记推送到绑定仓库后，可在这里查看记录。
             </p>
@@ -200,7 +246,12 @@ async function startTask() {
                   class="inline-flex min-h-11 items-center text-link underline underline-offset-4 aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
                   :to="{
                     path: route.path,
-                    query: { ...route.query, runId: run.id, answerId: undefined },
+                    query: {
+                      ...route.query,
+                      runId: run.id,
+                      answerId: undefined,
+                      answerRunId: undefined,
+                    },
                     hash: '#note-report',
                   }"
                   :aria-current="selectedRunId === run.id ? 'true' : undefined"

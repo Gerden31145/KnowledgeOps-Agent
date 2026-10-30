@@ -1319,6 +1319,155 @@ pnpm exec vitest run apps/web/test/use-follow-up-answer.spec.ts --reporter verbo
 
 前端相关 69 项及回答 API 集成 18 项通过，构建/类型/目标 lint/格式检查通过。合成浏览器验证提交防重、响应丢失/刷新、409、历史查询、请求错误、转义与切换隔离；桌面和 390px 手机无横向溢出，44px 控件、键盘与焦点检查通过。真实数据仅只读确认已有回答和来源，没有新提交或付费模型调用；未更新 VPS。用户随后确认导读理解，并正确复述从 sessionStorage 恢复原命令、后端查询已有回答/Run 避免重复创建；AI 补充原版本字段、复合键及内容核对，保留原答与补充的区别。用户追问并理解 questionId 的持久化来源及传递链路后，明确“本次耗时15分钟，已观察”，本段学习记录收尾。R12 DONE 随本次本地提交成功生效；固定证据段约 30 分钟，首段未报，不推算精确总时长。持续恢复、取消/关联重试及已知离线暂停仍留 R15，本轮不重跑已通过检查。
 
+### 5.42 R15 首段：已选中验收 Run 的自动更新
+
+从 R12 的手动读取进入持续同步：笔记报告与回答验收的已选中 Run 在非终态时每 2 秒 GET，进入终态停止轮询，并刷新 Task、今日任务和已知计划。Query 使用浏览器在线/离线通知暂停与恢复，隐藏标签页不持续轮询；联网或回到前台会重新校准。缓存可以保留旧业务快照，页面优先展示暂停/读取错误提示，连接变化不写 Run/Task 状态。
+
+本段复用原查询、缓存键、AbortSignal 与 C2 已学过的版本/终态原则，无新 SSE 或手写。当前只跟踪已选中的 Run，新 Push 的运行发现、取消/关联重试和整体操作回归仍待 R15 后续。
+
+先运行无需数据库或模型的观察用例：
+
+```bash
+pnpm exec vitest run apps/web/test/verification-polling.spec.ts --reporter verbose
+```
+
+重点观察运行中 → 离线暂停 → 后台完成 → 联网读回结果 → 停止轮询；再看终态刷新 Task，以及成功执行但回答结论 FAILED 的区别。首读 `apps/web/app/composables/use-workspace-queries.ts` 的轮询配置和 `refreshTaskOnSettled`，再读 `NoteVerificationPanel.vue` 的 isPaused/isError 分支；`verification-polling.ts` 仅决定继续读取和版本保护，`FollowUpAnswerPanel.vue` 同样接入暂停提示。
+
+新增 16 项、相关回归共 85 项及 Web 类型/目标 lint/格式通过。隔离浏览器使用合成响应和在线/离线通知验证自动读取、暂停、重连、Task 刷新、终态停止及回答 POST 次数不变；桌面/390px 手机无横向溢出，既有控件保持 44px 与焦点样式。仅为 UI 检查启动了 Nuxt Web 3000，日志在忽略的 `apps/worker/.local/r15-web.log`；本轮未启动真实 API/Worker、写入数据库或调用模型。真实产品观察仍需原本地完整服务运行，不将合成检查当作真实验收。
+
+用户已完成 16 项定向用例观察、导读理解确认与短复述，报告本段投入约 10 分钟，计入 R15 原 3 小时预算；不重复运行已观察检查。复述正确串起联网重读、终态停轮询与 Task 刷新，AI 补充同步状态与后台 Run 生命周期独立。首段学习收尾，R15 回到 WORKING；下一小段补齐新 Push 后任务快照与运行列表更新、发现新 Run，显式选中的历史 Run 保持不变。新 Run 发现、取消/关联重试与整体回归尚未完成，M5 仍 VERIFYING，VPS 未更新。
+
+### 5.43 R15：从任务快照发现新验收 Run
+
+本段只增加“发现运行”：当前活动计划中已开始、正在验收或等待补充的 Task 每 5 秒 GET tasks/:id，刷新其运行列表。Task PASSED、READY、BLOCKED 或计划非 ACTIVE 时停止定时发现；已选中 Run 的每 2 秒结果查询继续由 5.42 负责。任务通过前，即使上一次 Run 已结束，也可能收到下一次 Push，因此两层查询的停止条件不同。
+
+无需数据库或模型调用的观察命令：
+
+```bash
+pnpm exec vitest run apps/web/test/task-run-discovery.spec.ts --reporter verbose
+```
+
+预期 16 项通过，重点观察首次空列表 → 出现新 Run、旧 Run 已结束仍发现新运行，以及离线恢复与 Task 通过后停止。首读：
+
+1. `apps/web/app/composables/use-workspace-queries.ts` 的 useTaskQuery：请求身份、Task 版本保护、定时发现和生命周期；策略在 verification-polling.ts 的 taskDiscoveryPollInterval。
+2. `apps/web/app/pages/app/tasks/[taskId].vue` 的 selectedRunId 与任务提示/运行列表：无 URL runId 自动跟随最新，有 ID 保持历史选择；“跟随最新笔记运行”清除 runId/answerId。临时 Task 查询失败保留上次数据及组件，401/404 等错误隐藏内容。
+
+已有完整本地服务运行时，可打开当前任务页并保持 URL 不带 runId；真实 Push 经后端取证创建 Run 后，列表应自动出现并开始读报告。指定历史 runId 后新运行仍进入列表，当前报告保持原选择。此操作可能触发既有模型验收，不作为本段必要观察；只运行上述合成用例即可，不需为学习再次 Push。
+
+新增 16 项、相关回归共 101 项及 Web 类型/目标 lint/格式检查通过。隔离浏览器已验证发现与选择、临时失败保留未提交草稿、权限失败隐藏、非法 URL 不回退，桌面/390px 手机、44px 控件、键盘操作与焦点及文本对比度检查通过。初次浏览器草稿场景因夹具另有活动 Run 而正确隐藏表单，修正为无活动运行的合法夹具后通过，产品条件未改变。仅复用 Web 3000，未启动 API/Worker、写库或调用模型；VPS 未更新。
+
+用户已确认本段导读理解、完成 16 项用例观察并报告约 15 分钟；复述正确说明 Task 查询发现新 Run 和 URL 显式指定历史运行，末句“不会切换到A”由 AI 按上下文纠正为“继续显示 A，不自动切换到 B”。短复述通过，不追加练习或重跑用例。本段学习收尾，与首段约 10 分钟合计 R15 已报约 25 分钟，计入原 3 小时预算；下一小段为验收 Run 取消，关联重试与整体回归随后推进。R15 回到 WORKING、M5 保持 VERIFYING，整个单元尚未完成或提交。
+
+### 5.44 R15：请求取消与后台确认
+
+笔记运行与回答验收运行现在共享“取消本次验收”入口。POST `/agent-runs/:runId/cancel` 携带 `expectedRunVersion`；API 验证登录、Origin 和归属，并按 User → Task → Run 加锁，仅将活动 Run 改为 CANCEL_REQUESTED、版本加一。重复请求或已经结束的 Run 返回已有状态；活动 Run 版本冲突返回 409。接口不提前恢复 Task，也不删除队列任务。
+
+复用既有 Worker 的 prepare/finalize/reconcile 取消检查：收束为 CANCELLED，并只恢复仍处于 VERIFYING 且版本属于该 Run 的 Task。前端继续 GET，读到真实终态再停止轮询；“请求已保存”与“取消已完成”分开。已经发出的模型请求可能继续返回，但不能发布成报告；本段不承诺上游立即中断或退费，也未扩展取消期间的用量对账。
+
+先观察本地数据库集成用例，不需启动真实 Worker 或调用付费模型：
+
+```bash
+pnpm test:integration:r15 --reporter verbose
+```
+
+预期 9 项通过，重点看排队取消后不调用模型、执行中取消后拒绝迟到报告，以及成功先落库时保留成功结果。测试只创建随机夹具、停放其 Outbox 并限制恢复扫描范围，结束后清理自身数据，需要本地 PostgreSQL 可用。前端补充观察命令（不需要数据库）：
+
+```bash
+pnpm exec vitest run apps/web/test/use-cancel-verification-run.spec.ts --reporter verbose
+```
+
+预期 9 项通过：重复点击、响应丢失后的显式再试、409 后读取新版、成功先完成、已取消/终态、切换后迟到成功/错误、身份不匹配、受理后 GET 失败。
+
+首读三个入口，目标 20 至 30 分钟计入 R15 原预算，无新手写：
+
+1. `apps/web/app/composables/use-cancel-verification-run.ts`：点击 → 发送当前 Run 版本 → 保存受理提示 → 刷新原 Task 及其报告查询；不直接写成 CANCELLED。
+2. `apps/api/src/verification/cancel-verification-run.service.ts`：归属、加锁、版本检查与幂等快照；Controller 负责路由与输入校验。
+3. `apps/worker/src/verification/verification-run-lifecycle.ts` 的 `terminateVerificationRun`：沿用已有终止实现，将 Run 终态与匹配版本的 Task 恢复放进同一事务；调用位置在笔记/回答 Run repository。
+
+新增 19 项测试，相关定向回归共 88 项通过；API/Web 类型、API 构建、目标 lint/格式检查通过。API 测试类型检查允许跨 workspace 引用 Worker，生产构建仍限于 API src。浏览器使用合成响应验证笔记和回答取消、网络错误后再次操作、等待确认与取消后 Task 恢复；桌面/390px 手机无横向溢出，新增按钮 44px，Tab/Enter 与 2px 焦点可见，沿用白字/黑底及既有提示色。首次集成测试因夹具缺 githubLogin 被鉴权拒绝，补齐合法登录夹具后通过，未放宽鉴权。
+
+本轮启动了已有 WSL PostgreSQL/Redis 并通过 infra 检查，复用 Nuxt Web；真实 API 仅由集成测试在临时端口启动并关闭，没有启动常驻 Worker、调用真实模型或更新 VPS。当前为本段 WALKTHROUGH，用户观察/理解/复述及耗时尚未报告；R15 已报约 25 分钟保持不变，关联重试和整体操作回归仍在后续，未提交整个单元。
+
+用户已完成三入口导读并确认“ok，明白了”，本段进入 RECALL；待简短复述及用例观察、耗时补记。此前工程证据保持有效，不重跑已通过检查，不将理解确认替代用户观察或复述记录。
+
+用户随后明确“已观察，约15分钟”，补齐本段用例观察及耗时；R15 已报累计约 40 分钟，计入原 3 小时预算。当前只待简短复述，保持 RECALL，不重复观察或耗时确认；关联重试与整体回归仍未完成。
+
+用户随后正确复述 API 写取消意图、Worker 在执行前/落库前/恢复中检查并终止的主链路。AI 纠正请求只带 runId 与 expectedRunVersion、API 不以 Task 非终态作为取消条件，补充 Task 恢复必须匹配 VERIFYING/版本、迟到模型结果不发布，以及前端读回终态后停止轮询并刷新任务；补充不冒记为用户独立答出。本段短复述收尾，R15 回到 WORKING 继续关联重试，已报累计约 40 分钟，未完成或提交整个单元。
+
+### 5.45 R15：笔记验收的关联重试
+
+本小段仅接入笔记验收重试，复用已保存的 Submission/固定 Commit 证据。失败、超时或已取消的最新笔记运行可请求 POST `/agent-runs/:runId/retry`，携带 `expectedRunVersion` 与 `expectedTaskVersion`。API 按 User → Task → Run 加锁，先找既有直接后继，再复核活动绑定、目标路径、最新提交与运行、Task 稳定状态/版本及无其他活动运行；将新 Run、Task VERIFYING 新版本和原有 NOTE_VERIFICATION_REQUESTED Outbox 放进同一事务。无需新迁移、队列或 Worker 业务实现。
+
+同一旧 Run 只创建一个直接后继，重复点击/刷新/响应丢失后重发返回它；再次失败应从后继发起下一次重试。新 Run 的 `retryOfRunId` 保存来源，原运行查询通过反向关联返回 `retryRunId`，不改写原终态、错误或报告。新 Run 在首次领取时取得新的执行配置和预算；复用固定证据不等于读取 GitHub 最新文件，修订正文仍需 Push。
+
+先观察本地数据库用例，使用随机夹具和合成模型，不需启动常驻 Worker：
+
+```bash
+pnpm test:integration:r15 apps/api/test/retry-note-verification.integration.ts --reporter verbose
+```
+
+预期 20 项通过，重点看并发点击/刷新只得到一个后继、Outbox 失败整组回滚、旧任务/绑定/提交拒绝，以及重试经原 Processor 成功保存报告。全组 `pnpm test:integration:r15` 现为 29 项，包含此前取消的 9 项；已观察取消部分不要求再次学习。前端无需数据库的观察命令：
+
+```bash
+pnpm exec vitest run apps/web/test/use-retry-note-verification.spec.ts --reporter verbose
+```
+
+预期 18 项通过。首读两处，目标 20 至 30 分钟计入 R15 原 3 小时预算，无手写：
+
+1. `apps/api/src/verification/retry-note-verification.service.ts`：同来源的幂等返回、创建资格和原子写入；Controller/契约只提供路由与数据校验。
+2. `apps/web/app/composables/use-retry-note-verification.ts`：发送所见版本、防重复点击、保留响应不确定性、刷新查询、切换后忽略迟到响应；GET 找到后继即可消除不确定提示。
+
+`NoteVerificationRetry.vue` 接到原笔记报告面板：提供重试按钮与“查看重试运行/查看重试来源”，重试后保留显式历史选择，由用户点击链接查看新 Run。新 Run 的轮询和报告读取复用前两段。运行 SUCCEEDED 但报告标准未通过时不能用执行重试刷结果；回答验收的关联重试及同一答案的多 Run 选择留下一小段，尚未接入。
+
+新增 39 项（数据库 20、前端命令 18、API 客户端 1），定向回归合计 127 项通过；API/Web 类型、API 构建、目标 lint/格式通过。浏览器合成检查覆盖响应丢失后的 GET 找回、刷新不自动 POST、新旧链接与显式选择、历史运行隐藏重试；桌面/390px 手机无横向溢出，按钮/链接 44px、键盘 Enter 与 2px 焦点可见，沿用主题白字/黑底、提示色与链接色。没有真实模型调用、常驻 Worker 启动或 VPS 更新；数据库测试仅处理随机夹具，Outbox 停放到未来并清理自身数据。
+
+本段进入 WALKTHROUGH，用户观察/理解/复述和实际耗时未报告，R15 已报约 40 分钟保持不变。整个 R15/M5 尚未完成，未创建本地收尾提交。
+
+2026-10-30 导读理解更新：用户明确“ok，明白了”，确认本段固定证据重试、来源防重、事务资格检查及前端回执/GET 恢复入口的导读理解。当前进入 RECALL，待响应丢失场景的简短复述；用户用例观察与本段实际耗时仍待反馈，R15 已报约 40 分钟保持不变。本轮只更新学习记录，不新增产品改动、测试或提交。
+
+用户随后正确复述：再次重试时后端先查已有后继并返回；刷新后前端通过 A 的关联找到 B。本段短复述完成，进入 DOCUMENTING；用例观察和实际耗时仍待用户补记，累计约 40 分钟保持不变。不要求重跑已经观察过的用例，本轮没有新增工程验证或提交。
+
+用户补报“已观察，耗时15分钟”：本段观察与约 15 分钟学习投入已记录，R15 累计约 55 分钟。本段工程、观察、导读与复述收尾，回到 WORKING，下一小段为回答关联重试及同一答案的运行选择。本轮只更新记录，不重跑测试；整个 R15/M5 尚未完成或提交。
+
+### 5.46 R15：回答验收关联重试与运行选择
+
+本段复用已保存的 AnswerSubmission 和原追问/笔记证据，为失败、超时或取消的最新回答运行创建后继。POST `/answer-submissions/:answerId/runs/:runId/retry` 只接收所见 Run/Task 版本；先鉴权并找已有后继，再核对最新业务上下文，原子保存新 Run、Task 新版本和既有类型 Outbox。重复操作返回原后继，旧运行、答案和报告保持不变。原 Worker 首次领取时为新 Run 单独取得预算，执行与 Finalizer 不新增一套实现。
+
+先观察数据库用例（真实本地 PostgreSQL，模型使用合成响应，无模型费用）：
+
+```powershell
+pnpm test:integration:r15 apps/api/test/retry-answer-verification.integration.ts --reporter verbose
+```
+
+预期 23 项通过。重点观察：同一答案多 Run、并发只有一个后继、原 Processor 可生成新报告、旧记录不变、Outbox 写失败整组回滚、新答案/新笔记使旧重试失效，以及指定其他回答/笔记 Run 时返回 404。
+
+前端定向观察命令（无需数据库）：
+
+```powershell
+pnpm exec vitest run apps/web/test/use-retry-answer-verification.spec.ts --reporter verbose
+```
+
+预期 19 项通过，覆盖所见版本、防重复点击、响应不确定与 GET 找回、旧上下文拒绝和离开后的迟到响应。已经观察过的旧取消/笔记重试无需重复学习。
+
+首读两处，目标 20 至 30 分钟计入 R15 原 3 小时预算，无新手写：
+
+1. `apps/api/src/verification/retry-answer-verification.service.ts`：为什么复用答案却创建新的 Run，如何保护原追问和最新任务资格。
+2. `apps/web/app/composables/use-workspace-queries.ts` 的 `useFollowUpAnswerQuery`：answerId 与 Run 身份各自的职责，如何隔离新旧请求、缓存和报告。
+
+配套的 `use-retry-answer-verification.ts` 沿用笔记重试的回执/GET 恢复方式；`AnswerVerificationRetry.vue` 提供来源/后继链接。`FollowUpAnswerPanel.vue` 从 URL 的 answerRunId 选中运行，切换答案时清除它。GET `/answer-submissions/:id?runId=...` 严格查该回答下的运行，不指定则保留首次运行；切换笔记也清除答案和答案运行参数。页面刷新只读取，重试须用户显式点击；内容验收未通过而 Run 已成功时，应修改并提交新答案。
+
+新增 46 项；R15 数据库集成 52 项、原回答提交 18 项、Web 与 API 装配 168 项通过，contracts 构建、API/Web 类型、API 构建和目标 lint 通过。首次集成修正了夹具清理的外键顺序，仅清理本次已核对的随机记录后重跑通过。隔离浏览器验证响应丢失找回、旧/新运行、完整刷新保持选择且不 POST、重新选答案清除 Run、错配安全错误；1280px/390px 无横向溢出、44px 操作区、键盘 Enter/2px 焦点及最低约 7.37:1 文字对比度通过。截图调用一度无响应，后续使用 DOM/可访问性快照验证，没有截图产物；无付费模型调用、常驻 Worker 启动或 VPS 更新。
+
+本段进入 WALKTHROUGH，用户观察/导读理解/复述和实际耗时待反馈；R15 已报约 55 分钟保持不变，整个 R15/M5 尚未完成或提交。
+
+用户在导读后明确“ok，我明白了。已观察”：本段用例观察与理解确认已记录，进入 RECALL，待简短链路复述和本段耗时。累计仍按此前实报约 55 分钟，不重跑已观察用例，不提前标记整个 R15/M5 完成或提交。
+
+短复述更新：用户正确说明复用笔记/答案、新建 Run 和 Outbox，但混淆了响应字段与页面参数。已校准为“受理响应 runId → 页面 answerRunId → 回答 GET 的 runId”，页面原 runId 仍指笔记运行；Task 是更新状态/版本，原 Run 不变。本段复述经校准记录，进入 DOCUMENTING，待补耗时与 R15 整体收尾；不追加复述或重跑测试，累计暂仍约 55 分钟。
+
+用户确认本段约 15 分钟，R15 累计实报约 1 小时 10 分钟，五段学习记录已齐。进入 R15/M5 整体验证核对与本地提交收尾；不要求用户重复观察既有专项用例。
+
+2026-10-30 整体收尾：`pnpm verify:ci` 通过格式、lint、workspace 类型、Prisma 校验、820 项常规测试和全部构建；R15 数据库集成 52 项、原回答提交 18 项及浏览器合成检查沿用本单元已记录证据。补齐 `apps/worker/.local/**` 的 ESLint 忽略，与既有 Git/Prettier 忽略一致。R15/M5 随本地提交成功标记 DONE，不推送或更新 VPS；M6/R16 尚未启动。
+
 ## 6. 启动应用
 
 ```powershell

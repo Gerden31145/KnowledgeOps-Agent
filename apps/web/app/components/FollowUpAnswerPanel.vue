@@ -67,14 +67,27 @@ const answers = computed(() => {
 })
 const invalidSelection = computed(
   () =>
-    route.query.answerId !== undefined && !entityIdSchema.safeParse(route.query.answerId).success,
+    (route.query.answerId !== undefined &&
+      !entityIdSchema.safeParse(route.query.answerId).success) ||
+    (route.query.answerRunId !== undefined &&
+      (!entityIdSchema.safeParse(route.query.answerRunId).success ||
+        route.query.answerId === undefined)),
 )
 const selectedId = computed(() => {
   if (invalidSelection.value) return null
   if (typeof route.query.answerId === 'string') return route.query.answerId
   return receipt.value?.answerSubmissionId ?? answers.value[0]?.id ?? null
 })
-const query = useFollowUpAnswerQuery(props.task.id, props.question.id, props.noteRunId, selectedId)
+const selectedRunId = computed(() =>
+  typeof route.query.answerRunId === 'string' ? route.query.answerRunId : null,
+)
+const query = useFollowUpAnswerQuery(
+  props.task.id,
+  props.question.id,
+  props.noteRunId,
+  selectedId,
+  selectedRunId,
+)
 const answer = query.data
 const result = computed(() => answer.value?.report?.body.result)
 const denied = computed(
@@ -96,7 +109,10 @@ const outcomes = { PASSED: '通过', FAILED: '未通过', INSUFFICIENT_EVIDENCE:
 
 async function select(id: string) {
   if (!disposed)
-    await router.replace({ query: { ...route.query, answerId: id }, hash: '#follow-up-answer' })
+    await router.replace({
+      query: { ...route.query, answerId: id, answerRunId: undefined },
+      hash: '#follow-up-answer',
+    })
 }
 async function refreshContext() {
   await Promise.all([
@@ -162,7 +178,7 @@ async function refresh() {
       <h4 id="answer-title" class="font-display text-2xl tracking-display">回答追问</h4>
       <button
         type="button"
-        :disabled="acting || submitting || query.isFetching.value"
+        :disabled="acting || submitting || query.isFetching.value || query.isPaused.value"
         class="min-h-11 px-3 text-sm text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         @click="refresh"
       >
@@ -260,6 +276,13 @@ async function refresh() {
       description="请从已保存的回答列表重新选择。"
     />
     <AsyncStatePanel
+      v-else-if="query.isPaused.value"
+      class="mt-5"
+      tone="warning"
+      title="网络离线，同步已暂停"
+      description="恢复网络后会重新读取回答结果；恢复查询不会自动重新提交回答。"
+    />
+    <AsyncStatePanel
       v-else-if="query.isError.value"
       class="mt-5"
       tone="warning"
@@ -281,6 +304,17 @@ async function refresh() {
     />
     <div v-else-if="answer" class="mt-6 space-y-4 [overflow-wrap:anywhere]">
       <p class="text-sm text-body-strong">回答验收：{{ states[answer.run.status] }}</p>
+      <p class="text-sm text-muted">
+        本次运行：{{ new Date(answer.run.queuedAt).toLocaleString('zh-CN') }} ·
+        {{ answer.run.retryOfRunId ? '重试验收' : '首次验收' }}
+      </p>
+      <VerificationRunCancel :key="answer.run.runId" :run="answer.run" />
+      <AnswerVerificationRetry
+        :key="`${answer.answerSubmissionId}:${answer.run.runId}`"
+        :answer="answer"
+        :task="task"
+        :note-run-id="noteRunId"
+      />
       <details>
         <summary
           class="min-h-11 cursor-pointer py-3 text-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
@@ -342,7 +376,7 @@ async function refresh() {
         "
         :description="
           !isAgentRunTerminalState(answer.run.status)
-            ? '可以稍后点击刷新回答与任务，离开页面不会停止后台验收。'
+            ? '页面正在自动更新；离开页面不会停止后台验收。'
             : '请查看运行状态；执行失败与回答内容未通过是不同情况。'
         "
       />

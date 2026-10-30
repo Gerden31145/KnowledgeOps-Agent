@@ -63,7 +63,7 @@ function criterionTitle(id: string) {
       <button
         class="min-h-11 rounded-full border border-ink px-6 font-mono text-sm disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         type="button"
-        :disabled="query.isFetching.value"
+        :disabled="query.isFetching.value || query.isPaused.value"
         @click="query.refetch()"
       >
         {{ query.isFetching.value ? '读取中' : '刷新报告' }}
@@ -71,7 +71,14 @@ function criterionTitle(id: string) {
     </div>
 
     <AsyncStatePanel
-      v-if="query.isError.value"
+      v-if="query.isPaused.value"
+      class="mt-6"
+      tone="warning"
+      title="网络离线，同步已暂停"
+      description="恢复网络后会重新读取已保存的运行状态；后台验收不会因页面离线而停止。"
+    />
+    <AsyncStatePanel
+      v-else-if="query.isError.value"
       class="mt-6"
       tone="warning"
       :title="denied ? '登录已过期' : missing ? '无法查看此运行' : '报告读取失败'"
@@ -115,6 +122,8 @@ function criterionTitle(id: string) {
       <p class="text-sm leading-6 text-muted">
         运行状态说明这次后台执行是否结束；任务是否通过，以任务状态为准。
       </p>
+      <VerificationRunCancel :key="snapshot.runId" :run="snapshot" />
+      <NoteVerificationRetry :key="snapshot.runId" :run="snapshot" :task="task" />
 
       <AsyncStatePanel
         v-if="!report"
@@ -127,7 +136,7 @@ function criterionTitle(id: string) {
         "
         :description="
           !isAgentRunTerminalState(snapshot.status)
-            ? '后台仍在处理，可稍后刷新报告。'
+            ? '页面正在自动更新，运行结束后会显示已保存的报告。'
             : snapshot.status === 'SUCCEEDED'
               ? '这次运行已结束，但没有保存可展示的报告。'
               : '这次执行已结束。请查看运行状态，已有任务结果不会因页面读取而改变。'
