@@ -4,6 +4,8 @@
 .nuxt/
 .output/
 coverage/
+/playwright-report/
+/test-results/
 /apps/worker/.local/
 dist/
 node_modules/

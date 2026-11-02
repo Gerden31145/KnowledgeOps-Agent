@@ -7,6 +7,10 @@ import {
 } from '@knowledgeops/contracts'
 import { useKnowledgeOpsApi } from './use-knowledge-ops-api'
 import { KnowledgeOpsApiError } from '../lib/knowledge-ops-api'
+import {
+  answerCommandStoragePrefix,
+  answerCommandSessionGeneration,
+} from '../lib/answer-command-session'
 
 const savedSubmissionSchema = z
   .object({
@@ -24,7 +28,9 @@ export function useFollowUpAnswer(input: {
   canSubmit: () => boolean
 }) {
   const api = useKnowledgeOpsApi()
-  const key = `knowledgeops:answer-command:v1:${input.userId}:${input.taskId}:${input.questionId}`
+  const key = `${answerCommandStoragePrefix}${input.userId}:${input.taskId}:${input.questionId}`
+  const generation = answerCommandSessionGeneration()
+  const currentSession = () => generation === answerCommandSessionGeneration()
   const draft = ref('')
   const saved = shallowRef<z.infer<typeof savedSubmissionSchema> | null>(null)
   const submitting = ref(false)
@@ -55,7 +61,7 @@ export function useFollowUpAnswer(input: {
   const locked = computed(() => Boolean(saved.value) || submitting.value)
 
   function reset() {
-    if (submitting.value || disposed) return
+    if (submitting.value || disposed || !currentSession()) return
     try {
       window.sessionStorage.removeItem(key)
       saved.value = null
@@ -68,7 +74,14 @@ export function useFollowUpAnswer(input: {
   }
 
   async function submit(): Promise<FollowUpAnswerAcceptedResponse | null> {
-    if (disposed || submitting.value || storageBlocked.value || rejection.value) return null
+    if (
+      disposed ||
+      !currentSession() ||
+      submitting.value ||
+      storageBlocked.value ||
+      rejection.value
+    )
+      return null
     if (saved.value?.receipt) return saved.value.receipt
     issue.value = ''
     if (!saved.value) {
@@ -99,23 +112,24 @@ export function useFollowUpAnswer(input: {
     submitting.value = true
     try {
       const accepted = await api.submitFollowUpAnswer(input.questionId, command)
+      if (!currentSession()) return null
       if (
         accepted.taskId !== input.taskId ||
         accepted.taskVersion !== command.expectedTaskVersion + 1
       )
         throw new Error('mismatched acceptance')
       const record = { command, receipt: accepted }
-      // 即使离开页面，也只写回原用户/原题的记录；不改变新页面的状态或 URL。
+      // 同一身份下离开页面仍可保留回执；退出/换账号后不允许迟到结果重新写入。
       try {
         window.sessionStorage.setItem(key, JSON.stringify(record))
       } catch {
         if (!disposed) issue.value = '回答已受理，本地记录保存失败，可从已保存的回答找回结果。'
       }
-      if (disposed) return null
+      if (disposed || !currentSession()) return null
       saved.value = record
       return accepted
     } catch (error) {
-      if (disposed) return null
+      if (disposed || !currentSession()) return null
       if (
         error instanceof KnowledgeOpsApiError &&
         [400, 401, 403, 404, 409].includes(error.status)
@@ -134,7 +148,7 @@ export function useFollowUpAnswer(input: {
       }
       return null
     } finally {
-      if (!disposed) submitting.value = false
+      if (!disposed && currentSession()) submitting.value = false
     }
   }
   return {

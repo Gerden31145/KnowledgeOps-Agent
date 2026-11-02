@@ -14,6 +14,8 @@ node_modules/
 .output/
 dist/
 coverage/
+/playwright-report/
+/test-results/
 *.tsbuildinfo
 /generated/prisma/
 /packages/database/src/generated/prisma/

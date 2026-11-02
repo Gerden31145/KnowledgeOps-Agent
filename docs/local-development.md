@@ -1468,6 +1468,302 @@ pnpm exec vitest run apps/web/test/use-retry-answer-verification.spec.ts --repor
 
 2026-10-30 整体收尾：`pnpm verify:ci` 通过格式、lint、workspace 类型、Prisma 校验、820 项常规测试和全部构建；R15 数据库集成 52 项、原回答提交 18 项及浏览器合成检查沿用本单元已记录证据。补齐 `apps/worker/.local/**` 的 ESLint 忽略，与既有 Git/Prettier 忽略一致。R15/M5 随本地提交成功标记 DONE，不推送或更新 VPS；M6/R16 尚未启动。
 
+### 5.47 R16：Playwright 最小刷新读取
+
+先保持本地 PostgreSQL、Redis 启动。自第二小段起，两项浏览器测试统一使用专用库，初始化说明见 5.48；当前本机已准备完成。只观察首段时运行：
+
+```powershell
+pnpm test:e2e:r16 tests/e2e/note-run-refresh.e2e.ts
+```
+
+命令先构建共享包、API 与 Web，再由 Playwright 自动在 `127.0.0.1:4300` / `127.0.0.1:4400` 启动测试 Web/API，结束后关闭。原 3000/4000 服务可以保留；测试端口须空闲，不复用其他服务。首段用例不启动 Worker。首次在另一台机器使用时，先 `pnpm install --frozen-lockfile`、`pnpm exec playwright install chromium`；Chromium 与 lockfile 中的 Playwright 版本配套。
+
+预期 **1 passed**。也可在命令后加 `--headed` 观看浏览器打开运行页面并刷新；运行很快，详细步骤可在生成的本地 HTML 报告中查看。希望逐步观察且已完成上述构建时，执行 `pnpm exec playwright test tests/e2e/note-run-refresh.e2e.ts --debug`，在 Playwright Inspector 中逐步执行。测试结束会清理随机夹具，不把该临时 URL 当作长期演示地址。
+
+本段检查真实浏览器 → 正式 Web/API → PostgreSQL 的读取路径。测试先在数据库准备随机用户、短期会话、证据、终态 Run 和合成报告，再由浏览器带 Cookie 通过正式鉴权。刷新后须发出新的 GET，Run ID、报告 ID、版本及可见内容与原记录相同，且不发写请求。没有 Mock 业务 GET；但报告本身是夹具，不说明 GitHub 登录、模型或 Worker 已被这条用例验收。
+
+首读两处，约 20 至 30 分钟计入 R16 原预算：
+
+1. `tests/e2e/note-run-refresh.e2e.ts`：`page` 操作真实页面；先等待响应再触发刷新，断言新的 API 返回与最终可见内容。
+2. `playwright.config.ts`：浏览器、端口、服务启动与失败时的 trace/截图配置。[webServer 官方说明](https://playwright.dev/docs/test-webserver)与[自动等待断言](https://playwright.dev/docs/test-assertions)可按需查阅。
+
+配套 `saved-note.fixture.ts` 负责准备/清理本次随机数据和会话，`environment.ts` 只选择并校验本地连接。夹具事务提交时已删除测试 Outbox、Run 已终态，日常 Worker 无任务可领；清理遵守外键顺序。`test-results/` 与 `playwright-report/` 仅为本地测试产物，不进入 Git。
+
+工程观察已通过：1 项 Chromium 用例、目标类型/lint/格式和共享包/API/Web 构建；测试后用户夹具残留 0、4300/4400 端口已关闭。首次开发服务启动锁冲突已通过改用构建后的服务解决。当前等待用户观察、导读与复述，实际耗时未报；后续才补完整闭环、双用户隔离、故障恢复与 CI，不把最小读取用例等同于 R16 完成。
+
+学习记录更新：用户已确认导读理解，正确复述 URL 重新读取、接口响应断言与报告区域文字检查，并补报“已观察；用时约10分钟”。首段学习收尾，R16 累计实报约 10 分钟，回到 WORKING；下一小段扩展浏览器业务闭环，不要求重跑本段用例。整个 R16/M6 尚未完成或提交。
+
+### 5.48 R16：浏览器回答 → 队列验收 → 任务通过与解锁
+
+本段只新增浏览器回归与测试装配，不修改产品页面。已有笔记、追问作为起点：浏览器填写答案并提交 → 真实 API 返回 202、创建回答/Run/Outbox → 实际 Dispatcher 投递 BullMQ → 实际回答 Processor、执行账本和 Finalizer 落库 → 页面读回通过结果，后续任务显示“可开始”。模型端口返回固定的合成内容，不发起付费请求；笔记准备直接调用真实笔记 Processor/Finalizer，未经过 GitHub Push/笔记队列，登录会话也由夹具准备，不把本段称为完整产品闭环或模型效果验证。
+
+当前本机已准备好专用 PostgreSQL 库 `knowledgeops_r16_e2e`。测试复用根 `.env` 的本地连接凭据，仅替换数据库名；不要求修改日常 `.env`。每次启动先验证专用库标记，再 `migrate deploy`，不 reset 或清空数据库。这样浏览器提交的新 Outbox 不会被日常 Worker 领取；Redis 使用本次随机的 `r16-answer-UUID` 队列，结束后只清该队列与本次随机夹具。
+
+另一台使用相同 WSL 原生 PostgreSQL、账号为 `knowledgeops` 的开发机，首次运行前创建一次；已存在时核对归属，不重复创建或覆盖标记：
+
+```powershell
+wsl.exe -d Ubuntu -u root -- runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d postgres -c 'CREATE DATABASE knowledgeops_r16_e2e OWNER knowledgeops'
+wsl.exe -d Ubuntu -u root -- runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d postgres -c "COMMENT ON DATABASE knowledgeops_r16_e2e IS 'KnowledgeOps R16 E2E synthetic fixtures only'"
+```
+
+其他本地 PostgreSQL 安装方式由对应管理员执行同样 SQL，owner 使用本机 `.env` 中的数据库账号；专用库名与标记保持一致。自动化命令不创建数据库、不提升账号权限。正式 CI 装配留后续 R16。
+
+当前本机构建已完成，可直接逐步观察新用例：
+
+```powershell
+pnpm exec playwright test tests/e2e/answer-submit.e2e.ts --debug
+```
+
+浏览器会显示“等待回答”，填写并点击提交，随后出现“回答验收：执行完成”“回答结论：通过”和任务“已通过”，再打开依赖任务检查“可开始”。测试接着重发浏览器首次发送的同一命令，核对返回同一回执，回答、Run、报告、Outbox 均只有一份，模型端口只调用一次，任务版本不再次增加。这里的重发通过同一浏览器上下文的请求客户端执行；本段未模拟断网或丢失响应，不代写后续恢复小手写。
+
+完整构建并执行当前 R16 用例用 `pnpm test:e2e:r16`，第七段接入后预期 **12 passed**。只跑本段 `answer-submit.e2e.ts` 时预期 **1 passed**。测试中的 Worker 消费器运行在 Playwright 测试进程内，复用生产类，API/Web 是独立进程；本段不验证 Nest Worker Runtime 启动、进程崩溃恢复或生产部署。
+
+首读两处，目标 20 至 30 分钟计入 R16 原 3 小时预算：
+
+1. `tests/e2e/answer-submit.e2e.ts`：真实页面提交、等待 202、区分受理与终态、检查页面与业务记录。
+2. `apps/worker/test/fixtures/e2e-answer-worker.ts`：用固定模型端口装配实际 Processor、Queue 和 Dispatcher，解释哪些依赖真实运行、哪些替换为合成响应。
+
+`answer-flow.fixture.ts` 负责准备笔记起点、依赖任务与会话，启动/关闭消费器；`cleanup-fixture.ts` 按引用顺序清理本次记录，两条用例共用；`prepare-database.ts` / `environment.ts` 只负责专用库与连接边界，不作为新增逐行必读。
+
+工程验证（2026-10-30）：两项 Chromium 用例通过（本次总耗时 12.6 秒，新用例约 4.6 秒）、E2E/Worker 类型检查、目标 lint 通过；专用库 User/Run/Submission/AnswerSubmission/Report/Outbox 均残留 0，本次队列键残留 0。沿用首段已验证的相同产品构建，未改产品代码。本段进入 WALKTHROUGH，等待用户观察、导读、复述及耗时；R16 累计实报仍约 10 分钟，不计 AI 实现时间，不提交或标记整体 DONE。
+
+学习记录更新：用户已确认第二段导读理解，短复述正确判断仅返回 202 而后台未完成时测试不会通过，但将后续检查统一归为幂等性；AI 补充区分第一段完成/解锁检查与第二段同命令重发的幂等检查，不记作用户独立答出。进入 DOCUMENTING，待用例观察反馈与实际耗时，累计实报约 10 分钟保持不变，本轮不重跑已验证用例。
+
+用户随后确认“已观察，用时约15分钟”。第二段学习记录已齐，R16 累计实报约 25 分钟，回到 WORKING，下一小段接续双用户隔离；不重复观察或测试，R16 整体仍未完成或提交。
+
+### 5.49 R16：双用户资源读取与取消权限
+
+本段复用 5.48 的专用本地数据库和现有 Web/API 构建，新增两项回归。一个概念：有效登录说明请求者是谁，读取或写入具体资源还要核对资源归属。会话、用户、各自 Repository 记录及报告是随机合成夹具，真实 API 使用数据库会话和原有权限条件；未模拟业务响应，不经过 GitHub OAuth 或真实模型。
+
+保持本地 PostgreSQL/Redis 启动，逐步观察：
+
+```powershell
+pnpm exec playwright test tests/e2e/user-isolation.e2e.ts --debug
+```
+
+不需要逐步调试时去掉 `--debug`，本文件预期 **2 passed**。产品有改动或首次运行时先用 `pnpm test:e2e:r16 tests/e2e/user-isolation.e2e.ts` 构建后验证；当前完整 R16 命令预期 **12 passed**。
+
+两个独立 browser context 各有自己的 Cookie/storage。第一条用例先核对 A/B 的真实会话 userId，再各自打开报告；对计划、任务、笔记 Run/报告、固定证据逐项比较：自己的返回 200 与正确 ID，他人的和随机不存在 ID 均返回相同的 404。随后改页面 URL 为对方任务，观察“任务读取失败”；把自己的 taskId 配上对方 runId，则显示“无法选择此笔记运行”，两种情况下都没有私有报告内容。
+
+第二条用例只在本次夹具中准备两份 QUEUED Run，暂不消费。携带合法会话、正确 Origin 与当前版本向他人的 Run 发取消请求，应返回 404，且 Task/Run 完整记录不变；本人从页面点击“取消本次验收”应返回 202、显示“正在取消”，Run 为 CANCEL_REQUESTED/version 1，Task 仍 VERIFYING/version 6。本段验证取消受理权限，不等待取消终态，也不把“拒绝写入”误判为请求格式或版本错误。
+
+首读两处，目标约 20 至 30 分钟：
+
+1. `tests/e2e/user-isolation.e2e.ts`：正常访问、跨用户访问、不存在资源的对照；拒绝取消前后的数据库检查与本人正向操作。
+2. `apps/api/src/verification/note-verification-query.service.ts`：userId 如何加入资源查询，资源不存在与越权为何返回一致结果。该服务沿用已有实现，本轮未修改。
+
+配套 `two-users.fixture.ts` 负责独立会话和关闭页面后的清理；`saved-note.fixture.ts` 提取现有数据准备函数供两段共用。取消入口沿用 `cancel-verification-run.service.ts` 的所属用户查询与加锁规则，按职责补充，不要求重读完整后端链路。
+
+工程验证（2026-10-30）：新增 2 项与既有 2 项 Chromium 用例合计 4/4 通过（本次 13.4 秒），E2E 类型检查、目标 lint/格式通过；专用库 User/Session/Plan/Task/Repository/Installation/Run/Submission/AnswerSubmission/Report/Outbox 均残留 0。本段未修改产品行为、调用真实模型或更改 VPS。进入 WALKTHROUGH，用户观察、导读确认、复述及实际耗时待反馈，累计实报仍约 25 分钟。
+
+覆盖边界：独立会话隔离不能替代同一浏览器退出 A、登录 B 后的缓存清理验证；SSE 所属用户、安装/仓库授权、其他写入口及整个上游闭环继续保留待验收，不提前宣称 R16 双用户范围全部完成。
+
+2026-11-02 学习记录：用户已确认第三段导读理解，进入 RECALL；待简短复述、用例观察反馈与实际耗时。此前累计实报约 25 分钟保持不变，本轮不重跑已验证用例。
+
+用户随后正确复述后端沿 Run 所属任务、计划与目标检查资源归属，并确认“已观察，用时约10分钟”；AI 补齐 Stage 与会话 userId 的来源。第三段学习记录已齐，R16 累计实报约 35 分钟，回到 WORKING；下一段接续同一浏览器换账号缓存清理验证，不重复本段观察或测试。
+
+### 5.50 R16：同一浏览器退出与换账号后的私有数据清理
+
+本段只学习身份变化时旧数据的处理，目标 20 至 30 分钟计入 R16 原预算。原退出/路由鉴权已清理 TanStack Query，但漏掉了 `sessionStorage` 中保存的回答命令；旧提交的迟到回执还可能把命令重新写回。先用旧 Web 构建运行新增两项用例，分别在退出、A → B 后发现 A 的命令残留，随后修复并回归。
+
+新增客户端插件同步观察已确认的用户 ID：退出时清除本功能全部回答命令，确认 B 时仅保留 B 的命令，同时使旧身份的提交回调失效。初始身份尚未知时不立即清空，确保同账号刷新可以恢复原 requestId/回答；首次会话检查明确返回 401 时由路由中间件补清理。回答 composable 在异步返回后检查身份批次，防止成功回执重新写入、迟到错误更新页面，以及 A → B → A 后旧 A 回执覆盖新 A 命令。普通路由离开仍可保存原题回执。
+
+保持本地 PostgreSQL/Redis 启动；当前 Web 已重建，可以直接逐步观察：
+
+```powershell
+pnpm exec playwright test tests/e2e/session-switch.e2e.ts --debug
+```
+
+不需要逐步调试时去掉 `--debug`，本文件预期 **2 passed**；首次运行或产品代码变动后先用 `pnpm test:e2e:r16 tests/e2e/session-switch.e2e.ts` 构建。第一项验证同账号刷新保留命令、真实 logout 204 删除数据库会话/Cookie/本地命令、未登录刷新遇 401 清理遗留命令，再在原标签页放入 B 的测试会话读取 B 数据，并拒绝 A 的地址。第二项通过 NuxtLink 保持同一文档，在刚缓存 A 的今日任务后切换为 B；暂缓真实 B 的 GET 响应，确认等待时显示加载、没有 A 内容或 A 命令，放行后只显示 B。
+
+首读两个入口：
+
+1. `tests/e2e/session-switch.e2e.ts`：同一个 context/page、真实退出、整页刷新与保留文档的导航如何形成对照。
+2. `apps/web/app/lib/answer-command-session.ts`：按已确认身份清理命令，并使旧身份批次失效。
+
+配套 `answer-command-session.client.ts` 连接用户身份 watch；`use-follow-up-answer.ts` 只补批次检查；`auth.global.ts` 补初始未登录的清理出口。Query 清理沿用已有退出/路由逻辑，没有改写恢复状态机。无需重新通读 R12 或手写另一套恢复逻辑。
+
+工程验证（2026-11-02）：完整 Chromium **6/6** 通过（12.3 秒）；Web 回归 **172/172**（其中回答提交 23 项）、Web/E2E 类型检查、目标 lint/格式及 Web 构建通过。专用库 User/Session/Plan/Task/Repository/Installation/Run/Submission/AnswerSubmission/Report/Outbox 均残留 0，4300/4400 测试端口已回收。环境首次未就绪，用户手动启动后 PostgreSQL/Redis 协议检查通过；不把启动超时算作产品断言失败。
+
+覆盖边界：本段为同一标签页，不宣称跨标签页即时清理；B 登录以已有合成数据库会话 Cookie 代替外部 OAuth，本地回答命令由用例准备，真实退出/鉴权/业务 GET 照常执行，无付费模型或 VPS 操作。SSE/绑定隔离、其余写入口、上游闭环、故障回归与 CI 继续待做；后续断网期间后台完成的小手写未预写。本段进入 WALKTHROUGH，用户观察、导读、复述及耗时待反馈，累计实报仍约 35 分钟，R16/M6 尚未完成或提交。
+
+用户随后确认“ok，我明白了”，第四段导读理解已确认，进入 RECALL；短复述、两项用例观察反馈及本段耗时待补记，累计实报仍约 35 分钟。已观察无需重跑，不将理解确认代记为整段完成。
+
+用户已复述身份变化增加批次、旧回调发现不一致后不写入，核心判断正确，短复述通过。AI 澄清批次由表单初始化时捕获、在前端比较，同一身份下多次提交可共用，并非后端回执字段。进入 DOCUMENTING，待观察反馈与耗时；累计实报仍约 35 分钟，不重跑或追加学习题。
+
+用户补报“已观察，用时10分钟”，第四段学习记录已齐，R16 累计实报约 45 分钟，回到 WORKING；下一段接续既有 SSE 所属用户隔离验证。无需重复本段观察或测试，R16/M6 整体尚未完成或提交。
+
+### 5.51 R16：SSE 所属用户与长连接会话复查
+
+本段复用 5.48 专用库与双用户夹具，只增加浏览器验证。已有 SSE 在发送响应头前检查会话及 Run 所属 Goal 的 userId，每轮读取也重新检查数据库会话；本轮无需修改产品代码。学习目标约 15 至 20 分钟计入 R16 原预算，区分建连前的 HTTP 401/404 与建连后的 stream-error。
+
+保持 PostgreSQL/Redis 启动，沿用当前已构建的 API/Web：
+
+```powershell
+pnpm exec playwright test tests/e2e/plan-stream-isolation.e2e.ts --debug
+```
+
+本文件预期 **2 passed**。首次运行或产品有改动时用 `pnpm test:e2e:r16 tests/e2e/plan-stream-isolation.e2e.ts` 构建后执行；全部 Playwright 回归当前预期 **12 passed**。浏览器停留在登录页以取得真实 Web origin，测试直接创建原生 EventSource；观察重点为 Network 中 `/plan-generation-runs/:id/events` 的响应与事件，以及 Playwright 的事件断言，不是页面生成流程。`window.r16PlanStream` 仅供测试记录回调，可在开发者工具查看；无生产调试入口或业务响应注入。
+
+- 第一项为 A/B 双向对照：本人 200 与 snapshot；他人 404 且未打开流、未收到快照，响应体与不存在资源一致；无 Cookie 时为 401。原生 EventSource 的 error 不提供可靠 HTTP 状态，测试通过 Playwright 响应对象另查 401/404，因此 nativeError 不等于断网。
+- 第二项在收到本人快照后调用真实 logout，但保留页面和连接。下一轮收到 `{ code: 'UNAUTHENTICATED' }` 的 stream-error，观察器关闭 EventSource，Run 全部字段保持原样。这里验证服务端对长连接重新鉴权，客户端关闭行为来自测试监听器；产品订阅适配器的关闭逻辑沿用已有实现。
+
+首读两处：`tests/e2e/plan-stream-isolation.e2e.ts` 的两个 test，以及 `apps/api/src/plan-generation/plan-generation-stream.service.ts` 的 read、首次读取、poll 错误出口。Controller 提供会话 userId；Repository.findStatusForUser 将其加入 Goal.userId 查询；AuthService.revalidateUser 每轮重新读会话，不复用建连时缓存的 Promise。其余夹具沿用前段，只新建 QUEUED PlanGenerationRun，随本次用户清理。
+
+验证（2026-11-02）：完整 Chromium 8/8（18.3 秒）；观察字段命名澄清后本段 2/2（6.0 秒）；E2E 类型、目标 lint/格式通过。专用库含新增 PlanGenerationRun 在内的相关表均残留 0，4300/4400 测试端口已回收。沿用原产品构建，没有模型生成、Outbox 投递、真实 OAuth 或生产环境操作；没有新增恢复状态机或预写后续离线小手写。进入 WALKTHROUGH，观察/导读/复述/耗时待用户反馈，累计实报仍约 45 分钟，R16/M6 整体未完成或提交。
+
+本段已提供代码导读，覆盖 EventSource 事件记录、A/B 权限对照、退出后的会话复查，以及建连前 HTTP 错误与建连后 stream-error 的区别。尚待用户观察与理解确认，不将已讲解记为用户已掌握或本段已完成；未修改产品或重跑检查。
+
+用户确认“ok，我明白了；用例已观察”，进入 RECALL，仅待短复述与本段耗时，累计实报仍约 45 分钟。无需重跑已观察用例，R16/M6 整体仍未完成或提交。
+
+复述补充：用户已正确说明 Run 状态不变；使用 stream-error 的原因需澄清为“同一响应的 HTTP 200/响应头已经发出，不能改成 401”，而非退出属于正常流程。最终非 200 响应的 EventSource 行为已核对 [WHATWG 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#processing-model)，不能将 401 与自动重试画等号。保持 RECALL，待理解确认及耗时，不重复用例。
+
+用户正确回答首次订阅且尚未发出响应头时应返回 HTTP 401，澄清后第五段复述通过。观察与导读已完成，进入 DOCUMENTING，仅待本段耗时，累计实报仍约 45 分钟；不追加题目或重复用例。
+
+用户补报本段约 10 分钟，第五段学习记录已齐，R16 累计实报约 55 分钟，回到 WORKING。下一段接续 GitHub 安装/仓库绑定授权隔离验证；本轮仅更新记录，无需重跑用例，R16/M6 整体仍未完成或提交。
+
+### 5.52 R16：安装与仓库绑定的会话授权隔离
+
+本段观察现有权限链路，目标 15 至 20 分钟计入 R16 原预算。保持本机 PostgreSQL 启动，在仓库根目录运行：
+
+```powershell
+pnpm test:integration:r04 apps/api/test/repository-authorization.integration.ts --reporter verbose
+```
+
+预期 **4 passed**。沿用 R04 的 HTTP/数据库集成配置，名称不表示重开 R04；本段不打开浏览器，也无需启动 Web、Worker 或配置真实 GitHub。API 临时监听本机随机端口；数据使用 `.env` 指向的本地数据库，随机分配两个测试身份并只清理它们及对应安装，区别于前几段 Playwright 的专用库。
+
+- 本人安装/仓库可正常读取并绑定；B 携带 A 的 installationId、githubRepositoryId 仍返回 404，不能解绑 A 的绑定。不存在安装与无权安装返回相同安全错误。
+- B 能看到安装但目标仓库不在自己的授权交集内，仍不能绑定；拒绝时不会进一步申请 App 的仓库访问令牌，也不会改数据库。
+- 之前 GET 出来的选项不是永久授权：撤销权限后，POST 重新核验并拒绝；本项目登录会话仍有效。
+- 同一用户的另一有效会话没有 GitHub grant 时返回 409 / GITHUB_AUTH_REQUIRED，不能使用前一个会话的 grant，也不会清除项目会话。
+
+首读 `apps/api/test/repository-authorization.integration.ts` 的四项断言，以及 `apps/api/src/repositories/github-repositories.ts` 的 verify。链路为 Cookie → AuthService 校验项目会话并取该会话的 GitHub Token → 用户可访问安装 → 用户/安装共同可访问仓库 → App 限仓访问核验 → 绑定事务。`fixtures/github-authorization.ts` 只模拟外部 GitHub HTTP 响应与内存私钥，不模拟 requireGitHubToken、verify 或绑定结果；OAuth setup 通过本机 login/callback，302 不跟随到外网。
+
+验证（2026-11-02）：本段 4/4、完整 `pnpm test:integration:r04` 为 27/27，相关单元 32/32，API 类型及目标 lint/格式通过；随机夹具已清理，Session/Repository 残留断言为 0。本轮不改产品，不重跑无关浏览器用例，无真实 GitHub 或模型调用；真实双账号上线验证仍留 R17。进入 WALKTHROUGH，用户观察、导读、复述和耗时待反馈，R16 累计实报仍约 55 分钟，整体未完成或提交。
+
+已提供本段导读，重点为会话与 grant 的对应、verify 的两层权限检查、测试中目标 ID 与请求者 Cookie 分离，以及错误响应和数据库不变的双重断言。测试 scope 只控制合成上游响应，不修改生产权限；保持 WALKTHROUGH，待观察与理解确认，本轮不改产品或重跑检查。
+
+用户确认“ok，明白了”，第六段导读理解已确认，进入 RECALL；待短复述、4 项用例观察反馈与本段耗时。已观察无需重跑，R16 累计实报仍约 55 分钟，整体尚未完成或提交。
+
+用户已正确复述 B 的安装/仓库权限不满足则拒绝、数据库不变，第六段短复述通过。AI 补充安装检查失败立即返回，安装通过后才查仓库交集，任一失败均足以拒绝。进入 DOCUMENTING，仅待用例观察反馈和本段耗时，累计仍约 55 分钟；本轮不修改产品或重跑检查。
+
+用户补报本段“已观察、15 分钟”，R16 累计实报约 70 分钟，第六段学习记录已齐，回到 WORKING。另针对安装检查能否通过的疑问，结合第二项测试及 [GitHub 官方接口说明](https://docs.github.com/en/rest/apps/installations#list-app-installations-accessible-to-the-user-access-token) 说明：同一组织安装可以被多个有权限的用户访问，但各自可读的仓库范围可能不同；已知安装 ID 不等于独享或全仓权限。原“安装列表不存在该 ID”的具体场景仍直接失败。本轮只澄清和更新记录，不修改产品或重跑测试；整体 R16/M6 未完成或提交。
+
+### 5.53 R16：写接口不能借用他人的已有回执
+
+本段目标 15 至 20 分钟，重点为归属检查先于幂等返回。保持 PostgreSQL/Redis 启动，沿用已构建的 API/Web：
+
+```powershell
+pnpm exec playwright test tests/e2e/write-isolation.e2e.ts
+```
+
+预期 **4 passed**。首次运行或产品代码更新后，用 `pnpm test:e2e:r16 tests/e2e/write-isolation.e2e.ts` 先构建。测试沿用 5.48 专用数据库及 4300/4400 端口；本文件通过两份 BrowserContext 的 Cookie 直接发 HTTP 请求，观察终端断言即可，没有新的页面交互。不需要填写真实 GitHub/模型密钥。
+
+| 本段用例 | 对照行为 |
+| --- | --- |
+| 计划确认、任务开始 | 本人 201；他人首次调用和本人已成功后的重复调用均 404，状态/版本不变 |
+| 回答提交 | 本人 202；他人即使带完全相同的 questionId/requestId/正文/版本也为 404，不创建回答或泄露已有回执 |
+| 笔记重试 | 本人创建一个后继 Run 与 Outbox；他人不能创建或取回后继，本人重发才复用 |
+| 回答重试 | answerSubmissionId 与 runId 必须一起匹配本人；混搭双方 ID、跨用户首次调用及已有后继后的调用均被拒绝 |
+
+首读 `tests/e2e/write-isolation.e2e.ts` 的回答提交场景，再读 `apps/api/src/verification/follow-up-answer.service.ts` 的 owner 查询 → existing 查询 → 原回执返回。`post` 使用当前 Context 的真实 Cookie 与合法 Origin；`deniedLikeMissing` 比较他人资源与不存在资源的 404；`snapshot` 比较两方 Task/Plan、Run/报告、回答与 Outbox，防止错误响应掩盖写入。两个重试 Service 也先核验所属用户，再查后继 Run，按职责补充即可。
+
+其他写入口复用现有用例，本轮定向验证了计划生成的归属 1 项与取证 retry/resync 的权限 2 项；取消与绑定沿用此前证据，不另造一套权限实现。追问准备复用真实笔记 Processor/Finalizer 与合成模型端口，失败 Run 直接构造为重试起点；不启动队列消费，不宣称覆盖失败产生过程或完整上游链路。
+
+工程验证（2026-11-02）：本段 4/4（沙箱外完整运行约 6 秒）、已有集成定向 3/3、E2E 类型、目标 lint/格式通过。首次沙箱内在全部断言通过后服务回收挂起，核对进程后回收并在沙箱外确认正常退出；自动化执行需允许关闭自身测试进程。专用库相关表残留 0，测试端口释放。完整 Playwright 当前收录 12 项，本轮只定向运行新增 4 项，其他 8 项沿用前段证据。未改产品代码，进入 WALKTHROUGH，观察/理解/复述/耗时待用户反馈，累计实报仍约 70 分钟；R16/M6 尚未完成或提交。
+
+第七段已提供代码导读，重点为 A/B 请求身份、首次与已有回执两种越权场景、before/saved 数据库快照，以及 Service 先核验归属再处理幂等返回。已解释原命令版本与当前 Task 版本的区别、锁不等于鉴权，以及回答重试不能混搭 ID。尚待用户观察与理解确认，保持 WALKTHROUGH，不重跑既有检查或提前记录掌握。
+
+用户明确本段“已理解、用例已观察”，进入 RECALL，仅待短复述和实际耗时，累计实报仍约 70 分钟。已观察无需重跑，本轮只更新学习记录，R16/M6 整体尚未完成或提交。
+
+用户正确说明先核验资源归属、再处理重复请求，仅读已有回执也要防止越权泄露，第七段短复述通过。AI 补齐追问到 Goal.userId 的关联与回执包含的业务 ID。进入 DOCUMENTING，仅待实际耗时，累计仍约 70 分钟；本轮只更新记录，不重跑检查或提交整个 R16。
+
+用户补报第七段约 15 分钟，本段学习记录已齐，R16 累计实报约 85 分钟，回到 WORKING。下一段接续计划生成/确认、开始任务、Push 取证到报告的上游闭环验证；不重跑已观察用例。R16/M6 整体尚未完成或提交。
+
+### 5.54 R16：页面生成计划 → Push 取证 → 笔记/回答验收 → 任务通过
+
+本段目标约 20 至 25 分钟，观察各个真实业务环节如何交接。保持本地 PostgreSQL/Redis 启动，沿用已有 API/Web 构建：
+
+```powershell
+pnpm exec playwright test tests/e2e/learning-flow.e2e.ts
+```
+
+预期 **1 passed**。希望看到浏览器操作时在命令后加 `--headed`；需要逐步查看可改加 `--debug`，在 Inspector 中继续执行。首次运行或产品代码更新后，使用 `pnpm test:e2e:r16 tests/e2e/learning-flow.e2e.ts` 先构建。沿用 5.48 的专用数据库与 4300/4400 端口，不需要真实 GitHub Push 或模型密钥。
+
+测试会从页面填目标、选择合成模型并生成计划，确认后打开今日任务并点击开始；随后发送带签名的合成 Push。页面会发现笔记报告和追问，填入回答后等待任务通过，最后显示下一任务可开始。只预先建立登录会话与仓库绑定，计划、任务、证据及报告均由真实请求/消费者创建。
+
+首读两个入口：
+
+- `tests/e2e/learning-flow.e2e.ts`：五个 `test.step` 串起用户操作、Webhook 请求、页面观察及数据库关联检查。HTTP 202 只是受理；后续等待实际结果，并核对四个 Job completed、四条 Outbox 已投递。
+- `apps/worker/test/fixtures/e2e-pipeline-worker.ts`：一个 Dispatcher 接四类队列，复用已有 Processor/Finalizer。随机队列名隔离本次任务；结束时先停消费再清理。
+
+补充文件：`learning-flow.fixture.ts` 建合成身份/绑定并精确清理；`e2e-github-upstream.ts` 给真实取证读取器提供固定 GitHub HTTP 响应和内存私钥；`e2e-answer-worker.ts` 共用原笔记/回答合成模型。测试消费者运行于测试进程，不验证生产 Nest Worker 的启动装配；合成上游也不能代替真实 GitHub 接入与模型效果。R17 仍须做真实账号发布验证。离线恢复小手写留待后续业务导读后开始，本用例未提前实现该题。
+
+工程验证（2026-11-02）：新增 1/1、当前全部 Playwright 13/13；E2E/Worker 类型、目标 lint/格式通过。专用库 17 类相关表残留 0，测试端口已释放。进入 WALKTHROUGH，用户观察、理解、复述与本段耗时待反馈，累计实报仍约 85 分钟，R16/M6 尚未完成或提交。
+
+已提供第八段导读：五步测试按真实页面操作、签名 Push、异步等待、跨记录关联与队列/解锁检查展开；消费者装配说明真实实现与合成外部响应的边界。强调 expect.poll 是测试观察，业务推进由 Dispatcher/Worker 完成，HTTP 202 和 Job completed 均不能独立证明任务通过。保持 WALKTHROUGH，待用户观察反馈与理解确认，本轮仅补记录，不重跑测试或改产品。
+
+用户已确认理解第八段导读，进入 RECALL；待关联检查的短复述、用例观察反馈与实际耗时，累计实报仍约 85 分钟。已观察无需重跑，R16 整体仍未完成或提交。
+
+用户正确指出成功状态仍可能关联错 Run，需要确认验收结果对应本次提交；短复述通过，用例已观察，本段约 15 分钟。已补齐第八段学习记录，R16 累计实报约 100 分钟，回到 WORKING。后续集中关键故障回归与 CI 工程收尾，离线恢复小手写仍待业务导读及用户实现；本轮不重跑已观察检查，R16 整体尚未完成或提交。
+
+### 5.55 R16：集中故障回归与 CI 装配
+
+本段目标约 15 至 20 分钟，学习“本地已通过的保证如何持续进入 CI”。先保持 PostgreSQL/Redis 启动，观察新增的计划重放场景即可：
+
+```powershell
+pnpm test:integration:r16 apps/worker/test/plan-generation-run.repository.integration.ts --reporter verbose
+```
+
+预期 **4 passed**。新增用例先真实保存一次计划，再用同一个 generationRunId 连续重放三次，每次重建 Processor，都返回原 planId；模型只调用一次，完整计划图与 Run 版本不变。这里直接调用消费者，不将其描述成真实 Redis 重投三次。其余三个用例是版本、超时和模型失败的已有检查。
+
+统一完整回归命令为 `pnpm test:integration:r16`，当前收录 11 个文件、221 项用例。入口复用专用库 knowledgeops_r16_e2e 的 loopback 校验、用途标记与迁移，不连接日常开发库；不会自动创建或覆盖用途标记。初次准备仍见 5.48。各测试文件串行运行，避免 Outbox 扫描互相领取待办；断连和强杀只针对测试自有连接及子进程。
+
+| 故障边界 | 已有证据入口及保证 |
+| --- | --- |
+| 投递失败或入队回执丢失 | outbox-dispatcher.integration.ts：待办可重扫、稳定 Job ID；发布端故障为受控模拟 |
+| 模型调用前登记失败 | note-verification-execution.integration.ts：不调用供应商，不伪造完成 |
+| 模型已调用但结算未保存 | 同文件及 note-verification-consumer.integration.ts：保留未确定调用，拒绝重复调用，按原截止时间结束 |
+| 已有账本结果，报告/Task 发布失败 | note/answer-verification-consumer 与 task-assessment-finalization.integration.ts：事务回滚，恢复复用结果，不再调用模型 |
+| 取证提交前后进程退出、数据库连接中断 | github-evidence-processing.integration.ts：真实测试子进程/队列及 TCP 连接门，恢复不重复交接、不覆盖成功 |
+| 旧版本、旧绑定、旧尝试返回 | 对应 Finalizer/consumer 用例：拒绝失效材料，不修改新状态 |
+
+首读 `.github/workflows/ci.yml` 与 `apps/worker/test/plan-generation-run.repository.integration.ts` 新用例。CI 中两个独立作业分别负责质量/构建和数据库/浏览器回归；回归作业自建临时 PostgreSQL、Redis，标记专用库，安装 Chromium 后顺序运行集成和 E2E，保留报告与失败 trace 7 天。`vitest.integration.r16.config.ts` 负责选范围，`tests/e2e/run-regression.ts` 负责安全连接、迁移和透传失败退出码。
+
+浏览器安装/报告留存参考 [Playwright 官方 CI 流程](https://playwright.dev/docs/ci-intro)，临时数据库按 [GitHub 官方 service container 方式](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers) 配置；复用仓库已有 Action/Node/pnpm 版本，不引入生产凭据。普通 Pull Request、main 推送或手动工作流可触发。当前工作流仅在本地修改，**尚未推送或获得远端 CI 首次运行证据**，本地通过不等同于 GitHub Actions 已通过。
+
+本轮工程验证：原回归 220/220，补三次重放后定向文件 4/4（当前集合 221 项）；pnpm verify:ci 完整通过，新增测试的 Worker 类型/lint/格式补检通过；构建后的 Playwright 13/13。专用库相关 17 类表无残留、4300/4400 释放。用户已确认导读理解，并复述 SKIPPED 返回值不能单独证明幂等，须检查模型调用次数与数据库快照，短复述通过；保持 RECALL，仅待补记用户用例观察及本段耗时，累计实报仍约 100 分钟。原定离线恢复小手写尚未开始，R16/M6 尚未完成或提交。
+
+用户随后确认第九段已观察、用时 15 分钟，记录已齐；R16 累计实报约 115 分钟。本次用户明确将原定离线恢复小手写改为 AI 实现与导读，执行记录见下一节，不记作用户手写通过。
+
+### 5.56 R16：离线期间完成后的回答恢复（AI 实现与导读）
+
+观察命令（先保持 PostgreSQL/Redis 启动，使用已有专用测试库；本轮产品代码未改，可复用上一段构建）：
+
+```powershell
+pnpm exec playwright test tests/e2e/answer-recovery.e2e.ts --headed
+```
+
+预期 **1 passed**。页面提交回答并显示验收中 → 浏览器离线、显示同步暂停 → Worker 完成、数据库中已有成功结果但页面仍暂停 → 联网后自动读取同一回答报告并显示任务通过。第一次准备或产品源码有变化时，使用 `pnpm test:e2e:r16 tests/e2e/answer-recovery.e2e.ts --headed` 先构建再观察。
+
+首读 [answer-recovery.e2e.ts](../tests/e2e/answer-recovery.e2e.ts) 四个 test.step：先捕获真实 202 回执和运行中的页面状态；只切换浏览器网络；在测试进程用数据库/队列条件等待确认后台已完成；联网前监听 GET 并检查原 answerSubmissionId/runId/version/reportId，最后核对没有重复提交、模型调用或业务写入。`expect.poll` 是测试侧等待条件，不会给页面注入数据；没有点击刷新或通过整页重载代替自动恢复。
+
+再读 [answer-flow.fixture.ts](../tests/e2e/answer-flow.fixture.ts)：holdAnswerResult 默认为 false，原有用例照常执行；本用例设为 true 后，Promise 暂停合成模型结果的返回，由 releaseAnswerResult 放行。只在测试模型端口等待，真实 Processor/账本/Finalizer 照常执行；fixture 的 finally 必须先放行再关闭 Worker，防止失败清理卡住。[e2e-answer-worker.ts](../apps/worker/test/fixtures/e2e-answer-worker.ts) 仅负责等待该回调，不引入产品运行开关。
+
+浏览器离线使用 [Playwright setOffline](https://playwright.dev/docs/api/class-browsercontext#browser-context-set-offline)，等待后台状态使用 [expect.poll](https://playwright.dev/docs/test-assertions#expectpoll)。若没有等待点，Worker 可能在断网前就完成，测试即使变绿也不能证明“离线期间后台完成后的恢复”。如果联网后错误地重新 POST，即使页面出现通过，写请求次数与数据库/模型调用断言仍会失败。
+
+工程验证：定向 1/1，全套 Playwright 14/14；E2E/Worker 类型、目标 lint/格式通过。使用真实本地 API/Web、数据库、队列与消费者，笔记起点和模型输出为合成材料；不覆盖真实 OAuth/供应商效果或服务端断网。此项按用户要求由 AI 实现；用户已确认导读理解，并正确复述不控制模型返回时机会导致结果先到前端、再进入离线，漏掉目标恢复场景，短复述通过。保持 RECALL，仅待补记用户观察与耗时；累计实报仍约 115 分钟，R16 整体及远端 CI 验收尚未完成。
+
+用户随后确认第十段用例已观察、约 15 分钟，十段学习记录已齐，R16 累计实报约 130 分钟。本段按 AI 实现与导读记录，不计作用户手写成果。用户要求将剩余内容合并为一次工程收尾，不再重复导读、复述或已通过检查。
+
+### 5.57 R16：统一收尾与 CI 验收状态
+
+本地验证已齐：质量/构建检查通过；当前故障回归集合 11 文件、221 项（原 220/220，加新增用例所在文件 4/4）；最终浏览器回归 14/14；最新增量的类型/lint/格式通过。第十段结束后专用测试库 17 类相关表无残留。以上沿用本轮实际结果，不把收尾整理计作再次执行。
+
+远端验收仍待执行：推送对应本地提交后，在 GitHub Actions 的 CI 中核对同一提交的 Quality and build 与 Core reliability and browser flows 两个作业，检查集成/浏览器实际结果及上传的浏览器报告；失败时先看该步骤日志和 trace，再修复并验证。未取得远端证据前，R16 保持 DOCUMENTING；本地通过不能替代 CI 已通过，也不自动开始 R17 生产部署。
+
+本轮本地提交排除面试资料、多 Goal backlog、真实环境/密钥及 Playwright 生成目录。提交前检查工作树与暂存差异，不推送、不 amend 或改写历史；远端推送须依仓库规则取得明确指令。
+
 ## 6. 启动应用
 
 ```powershell

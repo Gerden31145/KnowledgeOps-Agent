@@ -15,6 +15,8 @@ export default tseslint.config(
       '**/generated/**',
       '**/node_modules/**',
       'apps/worker/.local/**',
+      'playwright-report/**',
+      'test-results/**',
     ],
   },
   eslint.configs.recommended,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, type EffectScope } from 'vue'
 import { useFollowUpAnswer } from '../app/composables/use-follow-up-answer'
 import { KnowledgeOpsApiError } from '../app/lib/knowledge-ops-api'
+import { reconcileAnswerCommandSession } from '../app/lib/answer-command-session'
 import { taskId, otherRunId } from './fixtures/note-verification'
 import { userId, questionId, receipt } from './fixtures/follow-up-answer'
 
@@ -11,6 +12,8 @@ let scope: EffectScope
 let version: number
 let eligible: boolean
 let storage: {
+  readonly length: number
+  key: ReturnType<typeof vi.fn>
   getItem: ReturnType<typeof vi.fn>
   setItem: ReturnType<typeof vi.fn>
   removeItem: ReturnType<typeof vi.fn>
@@ -33,6 +36,10 @@ describe('follow-up answer command and receipt', () => {
     vi.clearAllMocks()
     const values = new Map<string, string>()
     storage = {
+      get length() {
+        return values.size
+      },
+      key: vi.fn((index: number) => [...values.keys()][index] ?? null),
       getItem: vi.fn((key: string) => values.get(key) ?? null),
       setItem: vi.fn((key: string, value: string) => {
         values.set(key, value)
@@ -116,6 +123,7 @@ describe('follow-up answer command and receipt', () => {
     await first.submit()
     scope.stop()
     scope = effectScope()
+    reconcileAnswerCommandSession(userId)
     const restored = mount()
     expect(restored.draft.value).toBe('原答案')
     expect(api.submitFollowUpAnswer).toHaveBeenCalledTimes(1)
@@ -231,5 +239,85 @@ describe('follow-up answer command and receipt', () => {
     await form.submit()
     expect(form.receipt.value).toBeNull()
     expect(form.pendingConfirmation.value).toBe(true)
+  })
+
+  it('keeps only the confirmed user commands, and removes all answer commands on logout', () => {
+    const otherKey = key.replace(userId, otherRunId)
+    storage.setItem(key, 'A-private')
+    storage.setItem(otherKey, 'B-private')
+    storage.setItem(`${key}-another-question`, 'A-private-2')
+    storage.setItem('unrelated-preference', 'keep')
+    reconcileAnswerCommandSession(otherRunId)
+    expect(storage.getItem(key)).toBeNull()
+    expect(storage.getItem(`${key}-another-question`)).toBeNull()
+    expect(storage.getItem(otherKey)).toBe('B-private')
+    reconcileAnswerCommandSession(null)
+    expect(storage.getItem(otherKey)).toBeNull()
+    expect(storage.getItem('unrelated-preference')).toBe('keep')
+  })
+  it.each([null, otherRunId])(
+    'does not recreate a private command from a late receipt after changing identity to %s',
+    async (nextUser) => {
+      let finish!: (value: ReturnType<typeof receipt>) => void
+      api.submitFollowUpAnswer.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+      const form = mount()
+      form.draft.value = 'A-private'
+      const sending = form.submit()
+      reconcileAnswerCommandSession(nextUser)
+      scope.stop()
+      finish(receipt())
+      expect(await sending).toBeNull()
+      expect(storage.getItem(key)).toBeNull()
+      expect(form.receipt.value).toBeNull()
+    },
+  )
+  it('rejects an old A receipt even after A → B → A, preserving the new A command', async () => {
+    let finish!: (value: ReturnType<typeof receipt>) => void
+    api.submitFollowUpAnswer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const old = mount()
+    old.draft.value = '旧回答'
+    const sending = old.submit()
+    reconcileAnswerCommandSession(otherRunId)
+    reconcileAnswerCommandSession(userId)
+    const current = mount()
+    current.draft.value = '重新登录后的回答'
+    await current.submit()
+    const saved = storage.getItem(key)
+    finish(receipt())
+    expect(await sending).toBeNull()
+    expect(storage.getItem(key)).toBe(saved)
+    expect(JSON.parse(saved!).command.answer).toBe('重新登录后的回答')
+    old.reset()
+    expect(storage.getItem(key)).toBe(saved)
+    expect(await old.submit()).toBeNull()
+    expect(api.submitFollowUpAnswer).toHaveBeenCalledTimes(2)
+  })
+  it('ignores an old submission failure immediately after logout, before component disposal', async () => {
+    let fail!: (error: Error) => void
+    api.submitFollowUpAnswer.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        }),
+    )
+    const form = mount()
+    form.draft.value = 'A-private'
+    const sending = form.submit()
+    reconcileAnswerCommandSession(null)
+    fail(new KnowledgeOpsApiError('rejected', 409, 'CONFLICT', null))
+    expect(await sending).toBeNull()
+    expect(form.issue.value).toBe('')
+    expect(form.rejection.value).toBeNull()
+    expect(storage.getItem(key)).toBeNull()
   })
 })

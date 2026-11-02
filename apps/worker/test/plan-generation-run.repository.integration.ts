@@ -3,9 +3,13 @@ import { createDatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { PlanGenerationSuccessFinalizer } from '../src/plan-generation/finalize-plan-generation-run.js'
+import {
+  FinalizePlanGenerationRun,
+  type PlanGenerationSuccessFinalizer,
+} from '../src/plan-generation/finalize-plan-generation-run.js'
 import { PlanGenerationJobProcessor } from '../src/plan-generation/plan-generation-job-processor.js'
 import { PlanGenerationRunRepository } from '../src/plan-generation/plan-generation-run.repository.js'
+import { validPlanGenerationOutput } from '../../../packages/agent-core/test/fixtures/plan-generation.js'
 
 const databaseUrl = process.env.DATABASE_URL
 
@@ -58,6 +62,68 @@ describe('PlanGenerationRunRepository against PostgreSQL', () => {
 
   afterAll(async () => {
     await database.$disconnect()
+  })
+
+  it('replays the same completed plan job three times without regenerating or changing the graph', async () => {
+    const ids = await createQueuedRun({
+      queuedAt: new Date(),
+      deadlineAt: new Date(Date.now() + 60_000),
+    })
+    const generate = vi.fn(async () => validPlanGenerationOutput)
+    const processor = () =>
+      new PlanGenerationJobProcessor(
+        new PlanGenerationRunRepository(database),
+        { generate },
+        new FinalizePlanGenerationRun(database),
+      )
+    const snapshot = () =>
+      database.plan.findUniqueOrThrow({
+        where: { generationRunId: ids.generationRunId },
+        include: {
+          generationRun: true,
+          stages: {
+            orderBy: { position: 'asc' },
+            include: {
+              tasks: {
+                orderBy: { position: 'asc' },
+                include: {
+                  criteria: { orderBy: { position: 'asc' } },
+                  prerequisites: { orderBy: { prerequisiteTaskId: 'asc' } },
+                },
+              },
+            },
+          },
+        },
+      })
+    try {
+      await database.learningGoal.update({
+        where: { id: ids.goalId },
+        data: {
+          deadline: new Date(Date.now() + 30 * 86400_000),
+        },
+      })
+      expect(await processor().process({ generationRunId: ids.generationRunId })).toMatchObject({
+        status: 'SUCCEEDED',
+      })
+      const saved = await snapshot()
+      expect(saved.stages.flatMap((stage) => stage.tasks)).toHaveLength(3)
+      // 每次重建消费者对象，仍由数据库终态识别原 Job，不能依赖进程内记忆。
+      for (let replay = 0; replay < 3; replay++) {
+        expect(await processor().process({ generationRunId: ids.generationRunId })).toEqual({
+          generationRunId: ids.generationRunId,
+          status: 'SKIPPED',
+          reason: 'TERMINAL',
+          runStatus: 'SUCCEEDED',
+          planId: saved.id,
+        })
+        expect(await snapshot()).toEqual(saved)
+      }
+      expect(generate).toHaveBeenCalledOnce()
+      expect(await database.plan.count({ where: { goalId: ids.goalId } })).toBe(1)
+    } finally {
+      await database.plan.deleteMany({ where: { goalId: ids.goalId } })
+      await database.user.delete({ where: { id: ids.userId } })
+    }
   })
 
   it('uses the run version as a fencing token between repeated executions', async () => {
