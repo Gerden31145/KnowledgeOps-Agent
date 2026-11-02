@@ -1760,9 +1760,11 @@ pnpm exec playwright test tests/e2e/answer-recovery.e2e.ts --headed
 
 本地验证已齐：质量/构建检查通过；当前故障回归集合 11 文件、221 项（原 220/220，加新增用例所在文件 4/4）；最终浏览器回归 14/14；最新增量的类型/lint/格式通过。第十段结束后专用测试库 17 类相关表无残留。以上沿用本轮实际结果，不把收尾整理计作再次执行。
 
-远端验收仍待执行：推送对应本地提交后，在 GitHub Actions 的 CI 中核对同一提交的 Quality and build 与 Core reliability and browser flows 两个作业，检查集成/浏览器实际结果及上传的浏览器报告；失败时先看该步骤日志和 trace，再修复并验证。未取得远端证据前，R16 保持 DOCUMENTING；本地通过不能替代 CI 已通过，也不自动开始 R17 生产部署。
+用户已明确授权本次推送。f6160f7 的[首轮 CI](https://github.com/Gerden31145/KnowledgeOps-Agent/actions/runs/41446154663) 中，质量/构建作业通过（普通测试 825/825），故障回归 221/221；浏览器 13/14。唯一失败出在 SSE 越权用例读取已关闭 EventSource 的正文：状态码已是 404，但 Chromium 不再提供该响应体。7d7ea9a 保留真实浏览器的全部权限断言，改用同一 context.request 读取并比较错误 JSON；它与浏览器[共享 Cookie](https://playwright.dev/docs/api/class-apirequestcontext#cookie-management)，不绕过登录或模拟后端。两项 SSE 本地各重复三次、6/6 通过，类型/lint/格式通过。
 
-本轮本地提交排除面试资料、多 Goal backlog、真实环境/密钥及 Playwright 生成目录。提交前检查工作树与暂存差异，不推送、不 amend 或改写历史；远端推送须依仓库规则取得明确指令。
+远端验收已完成：[7d7ea9a 的 CI #41447186399](https://github.com/Gerden31145/KnowledgeOps-Agent/actions/runs/41447186399) 两个作业均 success，普通测试 825/825、集成回归 221/221、浏览器 14/14，质量检查及应用构建通过。已核对 r16-browser-report（产物 ID 13143245472，保留至 2026-11-09）。R16 随文档收尾提交成功置为 DONE；累计实报学习 130 分钟，离线恢复按 AI 实现与导读记录，不记作用户手写。
+
+本轮提交排除面试资料、多 Goal backlog、真实环境/密钥及 Playwright 生成目录。提交前检查工作树与暂存差异，不 amend 或改写历史；本次明确推送授权继续有效，默认不自动推送的规则保留。R17 生产部署尚未开始。
 
 ## 6. 启动应用
 
