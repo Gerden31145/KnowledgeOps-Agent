@@ -105,13 +105,8 @@ test('真实 EventSource：本人收到快照，他人 Run 返回 404 且没有�
       )
       await openStream(actor.page, foreign.id)
       const denied = await response
-      const missing = await actor.context.request.get(
-        `${apiOrigin}/plan-generation-runs/${randomUUID()}/events`,
-      )
       expect(denied.status()).toBe(404)
-      expect(missing.status()).toBe(404)
       expect(denied.headers()['content-type']).not.toContain('text/event-stream')
-      expect(await denied.json()).toEqual(await missing.json())
       await expect
         .poll(() => actor.page.evaluate(() => window.r16PlanStream.nativeError))
         .toBe(true)
@@ -121,6 +116,28 @@ test('真实 EventSource：本人收到快照，他人 Run 返回 404 且没有�
           snapshots: window.r16PlanStream.snapshots,
         })),
       ).toEqual({ opened: false, snapshots: [] })
+
+      // EventSource 出错关闭后，Chromium 不保证仍可读取该请求的正文。
+      // 浏览器行为在上面验证；错误正文另用共享同一 Cookie 的真实 HTTP 请求比较。
+      const options = {
+        headers: { accept: 'text/event-stream', origin: webOrigin },
+        timeout: 10_000,
+      }
+      const [deniedHttp, missing] = await Promise.all([
+        actor.context.request.get(
+          `${apiOrigin}/plan-generation-runs/${foreign.id}/events`,
+          options,
+        ),
+        actor.context.request.get(
+          `${apiOrigin}/plan-generation-runs/${randomUUID()}/events`,
+          options,
+        ),
+      ])
+      expect(deniedHttp.status()).toBe(404)
+      expect(missing.status()).toBe(404)
+      expect(deniedHttp.headers()['content-type']).toContain('application/json')
+      expect(missing.headers()['content-type']).toContain('application/json')
+      expect(await deniedHttp.json()).toEqual(await missing.json())
     })
   }
 
