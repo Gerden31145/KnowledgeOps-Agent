@@ -109,6 +109,7 @@ export class PlanGenerationRepository {
             modelCatalogId: command.model.catalogId,
             modelProvider: command.model.provider,
             modelName: command.model.modelName,
+            modelReasoningEffort: command.model.reasoningEffort ?? null,
             promptVersion: command.model.promptVersion,
             outputSchemaVersion: command.model.outputSchemaVersion,
             queuedAt: command.queuedAt,

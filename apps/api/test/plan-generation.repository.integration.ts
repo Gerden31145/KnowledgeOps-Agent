@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { ActivePlanGenerationRunError } from '../src/plan-generation/plan-generation.errors.js'
 import { PlanGenerationRepository } from '../src/plan-generation/plan-generation.repository.js'
+import { PlanGenerationRunRepository } from '../../worker/src/plan-generation/plan-generation-run.repository.js'
 
 const databaseUrl = process.env.DATABASE_URL
 
@@ -59,6 +60,38 @@ async function cleanup(userId: string, runIds: string[]) {
 }
 
 describe('PlanGenerationRepository against PostgreSQL', () => {
+  it.each([undefined, 'low', 'high', 'max'] as const)(
+    'preserves reasoning effort %s through intake, persistence and worker claim',
+    async (reasoningEffort) => {
+      const { userId, goalId } = await createOwnedGoal()
+      const runId = randomUUID()
+      const model = { ...MODEL_SNAPSHOT, ...(reasoningEffort ? { reasoningEffort } : {}) }
+      try {
+        await new PlanGenerationRepository(database, () => runId).accept({
+          actorUserId: userId,
+          goalId,
+          model,
+          queuedAt: QUEUED_AT,
+          deadlineAt: DEADLINE_AT,
+        })
+        // A later catalog change must not alter the persisted request consumed by a worker.
+        model.reasoningEffort = reasoningEffort === 'low' ? 'max' : 'low'
+        const saved = await database.planGenerationRun.findUniqueOrThrow({ where: { id: runId } })
+        expect(saved.modelReasoningEffort).toBe(reasoningEffort ?? null)
+        const claimed = await new PlanGenerationRunRepository(database).claimForExecution(
+          runId,
+          new Date(QUEUED_AT.getTime() + 1_000),
+        )
+        expect(claimed.status).toBe('CLAIMED')
+        if (claimed.status !== 'CLAIMED') throw new Error('Expected claimed run')
+        expect(claimed.run.request.model.reasoningEffort).toBe(reasoningEffort)
+        if (!reasoningEffort)
+          expect(claimed.run.request.model).not.toHaveProperty('reasoningEffort')
+      } finally {
+        await cleanup(userId, [runId])
+      }
+    },
+  )
   beforeAll(async () => {
     await database.$connect()
   })

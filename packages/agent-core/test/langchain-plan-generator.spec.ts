@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { ChatOpenAI } from '@langchain/openai'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   LangChainPlanGenerator,
@@ -21,58 +21,63 @@ function createModelFactory(result: unknown) {
   return { factory, invoke, withStructuredOutput }
 }
 
+afterEach(() => vi.unstubAllGlobals())
+
 describe('LangChainPlanGenerator', () => {
-  it('sends json_object and an explicit schema through the real SDK for JSON-mode providers', async () => {
-    const fetchResponse = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          id: 'chatcmpl-test',
-          object: 'chat.completion',
-          created: 0,
-          model: 'glm-5.3',
-          choices: [
-            {
-              index: 0,
-              finish_reason: 'stop',
-              message: {
-                role: 'assistant',
-                content: JSON.stringify(validPlanGenerationOutput),
+  it.each([undefined, 'low'] as const)(
+    'sends JSON-mode schema and frozen reasoning effort %s through the real SDK',
+    async (reasoningEffort) => {
+      const fetchResponse = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'chatcmpl-test',
+            object: 'chat.completion',
+            created: 0,
+            model: 'glm-5.3',
+            choices: [
+              {
+                index: 0,
+                finish_reason: 'stop',
+                message: {
+                  role: 'assistant',
+                  content: JSON.stringify(validPlanGenerationOutput),
+                },
               },
-            },
-          ],
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
-    const generator = new LangChainPlanGenerator(
-      {
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      vi.stubGlobal('fetch', fetchResponse)
+      const generator = new LangChainPlanGenerator({
         apiKey: 'server-secret',
         baseUrl: 'https://provider.example/v4',
         structuredOutputMethod: 'jsonMode',
-      },
-      (input) =>
-        new ChatOpenAI({
-          apiKey: input.apiKey,
-          model: input.modelName,
-          maxRetries: 0,
-          configuration: { baseURL: input.baseUrl, fetch: fetchResponse },
-        }),
-    )
+      })
 
-    await expect(generatePlanCandidate(generator, validPlanGenerationRequest)).resolves.toEqual(
-      validPlanGenerationOutput,
-    )
-    expect(fetchResponse).toHaveBeenCalledOnce()
-    const [url, init] = fetchResponse.mock.calls[0]!
-    expect(String(url)).toBe('https://provider.example/v4/chat/completions')
-    const body = JSON.parse(init.body)
-    expect(body.response_format).toEqual({ type: 'json_object' })
-    expect(body.messages[0].content).toContain('acceptanceCriteria')
-    expect(body.messages[0].content).toContain('dependsOnTaskIds')
-    expect(body.messages[0].content).toContain('minCharacters')
-    expect(body.messages[0].content).toContain('heading')
-    expect(JSON.stringify(body)).not.toContain('server-secret')
-  })
+      await expect(
+        generatePlanCandidate(generator, {
+          ...validPlanGenerationRequest,
+          model: {
+            ...validPlanGenerationRequest.model,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+          },
+        }),
+      ).resolves.toEqual(validPlanGenerationOutput)
+      expect(fetchResponse).toHaveBeenCalledOnce()
+      const [url, init] = fetchResponse.mock.calls[0]!
+      expect(String(url)).toBe('https://provider.example/v4/chat/completions')
+      const body = JSON.parse(init.body)
+      expect(body.response_format).toEqual({ type: 'json_object' })
+      expect(body.reasoning_effort).toBe(reasoningEffort)
+      if (!reasoningEffort) expect(body).not.toHaveProperty('reasoning_effort')
+      expect(body.messages[0].content).toContain('acceptanceCriteria')
+      expect(body.messages[0].content).toContain('dependsOnTaskIds')
+      expect(body.messages[0].content).toContain('minCharacters')
+      expect(body.messages[0].content).toContain('heading')
+      expect(JSON.stringify(body)).not.toContain('server-secret')
+    },
+  )
 
   it.each(['jsonSchema', 'jsonMode'] as const)(
     'rejects wrong-shaped content in %s mode without misclassifying SDK validation',

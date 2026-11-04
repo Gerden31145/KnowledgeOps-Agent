@@ -8,6 +8,7 @@ const configuredModelSchema = z
     id: modelCatalogIdSchema,
     label: z.string().trim().min(1).max(100).optional(),
     model: z.string().trim().min(1).max(160),
+    reasoningEffort: z.enum(['low', 'high', 'max']).optional(),
   })
   .strict()
 

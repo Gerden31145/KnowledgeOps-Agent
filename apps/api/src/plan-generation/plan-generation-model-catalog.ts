@@ -31,6 +31,9 @@ export class PlanGenerationModelCatalog {
       catalogId: configuredModel.id,
       provider: this.provider,
       modelName: configuredModel.model,
+      ...(configuredModel.reasoningEffort
+        ? { reasoningEffort: configuredModel.reasoningEffort }
+        : {}),
       promptVersion: this.promptVersion,
       outputSchemaVersion: this.outputSchemaVersion,
     }

@@ -377,6 +377,7 @@ model PlanGenerationRun {
   modelCatalogId      String                 @map("model_catalog_id") @db.VarChar(100)
   modelProvider       String                 @map("model_provider") @db.VarChar(64)
   modelName           String                 @map("model_name") @db.VarChar(160)
+  modelReasoningEffort String?                @map("model_reasoning_effort") @db.VarChar(16)
   promptVersion       String                 @map("prompt_version") @db.VarChar(64)
   outputSchemaVersion String                 @map("output_schema_version") @db.VarChar(64)
   errorCode           String?                @map("error_code") @db.VarChar(64)

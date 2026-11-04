@@ -140,7 +140,7 @@ GET /plan-generation-models
 
 ```dotenv
 PLAN_GENERATION_PROVIDER=openai
-PLAN_GENERATION_MODELS_JSON=[{"id":"glm-primary","label":"GLM-5.3","model":"glm-5.3"}]
+PLAN_GENERATION_MODELS_JSON=[{"id":"glm-primary","label":"GLM-5.3","model":"glm-5.3","reasoningEffort":"low"}]
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 PLAN_GENERATION_OUTPUT_METHOD=jsonMode
 ```
@@ -149,7 +149,7 @@ PLAN_GENERATION_OUTPUT_METHOD=jsonMode
 
 `PLAN_GENERATION_OUTPUT_METHOD` 默认 `jsonSchema`，保留原有严格 Schema 请求；`jsonMode` 发送 `response_format: { type: "json_object" }`，并在系统提示中附上输出 Schema。这符合[智谱 JSON 模式文档](https://docs.bigmodel.cn/cn/guide/capabilities/struct-output)。JSON 语法合法不代表业务结构合法：两种方式都必须通过本地 Schema、数量/日期与 DAG 校验，再进入 Finalizer；没有规则或 Mock 降级。SDK 内部提前抛出的 Zod/JSON 解析错误也归类为 `MODEL_OUTPUT_INVALID`，而不是网络或供应商失败。
 
-目前没有覆盖 `reasoning_effort`；[GLM-5.3 官方文档](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)声明默认 `max` 且始终启用思考。原有 Run deadline 不因此自动延长。变更配置后重启 Worker；具体真实耗时与结果查阅逐日计划，不把单次调用当作性能指标。
+2026-11-04 起计划模型目录支持可选 `reasoningEffort`（low/high/max），API 在新 Run 中保存 `model_reasoning_effort`，Worker 只读取该快照并传入模型请求；省略时不发送该字段，已有 Run 不补写新配置。[GLM-5.3 官方文档](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)声明默认 `max` 且始终启用思考，本项目生产目录已显式使用 low。变更目录后重启 API，对新生成/关联重试生效；变更 Base URL 或输出模式后需重启 Worker。新增列要求先应用迁移再启动新代码，原有 180 秒 deadline 保持不变。笔记/回答的每 Run 费用预算不自动覆盖计划生成，单次诊断耗时也不作为平均性能指标。
 
 ### 5.2 Outbox 与 BullMQ 本地链路
 
