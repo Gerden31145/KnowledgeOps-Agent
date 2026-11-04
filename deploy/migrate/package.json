@@ -1,0 +1,13 @@
+{
+  "name": "@knowledgeops/migrate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "package.json"
+  ],
+  "dependencies": {
+    "dotenv": "17.4.2",
+    "prisma": "7.9.1"
+  }
+}

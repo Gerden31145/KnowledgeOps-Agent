@@ -1,0 +1,113 @@
+# Merge after compose.yaml. Production continues to use the knowledgeops project/volumes.
+x-runtime: &runtime
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+x-build: &build
+  context: ..
+  dockerfile: deploy/Dockerfile
+
+x-backend: &backend
+  <<: *runtime
+  env_file:
+    - ${APP_ENV_FILE:?Set APP_ENV_FILE relative to deploy/}
+  volumes:
+    - type: bind
+      source: ${GITHUB_APP_SECRETS_DIR:?Set the host secrets directory}
+      target: /run/secrets/knowledgeops
+      read_only: true
+      bind:
+        create_host_path: false
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  api:
+    <<: *backend
+    image: ${API_IMAGE:-knowledgeops-api:cd01}
+    build:
+      <<: *build
+      target: api
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: '4000'
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:?Set a database URL using postgres:5432}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '127.0.0.1:${API_BIND_PORT:-4000}:4000'
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health/ready', {signal: AbortSignal.timeout(3000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *backend
+    image: ${WORKER_IMAGE:-knowledgeops-worker:cd01}
+    build:
+      <<: *build
+      target: worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:?Set a database URL using postgres:5432}
+      REDIS_URL: redis://redis:6379
+    # Matches the current 180s model timeout plus shutdown margin. Revisit if timeouts change.
+    stop_grace_period: 210s
+
+  web:
+    <<: *runtime
+    image: ${WEB_IMAGE:-knowledgeops-web:cd01}
+    build:
+      <<: *build
+      target: web
+    environment:
+      NODE_ENV: production
+      NITRO_HOST: 0.0.0.0
+      NITRO_PORT: '3200'
+      NUXT_PUBLIC_API_BASE_URL: ${NUXT_PUBLIC_API_BASE_URL:?Set the browser-visible API URL}
+    ports:
+      - '127.0.0.1:${WEB_BIND_PORT:-3200}:3200'
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3200/', {signal: AbortSignal.timeout(3000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    image: ${MIGRATE_IMAGE:-knowledgeops-migrate:cd01}
+    build:
+      <<: *build
+      target: migrate
+    profiles: [tools]
+    init: true
+    restart: 'no'
+    environment:
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:?Set a database URL using postgres:5432}
+    depends_on:
+      postgres:
+        condition: service_healthy
