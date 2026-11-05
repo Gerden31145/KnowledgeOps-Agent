@@ -318,6 +318,8 @@ async function release() {
           const secrets = join(attempt, 'secrets')
           mkdirSync(secrets, { mode: 0o750 })
           chownSync(secrets, 0, 1000)
+          // SSH runs with umask 077; mkdir's mode alone would leave this at 0700.
+          chmodSync(secrets, 0o750)
           const key = join(secrets, 'github-app.pem')
           assert.ok(source.GITHUB_APP_PRIVATE_KEY_PATH.startsWith('/'))
           copyFileSync(source.GITHUB_APP_PRIVATE_KEY_PATH, key)

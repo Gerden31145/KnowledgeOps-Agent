@@ -1,6 +1,6 @@
 # CD03：手动生产发布与恢复
 
-当前状态（2026-11-05）：WORKING，用户已完成免交互 SSH 登录验证、Actions Secrets 配置及 Nginx 维护条件接入，首次 Actions check 在镜像身份预检处失败。已修正跨 Docker 存储后端比较本地 image ID 的错误假设，待推送修复后新建一次 check。尚未切换生产或演练回退；本地检查不代替这些证据。预算 1.5 至 2.5 小时，无手写，实际投入未报告。
+当前状态（2026-11-05）：WORKING，SSH/Secrets 与 Nginx 维护条件已接入。第二次 Actions check 已通过镜像校验，在 API 容器读取私钥时因目录权限不足失败；已补齐 umask 077 下的显式目录 chmod，本地 Linux 权限验证通过，待推送修复后新建 check。尚未切换生产或演练回退；本地检查不代替这些证据。预算 1.5 至 2.5 小时，无手写，实际投入未报告。
 
 接入进展：工程检查点 b85d0f4 已由用户推送。用户使用 id_ed25519_vps，在禁用 SSH agent 和交互提示的条件下成功登录 root@175.178.45.54，并确认三个 Actions Secrets 配置完成；AI 未读取私钥或 Secrets 内容。Nginx 候选差异仅含两个维护条件和注释；远端 check 已通过 Nginx 检查并推进到镜像检查，未记录独立的 reload/域名健康输出，不补造验收。
 
@@ -127,7 +127,11 @@ check、deploy、rollback 均记录 operation 和每一步的状态；Actions �
 
 修复后本地相关测试共 25 项通过（新增 7 项覆盖两类本地 ID、错误摘要/仓库、缺失摘要和错误平台），相关 ESLint、Node 语法、Prettier 检查通过。operation=check 未进入维护、停止服务或迁移阶段。推送修复后在 main 新建 Run workflow，保持原应用 commit、CI run/attempt、operation=check；不要 Re-run 旧部署运行，否则仍使用旧 controlCommit。无需重建应用镜像。远端修复结果仍待观察。
 
-本地版本/环境/顺序与失败停止测试覆盖 12 项，连同受影响的 CD02 6 项共 18 项通过；ESLint、Node 语法、Prettier、actionlint 1.7.12、六个工作流 Shell 步骤的 Bash 语法及 Compose 静态合并检查通过。Compose 配置检查使用合成变量，不连接 Docker daemon、VPS 或生产库；首次对 `$` 的断言误把序列化输出当成运行时原值，核对输出后按其转义形式修正检查，配置未因此改写。输出中的 `$` 会为可再次解析而序列化成 `$$`，不能把该输出直接当容器进程的原始环境。实际 raw env 解析和非 root 私钥读取仍由 check 模式验证。
+第二次远端 check：`deploy-42026315405-1`，工具提交 `479e57dcdbf0a1221705a315d558162b5824d073`，已越过四镜像检查，API 一次性容器读取 `/run/secrets/knowledgeops/github-app.pem` 返回 EACCES。工作流远端命令继承 umask 077，mkdir 的 0750 被屏蔽为 0700；原脚本仅 chown 目录，未显式恢复组的进入权限。已在 chown 后增加 chmod 0750，文件保持 root:1000/0640、只读挂载，上级 attempt 目录保持 0700，不扩大为全局可读或改用 root 容器。
+
+WSL Linux 临时合成文件验证已复现 0700 下 UID/GID 1000 读取失败，chmod 0750 后读取成功、写入被拒绝，其他 UID/GID 读取也被拒绝；未读取真实私钥或操作 Docker/VPS。此验证属于 Linux 权限行为验证，不等同于生产容器读取已成功。现有 25 项回归及相关 ESLint、Node 语法、Prettier 再次通过。下一步仍由用户推送后新建 main 的 check，沿用原应用 CI 选择；不手工修改旧 attempt，也无需重建镜像。
+
+初版本地版本/环境/顺序与失败停止测试覆盖 12 项，连同受影响的 CD02 6 项共 18 项通过；ESLint、Node 语法、Prettier、actionlint 1.7.12、六个工作流 Shell 步骤的 Bash 语法及 Compose 静态合并检查通过。Compose 配置检查使用合成变量，不连接 Docker daemon、VPS 或生产库；首次对 `$` 的断言误把序列化输出当成运行时原值，核对输出后按其转义形式修正检查，配置未因此改写。输出中的 `$` 会为可再次解析而序列化成 `$$`，不能把该输出直接当容器进程的原始环境。实际 raw env 解析和非 root 私钥读取仍由 check 模式验证。
 
 尚待：修复后的 Actions check、真实维护窗口发布、业务观察、故障与兼容回退演练、集中导读、短复述及耗时记录。工程检查点只让工作流可被推送执行，不标 CD03 DONE。
 
