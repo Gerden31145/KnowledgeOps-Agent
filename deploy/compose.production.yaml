@@ -1,0 +1,29 @@
+# Merge after the selected source version's compose.yaml and compose.apps.yaml.
+# The release runner only starts application services with --no-deps.
+services:
+  api:
+    image: ${API_IMAGE:?Select a verified digest}
+    env_file: !override
+      - path: ${APP_ENV_FILE:?Set the prepared runtime file}
+        format: raw
+  worker:
+    image: ${WORKER_IMAGE:?Select a verified digest}
+    env_file: !override
+      - path: ${APP_ENV_FILE:?Set the prepared runtime file}
+        format: raw
+    stop_grace_period: ${WORKER_STOP_SECONDS:?Set the shutdown margin}s
+  web:
+    image: ${WEB_IMAGE:?Select a verified digest}
+  migrate:
+    image: ${MIGRATE_IMAGE:?Select a verified digest}
+networks:
+  default:
+    external: true
+    name: knowledgeops_default
+volumes:
+  postgres-data:
+    external: true
+    name: knowledgeops_postgres-data
+  redis-data:
+    external: true
+    name: knowledgeops_redis-data

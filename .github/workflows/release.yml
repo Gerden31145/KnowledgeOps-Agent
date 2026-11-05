@@ -1,0 +1,108 @@
+name: Manual production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character commit from a successful CI release
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful CI run ID
+        required: true
+        type: string
+      ci_attempt:
+        description: Successful CI run attempt
+        required: true
+        default: '1'
+        type: string
+      operation:
+        description: Check configuration, deploy, or return to a compatible container version
+        required: true
+        default: check
+        type: choice
+        options: [check, deploy, rollback]
+      compatibility_reviewed:
+        description: For rollback, I verified database, business state and queue compatibility
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: knowledgeops-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      CI_ATTEMPT: ${{ inputs.ci_attempt }}
+      RELEASE_OPERATION: ${{ inputs.operation }}
+      COMPATIBILITY_REVIEWED: ${{ inputs.compatibility_reviewed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify the successful CI attempt and its exact release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-record.mjs
+      - name: Read configuration from the selected application source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          path: candidate-source
+          persist-credentials: false
+      - name: Package versioned deployment tools and selected Compose configuration
+        run: node scripts/package-release.mjs
+      - name: Configure the dedicated SSH identity and pinned host key
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/knowledgeops"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          printf 'Host knowledgeops-vps\n HostName %s\n User root\n Port 22\n IdentityFile %s/.ssh/knowledgeops\n IdentitiesOnly yes\n BatchMode yes\n StrictHostKeyChecking yes\n ConnectTimeout 15\n ServerAliveInterval 15\n ServerAliveCountMax 4\n' "$VPS_HOST" "$HOME" > "$HOME/.ssh/config"
+      - name: Transfer the reviewed bundle and perform the serial release
+        run: |
+          set -euo pipefail
+          release_id="deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [[ "$release_id" =~ ^deploy-[0-9]+-[0-9]+$ ]]
+          [[ "$RELEASE_OPERATION" == check || "$RELEASE_OPERATION" == deploy || "$RELEASE_OPERATION" == rollback ]]
+          [[ "$COMPATIBILITY_REVIEWED" == true || "$COMPATIBILITY_REVIEWED" == false ]]
+          ssh knowledgeops-vps 'umask 077; mkdir -p /var/lib/knowledgeops-delivery/bundles /var/lib/knowledgeops-delivery/incoming'
+          scp "$RUNNER_TEMP/release-bundle.tar.gz" "knowledgeops-vps:/var/lib/knowledgeops-delivery/incoming/${release_id}.tar.gz"
+          ssh knowledgeops-vps "umask 077; mkdir /var/lib/knowledgeops-delivery/bundles/${release_id} && tar -xzf /var/lib/knowledgeops-delivery/incoming/${release_id}.tar.gz -C /var/lib/knowledgeops-delivery/bundles/${release_id} && flock -n /var/lib/knowledgeops-delivery/release.lock /root/.nvm/versions/node/v24.19.0/bin/node /var/lib/knowledgeops-delivery/bundles/${release_id}/scripts/production-release.mjs /var/lib/knowledgeops-delivery/bundles/${release_id} ${release_id} ${RELEASE_OPERATION} ${COMPATIBILITY_REVIEWED}"
+      - name: Retrieve the redacted attempt result
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ -f "$HOME/.ssh/config" ]]; then
+            scp "knowledgeops-vps:/var/lib/knowledgeops-delivery/attempts/deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/result.json" "$RUNNER_TEMP/release-result.json"
+          fi
+      - name: Save the release result
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-result.json
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Remove the temporary SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/knowledgeops"
