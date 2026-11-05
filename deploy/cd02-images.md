@@ -22,10 +22,10 @@
 | 标识 | 表示什么 | 用在哪里 |
 | --- | --- | --- |
 | Git commit SHA | 源码提交 | 检查、构建和发布记录关联同一份源码 |
-| 本地 image ID | 本地镜像配置的内容标识 | 上传前确认标签仍指向刚构建并测试的镜像 |
+| 本地 image ID | 当前 Docker 存储后端给出的镜像标识 | 在同一 CI Docker 环境中，上传前确认标签仍指向刚构建并测试的镜像 |
 | Registry digest | 镜像仓库中 manifest 的内容标识 | VPS 按 `镜像名@sha256:…` 拉取确定内容 |
 
-本地 image ID 和 registry digest 不是同一个概念，不要求两者相等。标签便于人识别，但部署记录使用摘要固定内容；本次不用 latest。
+本地 image ID 和 registry digest 不能一概等同；不同 Docker 存储后端的 image ID 含义可能不同，跨主机部署不比较两端的 image ID，而核对完整 repository@digest 与目标平台。标签便于人识别，但部署记录使用摘要固定内容；本次不用 latest。
 
 镜像名称示例：`ghcr.io/gerden31145/knowledgeops-agent/api:sha-<完整提交>-run-<工作流编号>-<尝试次数>`。另外三个服务同样命名。每次工作流尝试都有独立标签，即使重新运行同一提交，也不会把记录混在一起。构建使用 linux/amd64，匹配当前 VPS；没有新增多架构发布。
 

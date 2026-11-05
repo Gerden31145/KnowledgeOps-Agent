@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { imagePlan, services } from '../../scripts/ci-images.mjs'
 import { validateJobs, validateRelease, validateRun } from '../../scripts/release-record.mjs'
-import { assertRollback, prepareRuntime, runSteps } from '../../scripts/production-release.mjs'
+import {
+  assertRollback,
+  prepareRuntime,
+  runSteps,
+  validatePulledImage,
+} from '../../scripts/production-release.mjs'
 
 const selected = { commit: 'a'.repeat(40), runId: '1234', attempt: '1' }
 function recordFixture() {
@@ -77,6 +82,59 @@ function environment() {
     NOTE_VERIFICATION_MODEL_JSON: '{"modelName":"fixture"}',
   }
 }
+
+describe('CD03 image identity across Docker stores', () => {
+  function pulled() {
+    const expected = recordFixture().images.api
+    return {
+      expected,
+      actual: {
+        Id: expected.imageId,
+        RepoDigests: [expected.reference],
+        Os: 'linux',
+        Architecture: 'amd64',
+      },
+    }
+  }
+
+  it.each(['classic', 'containerd'])(
+    'accepts the exact repository digest with a %s local ID',
+    (backend) => {
+      const { expected, actual } = pulled()
+      actual.Id = backend === 'classic' ? expected.imageId : expected.digest
+      expect(() => validatePulledImage(expected, actual)).not.toThrow()
+    },
+  )
+
+  it('rejects another registry digest even when the local ID matches the CI image ID', () => {
+    const { expected, actual } = pulled()
+    actual.RepoDigests = [expected.reference.replace(expected.digest, `sha256:${'f'.repeat(64)}`)]
+    expect(() => validatePulledImage(expected, actual)).toThrow('verified repository digest')
+  })
+
+  it('rejects the same digest under a different repository', () => {
+    const { expected, actual } = pulled()
+    actual.RepoDigests = [`ghcr.io/another/repository@${expected.digest}`]
+    expect(() => validatePulledImage(expected, actual)).toThrow('verified repository digest')
+  })
+
+  it('rejects absent or empty repository digests', () => {
+    const { expected, actual } = pulled()
+    for (const RepoDigests of [undefined, null, []]) {
+      expect(() => validatePulledImage(expected, { ...actual, RepoDigests })).toThrow(
+        'verified repository digest',
+      )
+    }
+  })
+
+  it.each([{ Os: 'windows' }, { Architecture: 'arm64' }])(
+    'rejects the wrong platform %j',
+    (platform) => {
+      const { expected, actual } = pulled()
+      expect(() => validatePulledImage(expected, { ...actual, ...platform })).toThrow()
+    },
+  )
+})
 
 describe('CD03 release selection and failure boundaries', () => {
   it('derives all four immutable image references from the complete verified record', () => {

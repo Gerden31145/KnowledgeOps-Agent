@@ -11,8 +11,8 @@
 | 确定任务预算 | R14 收尾后原未完成单元合计约 47 小时，其中原冻结前任务约 43 小时，超过 9/22 至 9/27 容量约 21 至 25 小时；是待完成工作量，不是月底完成承诺。包含入门、阅读、手写、Review、验证、复述、周问答与文档 |
 | 预算性质 | 用户项目投入估算，不是 AI 编码耗时或完成保证；按真实耗时复盘，剩余容量留作缓冲 |
 | 当前活动阶段 | M6 `AI_IMPLEMENTING`：R16/R17、CD01/CD02 已完成；CD03、主页重构和页面优化待推进；评分一致性问题保持 OPEN |
-| 当前活动单元 | CD03 `WORKING`：VPS 基线和完整 CD02 记录已收到，手动发布/check/兼容回退初版已准备；待用户配置 SSH、维护开关并观察 check；CD02 DONE（63231f3），约 25 分钟 |
-| 下一步 | 完成 CD03 工程检查点提交，由用户推送、设置三个 SSH Secrets、比较并安装维护开关，再手动运行 check；通过后才在约定维护窗口执行 deploy |
+| 当前活动单元 | CD03 `WORKING`：SSH/Secrets 与维护条件已接入；首次 check 在跨主机 image ID 比较处失败，修复及本地 25 项测试通过，待远端验证；CD02 DONE（63231f3），约 25 分钟 |
+| 下一步 | 用户推送镜像身份校验修复，在 main 新建 Run workflow，保持应用 2e47697、CI 41968799065/1、operation=check；不 Re-run 旧部署运行。check 通过后才在约定维护窗口执行 deploy |
 | 真相源 | [求职版 PRD](KnowledgeOps-Agent-9月求职版PRD.md)、[协作规则](../AGENTS.md)、[阶段技能](../.agents/skills/run-interview-project-stage/SKILL.md)、[学习档案](../问答.md) |
 
 旧计划剩余 22 个开发日，按此前每个至少 4 小时估算已超过 88 小时，尚未包含阶段收尾。因此本次同时减少实现范围和重复学习关卡，不将旧日期整体顺延。
@@ -134,6 +134,10 @@ AI 完成 Dockerfile 多阶段目标、可移植依赖打包、迁移工具 work
 用户提供线上 bf0a38c7dd5dc436e42cbb69b779a68076a00173、干净工作树、Compose 5.6.1、健康存储容器、明确的 knowledgeops 两个数据卷、三个 online PM2 应用、pm2-root active/旧 ecosystem 开机配置、Nginx 检查成功和约 41G 可用空间。完整交付记录为应用提交 2e47697fbc1dac0754e7320f0467ec370bcdd806、CI 41968799065/attempt 1，四份摘要保存在 CD03 说明。此前截断摘要的证据缺口已补齐；工作流仍会从 GitHub API 重新核对实际成功状态，不直接信任手工 JSON。用户确认 SSH 22、有专用密钥，尚未配置本次 Actions Secrets。
 
 初版复用 CD01 镜像/Compose，新增手动工作流、CI artifact 验证与打包工具、VPS 顺序发布脚本和生产 override；Nginx 仅增加维护文件判断。默认 check 通过一次性容器检查环境与私钥，不停旧应用或调用模型；deploy 停写备份后迁移、启动并检查，失败保留维护并停止部分启动的应用；rollback 要求既有成功记录、迁移摘要一致及显式兼容确认，并恢复目标版本配置。发布使用独立 Actions 并发组和 VPS 文件锁，不取消正在运行的发布。完整职责、首读入口和边界见 [CD03 说明](../deploy/cd03-release.md)，不要求逐行阅读全部工程辅助代码。当前尚无真实发布、回退或新业务观察；本地工程检查不替代生产证据，单元保持 WORKING，先创建可供远端观察的工程检查点。
+
+### CD03 首次 check 与镜像标识修复（2026-11-05）
+
+用户完成免交互 SSH 登录及三个 Actions Secrets 配置，并提供仅增加维护条件的 Nginx diff。首次手动 check `deploy-42023905114-1` 使用工具提交 b85d0f4，远端 Nginx 检查通过，在镜像 Id 比较处失败。根因是部署脚本把 CI 本地 image ID 当作跨 Docker 存储后端的统一身份；已改为完整 repository@digest 与 linux/amd64 校验，保留 CD02 同一 Docker 环境的 image ID 检查。新增 7 项测试，相关两文件共 25 项通过，相关 lint/语法/格式检查通过。此次 check 未进入维护、停服务或迁移，不需要恢复线上应用；新运行须使用修复后的 main 工具版本，仍选择原成功 CI 的应用镜像。实际远端修复结果、生产切换和回退未验证，CD03 保持 WORKING，实际投入未报。
 
 ### 11/4 执行粒度与架构导读调整
 

@@ -28,6 +28,17 @@ const maintenance = '/var/lib/knowledgeops-maintenance'
 const pm2 = '/root/.nvm/versions/node/v24.19.0/bin/pm2'
 const domain = 'game.gerden-shop.cn'
 
+export function validatePulledImage(expected, actual) {
+  // .Id is backend-specific (config digest vs manifest/index digest). The exact
+  // repository@digest is the cross-host identity already fixed by the CI record.
+  assert.ok(
+    Array.isArray(actual.RepoDigests) && actual.RepoDigests.includes(expected.reference),
+    'Pulled image does not contain the verified repository digest',
+  )
+  assert.equal(actual.Os, 'linux')
+  assert.equal(actual.Architecture, 'amd64')
+}
+
 export function prepareRuntime(source) {
   const database = new URL(source.DATABASE_URL)
   assert.equal(database.protocol, 'postgresql:')
@@ -351,9 +362,7 @@ async function release() {
               command('docker', ['pull', image.reference])
             }
             const actual = inspect(image.reference)
-            assert.equal(actual.Id, image.imageId)
-            assert.equal(actual.Os, 'linux')
-            assert.equal(actual.Architecture, 'amd64')
+            validatePulledImage(image, actual)
           }
           for (const [service, reader] of [
             ['api', 'readApiEnvironment'],

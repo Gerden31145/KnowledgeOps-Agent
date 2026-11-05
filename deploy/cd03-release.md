@@ -1,6 +1,8 @@
 # CD03：手动生产发布与恢复
 
-当前状态（2026-11-05）：WORKING，用户已提供 VPS 只读结果、完整 CD02 交付记录，并确认 SSH 端口 22、有专用密钥。手动工作流、版本校验、VPS 发布脚本和维护开关初版已准备，待用户配置 SSH、安装维护开关并首先执行 check。尚未实际运行发布工作流、切换生产或演练回退；本地检查不代替这些证据。预算 1.5 至 2.5 小时，无手写，实际投入未报告。
+当前状态（2026-11-05）：WORKING，用户已完成免交互 SSH 登录验证、Actions Secrets 配置及 Nginx 维护条件接入，首次 Actions check 在镜像身份预检处失败。已修正跨 Docker 存储后端比较本地 image ID 的错误假设，待推送修复后新建一次 check。尚未切换生产或演练回退；本地检查不代替这些证据。预算 1.5 至 2.5 小时，无手写，实际投入未报告。
+
+接入进展：工程检查点 b85d0f4 已由用户推送。用户使用 id_ed25519_vps，在禁用 SSH agent 和交互提示的条件下成功登录 root@175.178.45.54，并确认三个 Actions Secrets 配置完成；AI 未读取私钥或 Secrets 内容。Nginx 候选差异仅含两个维护条件和注释；远端 check 已通过 Nginx 检查并推进到镜像检查，未记录独立的 reload/域名健康输出，不补造验收。
 
 ## 本段目标与分工
 
@@ -93,7 +95,7 @@ awk '{print $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
 diff -u /etc/nginx/sites-available/game.gerden-shop.cn /root/knowledgeops-nginx.cd03.conf
 ```
 
-预期差异仅为 `/api/` 和 `/` 中的维护文件判断及注释；若线上还有其他改动，保留那些设置后再安装。安装时先创建原配置备份，`nginx -t` 成功才 reload；失败则恢复原配置。不改域名、证书、健康接口限制或 SSE 设置。维护文件不存在时行为不变。此安装步骤在用户反馈 diff 后给出具体命令；当前尚未执行。
+预期差异仅为 `/api/` 和 `/` 中的维护文件判断及注释；若线上还有其他改动，保留那些设置后再安装。安装时先创建原配置备份，`nginx -t` 成功才 reload；失败则恢复原配置。不改域名、证书、健康接口限制或 SSE 设置。维护文件不存在时行为不变。用户已提供符合预期的 diff，远端预检已确认配置中存在维护条件；不重复安装。
 
 完成 SSH 与维护开关配置后，打开 Actions → Manual production release → Run workflow，分支选 main：
 
@@ -121,8 +123,12 @@ check、deploy、rollback 均记录 operation 和每一步的状态；Actions �
 
 ## 当前验证边界
 
+首次远端 check：`deploy-42023905114-1`，controlCommit `b85d0f42676ada028c7b00aabf89aae3f64dd2ee`，应用/CI 选择仍为上表版本。预检在 `actual.Id === image.imageId` 失败；这是脚本把 CI 本地标识误作跨主机标识，不能据此断言拉错镜像。Docker containerd 后端可将 manifest/index 摘要作为 Id，与 classic 后端的 config 摘要不同。修复要求 inspect 的 RepoDigests 包含发布记录中完整的 repository@digest，并核对 linux/amd64；摘要固定 manifest 及其引用的配置/镜像层。CD02 同一 Docker 环境中的 image ID 检查保留。依据：[Moby containerd inspect 实现](https://github.com/moby/moby/blob/master/daemon/containerd/image_inspect.go)。
+
+修复后本地相关测试共 25 项通过（新增 7 项覆盖两类本地 ID、错误摘要/仓库、缺失摘要和错误平台），相关 ESLint、Node 语法、Prettier 检查通过。operation=check 未进入维护、停止服务或迁移阶段。推送修复后在 main 新建 Run workflow，保持原应用 commit、CI run/attempt、operation=check；不要 Re-run 旧部署运行，否则仍使用旧 controlCommit。无需重建应用镜像。远端修复结果仍待观察。
+
 本地版本/环境/顺序与失败停止测试覆盖 12 项，连同受影响的 CD02 6 项共 18 项通过；ESLint、Node 语法、Prettier、actionlint 1.7.12、六个工作流 Shell 步骤的 Bash 语法及 Compose 静态合并检查通过。Compose 配置检查使用合成变量，不连接 Docker daemon、VPS 或生产库；首次对 `$` 的断言误把序列化输出当成运行时原值，核对输出后按其转义形式修正检查，配置未因此改写。输出中的 `$` 会为可再次解析而序列化成 `$$`，不能把该输出直接当容器进程的原始环境。实际 raw env 解析和非 root 私钥读取仍由 check 模式验证。
 
-尚待：用户安装维护开关、SSH/Actions check、真实维护窗口发布、业务观察、故障与兼容回退演练、集中导读、短复述及耗时记录。工程检查点只让工作流可被推送执行，不标 CD03 DONE。
+尚待：修复后的 Actions check、真实维护窗口发布、业务观察、故障与兼容回退演练、集中导读、短复述及耗时记录。工程检查点只让工作流可被推送执行，不标 CD03 DONE。
 
 设计依据：[GitHub Actions 并发控制](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)、[Docker Compose 应用创建与重建](https://docs.docker.com/reference/cli/docker/compose/up/)。生产恢复能力以本段实际演练为准。
