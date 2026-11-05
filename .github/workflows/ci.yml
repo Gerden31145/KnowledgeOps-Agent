@@ -124,3 +124,82 @@ jobs:
             test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  images:
+    name: Verify and publish container images
+    needs: [verify, regression]
+    # PRs retain the existing read-only checks; image publishing runs on trusted main only.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      QUALITY_RESULT: ${{ needs.verify.result }}
+      REGRESSION_RESULT: ${{ needs.regression.result }}
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js for verification scripts
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare isolated Compose configuration and versioned image names
+        run: node scripts/ci-images.mjs prepare
+
+      - name: Build the four application images
+        run: docker compose --env-file deploy/.env.cd01 --profile tools build api worker web migrate
+
+      - name: Record the images that will be verified
+        run: node scripts/ci-images.mjs snapshot
+
+      - name: Verify migration, HTTP, queue consumption and persisted data
+        run: bash scripts/ci-container-smoke.sh
+
+      - name: Log in to GHCR with the job token
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish the verified images and record their registry digests
+        run: node scripts/ci-images.mjs publish
+
+      - name: Save the release record
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cd02-release/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Collect container diagnostics on failure
+        if: failure()
+        run: |
+          if [[ -f deploy/.env.cd01 && "${COMPOSE_PROJECT_NAME:-}" == knowledgeops-ci-* ]]; then
+            docker compose --env-file deploy/.env.cd01 ps -a > "$RUNNER_TEMP/cd02-containers.log"
+            docker compose --env-file deploy/.env.cd01 logs --no-color --tail 100 >> "$RUNNER_TEMP/cd02-containers.log" 2>&1
+          fi
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cd02-containers.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove this run's disposable containers and credentials
+        if: always()
+        run: |
+          if [[ -f deploy/.env.cd01 && "${COMPOSE_PROJECT_NAME:-}" == knowledgeops-ci-* ]]; then
+            docker compose --env-file deploy/.env.cd01 down --volumes --remove-orphans
+          fi
+          docker logout ghcr.io

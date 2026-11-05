@@ -1,0 +1,2 @@
+# Scripts execute in Linux CI/WSL even when the checkout is managed on Windows.
+ci-container-smoke.sh text eol=lf
