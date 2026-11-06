@@ -1,6 +1,6 @@
 # CD03：手动生产发布与恢复
 
-当前状态（2026-11-05）：WORKING，SSH/Secrets 与 Nginx 维护条件已接入。第二次 Actions check 已通过镜像校验，在 API 容器读取私钥时因目录权限不足失败；已补齐 umask 077 下的显式目录 chmod，本地 Linux 权限验证通过，待推送修复后新建 check。尚未切换生产或演练回退；本地检查不代替这些证据。预算 1.5 至 2.5 小时，无手写，实际投入未报告。
+当前状态（2026-11-06）：DONE（随本次本地收尾提交生效；提交失败恢复 DOCUMENTING）。首次正式发布、A→B→A 兼容回退及业务观察完成，完整 CI/CD 导读理解确认和短复述通过。预算 1.5 至 2.5 小时，用户实报约 30 分钟，无手写。B/回退的完整日志未单独提供，不补造运行标识。下一步讨论主页重构范围，尚未授权具体 UI 实现。
 
 接入进展：工程检查点 b85d0f4 已由用户推送。用户使用 id_ed25519_vps，在禁用 SSH agent 和交互提示的条件下成功登录 root@175.178.45.54，并确认三个 Actions Secrets 配置完成；AI 未读取私钥或 Secrets 内容。Nginx 候选差异仅含两个维护条件和注释；远端 check 已通过 Nginx 检查并推进到镜像检查，未记录独立的 reload/域名健康输出，不补造验收。
 
@@ -133,6 +133,26 @@ WSL Linux 临时合成文件验证已复现 0700 下 UID/GID 1000 读取失败�
 
 初版本地版本/环境/顺序与失败停止测试覆盖 12 项，连同受影响的 CD02 6 项共 18 项通过；ESLint、Node 语法、Prettier、actionlint 1.7.12、六个工作流 Shell 步骤的 Bash 语法及 Compose 静态合并检查通过。Compose 配置检查使用合成变量，不连接 Docker daemon、VPS 或生产库；首次对 `$` 的断言误把序列化输出当成运行时原值，核对输出后按其转义形式修正检查，配置未因此改写。输出中的 `$` 会为可再次解析而序列化成 `$$`，不能把该输出直接当容器进程的原始环境。实际 raw env 解析和非 root 私钥读取仍由 check 模式验证。
 
-尚待：修复后的 Actions check、真实维护窗口发布、业务观察、故障与兼容回退演练、集中导读、短复述及耗时记录。工程检查点只让工作流可被推送执行，不标 CD03 DONE。
+用户随后确认修复后的工作流成功，并核对 operation 为 check。据此记录远端预检通过，覆盖镜像身份、API/Worker 配置解析和私钥读取等预检步骤；未提供该次完整 result.json，不补造 deploymentId/controlCommit。check 不进入维护、备份、迁移、启动和激活阶段，不能记为生产已切换。下一步在 main 新建 Run workflow，保持应用 2e47697fbc1dac0754e7320f0467ec370bcdd806、CI 41968799065/1，operation 改为 deploy，compatibility_reviewed 保持未选。用户安排短暂维护窗口并暂停业务提交/Push，发布成功后再检查应用和业务结果；失败时保留日志与维护状态，根据失败步骤恢复。
+
+首次正式发布证据：用户提供 result 日志，deploymentId=`deploy-42030257913-1`，operation=`deploy`，commit=`2e47697fbc1dac0754e7320f0467ec370bcdd806`，CI=`41968799065/1`，controlCommit=`15a49a5a886d022b91947363a246535eafd84c7b`，status=`SUCCEEDED`，stage=`complete`，timestamp=`2026-11-05T12:51:00.888Z`。根据脚本完成路径，预检、维护及停止旧应用、备份、迁移、应用启动与健康检查、激活均完成；已禁用本项目旧 pm2-root 启动责任，沿用生产存储容器/卷并解除维护。该日志不等于浏览器或真实模型业务已验收，也不证明备份可实际恢复、回退已演练。用户下一步查看容器与服务状态、登录及旧数据、一次测试任务 Push 到报告的链路，不要求重跑已经通过的 check。
+
+用户回复“观察完毕，没问题”，据前序观察清单记录容器及旧 PM2/systemd 状态、登录刷新、旧计划/任务/报告读取、测试任务 Push 到报告均通过；没有单独输出、业务标识或测量值，不虚构它们。首次生产切换与用户业务观察已完成，不重复要求同一轮操作。
+
+兼容回退准备：A 为已验证的 2e47697 / CI 41968799065/1；候选 B 为 15a49a5a886d022b91947363a246535eafd84c7b，待用户提供对应 CI 成功运行链接及 attempt，不复用 Manual production release 的运行号。git diff 确认 A→B 仅改变发布工具/生产 override/Nginx 模板/测试/文档，业务源码、依赖锁文件和 Prisma 迁移没有变化，可作为低变更量的兼容发布演练。待 B 的成功 CI 记录核对后先 deploy B，再以 A 的原 CI 记录运行 rollback 并显式确认兼容；不得把当前 A 原地再次启动称为跨版本回退。发布工具仍来自选定的 main，回退对象为应用镜像与历史配置，数据库不恢复为旧备份。每次运行期间暂停业务提交/Push，记录一份现有报告 URL/任务状态，回退后确认仍可读取。具体两次运行尚未执行，不提前记为通过。
+
+用户已提供候选 B 对应 CI 成功运行链接：https://github.com/Gerden31145/KnowledgeOps-Agent/actions/runs/42027607903 。私有运行页面未能直接读取，记录为用户提供的运行号，不伪称已查看 jobs/artifact；attempt 尚无单独记录。由用户在 Run workflow 中选择 B 完整提交、ci_run_id=42027607903、未重跑时 ci_attempt=1（若重跑以 release.json 的 workflow.attempt 为准）、operation=deploy；工作流仍须在服务器变更前核验实际提交、当前成功 attempt 和完整交付记录。B 发布成功后才给出回退 A 的实际操作，暂不连续触发两次。
+
+用户确认“B发布成功”，据此记录第二次正式发布通过；未提供 B 的 deploymentId、精确 attempt 或完成时间，不补造这些字段。回退前先确认保存的报告在 B 下仍可读取；随后在 main 新建运行，commit=2e47697fbc1dac0754e7320f0467ec370bcdd806、ci_run_id=41968799065、ci_attempt=1、operation=rollback，并勾选 compatibility_reviewed。已核对 A/B 业务源码、依赖锁文件及迁移无变化，脚本还会核对历史成功镜像和迁移摘要；回退读取 A 历史配置，跳过迁移、不恢复旧数据库备份。回退成功后记录 operation=rollback 的完成日志和同一报告/任务读取结果，尚未收到这些结果。
+
+用户确认“回滚成功，一切正常”，按前序操作清单记录 B→A rollback 成功、回退后的原报告及任务状态正常，当前应用恢复到 A。未收到完整 rollback 日志，不虚构 deploymentId/controlCommit/完成时间或镜像摘要差异。该演练验证了不同发布记录之间的兼容回退流程；A/B 业务源码相同，不宣称已验证不兼容代码或不同数据库结构的回退。数据库保留当前内容，不把此演练记为备份恢复演练。
+
+当前首读入口：release.yml 的输入/CI 交付核验/SSH 与发布锁，production-release.mjs 的顺序步骤、check/deploy/rollback 分支及失败出口。release-record.mjs 与 package-release.mjs 作为配套职责补充；集中解释应用 commit 与工具 controlCommit 的区别、历史配置来源、失败时维护状态与日志、回退不还原数据库。进入 WALKTHROUGH，不将导读已提供记为用户理解已确认。
+
+2026-11-06：用户在完整 CI/CD 架构、commit 与 CI run/attempt 区别、release.yml→release-record.mjs→GitHub API→artifact 的导读后明确“ok,我明白了”，随后要求继续。理解确认完成，进入 RECALL，仅做本单元一次短复述与实际耗时补记；不重复发布/回退、不开下一功能或新增手写。用户尚未给出收尾复述，不预记通过。
+
+2026-11-06 收尾复述，用户原话：“选择CI版本之后，actions调用脚本去请求Github API，查看CI状态，拉取交付内容，然后ssh登录VPS调用脚本检查、停止服务、部署和重启服务。回退版本不影响已经持久化的数据”。评价：已理解版本核验、交付材料、远程执行和持久化数据边界，短复述通过。AI 补充维护、停止写入、备份、迁移与启动的先后顺序，以及回退保留当前数据库、仍需旧代码兼容当前结构；这些补充不记为用户独立答出。
+
+用户实报 CD03 累计约 30 分钟；不根据聊天日期、工作流时长或 AI 排错时间推算额外投入。CD01 约 20 分钟、CD02 约 25 分钟分开保留。工程提交 b85d0f4、479e57d、15a49a5 已包含实现与两次修复；本次仅收尾发布证据、学习记录和计划，不改产品代码、不重跑已通过的 25 项测试或生产操作。前两次失败提供真实预检停止证据，后续失败停止有本地测试；兼容回退不代表不兼容迁移恢复或零停机发布。按已确认范围完成 CD03，状态随本地收尾提交生效；未跟踪个人资料、R17 文档等不纳入提交，不自动推送或启动主页重构。
 
 设计依据：[GitHub Actions 并发控制](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)、[Docker Compose 应用创建与重建](https://docs.docker.com/reference/cli/docker/compose/up/)。生产恢复能力以本段实际演练为准。
