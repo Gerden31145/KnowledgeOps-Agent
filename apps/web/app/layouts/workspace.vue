@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
 import { useSessionUser } from '../composables/use-session-user'
+import { goalDraftKey } from '../lib/workspace-entry'
 
 const user = useSessionUser()
 const api = useKnowledgeOpsApi()
@@ -17,6 +18,11 @@ async function logout() {
   logoutError.value = ''
   try {
     await api.logout()
+    try {
+      window.sessionStorage.removeItem(goalDraftKey)
+    } catch {
+      /* 会话仍会退出 */
+    }
     queryClient.clear()
     user.value = null
     window.location.assign('/login')
@@ -31,7 +37,6 @@ useHead({
 })
 
 const navigation = [
-  { label: '今日学习', to: '/app/today' },
   { label: '学习计划', to: '/app/plan' },
   { label: '仓库接入', to: '/app/repository' },
 ]
@@ -70,7 +75,9 @@ const navigation = [
         </nav>
         <div class="flex flex-wrap items-center gap-3">
           <span class="max-w-48 truncate text-sm text-muted">{{ user?.githubLogin }}</span>
+          <NuxtLink v-if="!user" class="action-button" to="/login">登录</NuxtLink>
           <button
+            v-else
             type="button"
             :disabled="loggingOut"
             class="min-h-11 rounded-full border border-ink px-5 font-mono text-caption tracking-label disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
@@ -91,7 +98,7 @@ const navigation = [
 
     <main
       id="workspace-content"
-      class="mx-auto min-h-[calc(100svh-8rem)] max-w-7xl px-4 py-12 sm:px-6 md:py-16 lg:px-10"
+      class="mx-auto min-h-[calc(100svh-8rem)] max-w-7xl px-4 py-8 sm:px-6 md:py-10 lg:px-10"
     >
       <slot />
     </main>

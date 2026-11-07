@@ -9,6 +9,7 @@ import {
   type PlanDetailResponse,
   type TaskDetailResponse,
   type TodayTasksResponse,
+  type WorkspaceEntryResponse,
 } from '@knowledgeops/contracts'
 import type { DatabaseClient, PlanStatus, TaskState, TaskType } from '@knowledgeops/database'
 
@@ -36,6 +37,41 @@ export interface PlanGraph {
 
 export class PlanRepository {
   constructor(private readonly database: DatabaseClient) {}
+
+  async findWorkspaceEntryForUser(userId: string): Promise<WorkspaceEntryResponse> {
+    const active = await this.database.plan.findFirst({
+      where: { status: 'ACTIVE', goal: { userId } },
+      orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    })
+    if (active) return { planId: active.id, runId: null, modelId: null, goal: null }
+    const goal = await this.database.learningGoal.findFirst({
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        title: true,
+        currentLevel: true,
+        deadline: true,
+        weeklyMinutes: true,
+        planGenerationRuns: {
+          orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }],
+          take: 1,
+          select: { id: true, modelCatalogId: true },
+        },
+        plans: { orderBy: [{ version: 'desc' }], take: 1, select: { id: true } },
+      },
+    })
+    if (!goal) return { planId: null, runId: null, modelId: null, goal: null }
+    const { planGenerationRuns, plans, ...input } = goal
+    const run = planGenerationRuns[0]
+    return {
+      planId: run ? null : (plans[0]?.id ?? null),
+      runId: run?.id ?? null,
+      modelId: run?.modelCatalogId ?? null,
+      goal: { ...input, deadline: input.deadline.toISOString().slice(0, 10) },
+    }
+  }
 
   async findGraphByIdForUser(_planId: string, _userId: string): Promise<PlanGraph | null> {
     const plan = await this.database.plan.findFirst({

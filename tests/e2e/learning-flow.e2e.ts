@@ -23,25 +23,25 @@ test('页面生成并确认计划 → 开始任务 → Push 取证 → 笔记与
   const generationRunId = await test.step('通过页面创建计划，不预先写入 Task 或报告', async () => {
     expect(await f.database.learningGoal.count({ where: { userId: f.userId } })).toBe(0)
     await page.goto('/app/plan')
-    await page.getByLabel('目标', { exact: true }).fill('R16 完整链路：事件循环学习')
+    await page.getByLabel('学习目标', { exact: true }).fill('R16 完整链路：事件循环学习')
     await page
       .getByLabel('当前基础', { exact: true })
       .fill('已经熟悉 Vue 和 TypeScript，希望理解微任务的执行顺序。')
     await page
       .getByLabel('截止日期', { exact: true })
       .fill(new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10))
-    await page.getByLabel('每周分钟', { exact: true }).fill('600')
+    await page.getByLabel('每周投入（分钟）', { exact: true }).fill('600')
     await page.getByRole('radio', { name: /R16 合成模型/ }).check()
     const responsePromise = page.waitForResponse(
       (response) =>
         response.url().endsWith('/plan-generation-runs') && response.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: '创建目标并生成计划', exact: true }).click()
+    await page.getByRole('button', { name: '生成计划', exact: true }).click()
     const response = await responsePromise
     expect(response.status()).toBe(202)
     const accepted = planGenerationAcceptedResponseSchema.parse(await response.json())
     await expect(page).toHaveURL((url) => url.searchParams.get('run') === accepted.generationRunId)
-    await expect(page.getByRole('button', { name: '确认并激活计划', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '确认并开始', exact: true })).toBeVisible()
     return accepted.generationRunId
   })
 
@@ -54,10 +54,11 @@ test('页面生成并确认计划 → 开始任务 → Push 取证 → 笔记与
   expect(plan.status).toBe('DRAFT')
 
   await test.step('确认计划后开始根任务，后继仍须等待解锁', async () => {
-    await page.getByRole('button', { name: '确认并激活计划', exact: true }).click()
-    await page.getByRole('link', { name: '查看今日任务', exact: true }).click()
+    await page.getByRole('button', { name: '确认并开始', exact: true }).click()
     await expect(
-      page.getByRole('heading', { name: pipelinePlan.stages[0].tasks[0].title, exact: true }),
+      page
+        .getByRole('region', { name: '接下来做什么' })
+        .getByRole('heading', { name: pipelinePlan.stages[0].tasks[0].title, exact: true }),
     ).toBeVisible()
     await page.getByRole('link', { name: '查看任务', exact: true }).click()
     await expect(page).toHaveURL((url) => url.pathname === `/app/tasks/${task.id}`)
@@ -122,6 +123,7 @@ test('页面生成并确认计划 → 开始任务 → Push 取证 → 笔记与
   const answerRunId =
     await test.step('页面发现新报告与追问，再经现有回答流程完成验收', async () => {
       await expect(page.getByLabel('任务状态：等待回答', { exact: true })).toBeVisible()
+      await page.getByRole('tab', { name: '验收与反馈' }).click()
       await expect(page.getByText('R16 合成笔记验收：通过', { exact: true })).toBeVisible()
       await page
         .getByLabel('你的回答', { exact: true })

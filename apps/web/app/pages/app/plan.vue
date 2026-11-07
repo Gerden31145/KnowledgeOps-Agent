@@ -5,15 +5,18 @@ import {
   type LearningGoalInput,
   type PlanGenerationAcceptedResponse,
 } from '@knowledgeops/contracts'
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { computed, reactive, ref, watch } from 'vue'
-import { definePageMeta, useHead, useRoute, useRouter } from '#imports'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { definePageMeta, useHead, useRoute, useRouter, useState } from '#imports'
 
 import { useKnowledgeOpsApi } from '../../composables/use-knowledge-ops-api'
 import { usePlanRunRecovery } from '../../composables/use-plan-run-recovery'
 import { useModelCatalogQuery, usePlanQuery } from '../../composables/use-workspace-queries'
 import { KnowledgeOpsApiError } from '../../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../../lib/query-keys'
+
+import { useSessionUser } from '../../composables/use-session-user'
+import { goalDraftKey, goalDraftSchema } from '../../lib/workspace-entry'
 
 definePageMeta({ layout: 'workspace' })
 useHead({ title: '学习计划 · KnowledgeOps Agent' })
@@ -22,11 +25,30 @@ const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const api = useKnowledgeOpsApi()
-const modelCatalog = useModelCatalogQuery()
+const user = useSessionUser()
+const sessionIssue = useState<string | null>('workspace-session-issue', () => null)
+const modelCatalog = useModelCatalogQuery(() => Boolean(user.value))
+const explicit = computed(() => Boolean(route.query.run || route.query.goal || route.query.plan))
+const entry = useQuery({
+  queryKey: computed(() => ['knowledgeops', 'workspace-entry', user.value?.id ?? 'guest']),
+  queryFn: ({ signal }) => api.getWorkspaceEntry(signal),
+  enabled: computed(() => Boolean(user.value) && !explicit.value),
+  retry: false,
+  staleTime: 0,
+})
+const recovered = computed(() => (!explicit.value && user.value ? entry.data.value : undefined))
+const resolving = computed(() => Boolean(user.value) && !explicit.value && entry.isPending.value)
+const entryError = computed(() => !explicit.value && user.value && entry.isError.value)
+const draftRestored = ref(false)
+const storageIssue = ref('')
 
-const runId = computed(() => readQueryValue(route.query.run))
-const persistedGoalId = computed(() => readQueryValue(route.query.goal))
-const routePlanId = computed(() => readQueryValue(route.query.plan))
+const runId = computed(() => readQueryValue(route.query.run) ?? recovered.value?.runId ?? null)
+const persistedGoalId = computed(
+  () => readQueryValue(route.query.goal) ?? recovered.value?.goal?.id ?? null,
+)
+const routePlanId = computed(
+  () => readQueryValue(route.query.plan) ?? recovered.value?.planId ?? null,
+)
 const generationRun = usePlanRunRecovery(runId)
 const planId = computed(() => {
   const run = generationRun.data.value
@@ -37,13 +59,13 @@ const plan = usePlanQuery(planId)
 const syncLabel = computed(() => {
   switch (generationRun.mode.value) {
     case 'connecting':
-      return '正在连接实时状态'
+      return '正在更新生成进度'
     case 'streaming':
-      return '实时状态已连接'
+      return '生成进度自动更新中'
     case 'polling':
-      return '正在使用 HTTP 轮询同步'
+      return '连接恢复中，正在定时检查进度'
     case 'stopped':
-      return generationRun.error.value ? '状态同步已停止' : '运行已结束，已停止同步'
+      return generationRun.error.value ? '状态同步已停止' : '本次生成已结束'
     default:
       return ''
   }
@@ -60,6 +82,58 @@ const fieldErrors = ref<Record<string, string>>({})
 const submissionError = ref<string | null>(null)
 const confirmationError = ref<string | null>(null)
 
+const showingForm = computed(() => !runId.value && !routePlanId.value && !persistedGoalId.value)
+const canShowForm = computed(
+  () => showingForm.value && !resolving.value && !entryError.value && !sessionIssue.value,
+)
+let draftReady = false
+onMounted(() => {
+  try {
+    const raw = sessionStorage.getItem(goalDraftKey)
+    if (raw) {
+      const saved = goalDraftSchema.parse(JSON.parse(raw))
+      if (
+        (!saved.ownerId || saved.ownerId === user.value?.id) &&
+        saved.savedAt <= Date.now() &&
+        Date.now() - saved.savedAt < 86_400_000
+      ) {
+        Object.assign(form, saved.form)
+        draftRestored.value = true
+        sessionStorage.setItem(
+          goalDraftKey,
+          JSON.stringify({ ...saved, ownerId: user.value?.id ?? null }),
+        )
+      } else sessionStorage.removeItem(goalDraftKey)
+    }
+  } catch {
+    storageIssue.value = '无法恢复本地填写内容，请检查浏览器存储设置。'
+  }
+  draftReady = true
+})
+watch(
+  form,
+  () => {
+    if (!draftReady || !canShowForm.value) return
+    try {
+      sessionStorage.setItem(
+        goalDraftKey,
+        JSON.stringify({ ownerId: user.value?.id ?? null, savedAt: Date.now(), form: { ...form } }),
+      )
+      storageIssue.value = ''
+    } catch {
+      storageIssue.value = '浏览器无法保存填写内容，请允许本站使用会话存储后再登录。'
+    }
+  },
+  { deep: true },
+)
+watch(
+  recovered,
+  (value) => {
+    if (value?.modelId) form.modelId = value.modelId
+  },
+  { immediate: true },
+)
+
 watch(
   () => modelCatalog.data.value?.models,
   (models) => {
@@ -70,8 +144,22 @@ watch(
 
 const creation = useMutation({
   mutationFn: async (input: { goal: LearningGoalInput; modelId: string }) => {
+    const current = await api.getWorkspaceEntry()
+    if (current.planId || current.runId || current.goal) {
+      queryClient.setQueryData(
+        ['knowledgeops', 'workspace-entry', user.value?.id ?? 'guest'],
+        current,
+      )
+      throw new Error('已找到你保存的学习进度，请先继续已有计划。')
+    }
     const goal = await api.createLearningGoal(input.goal)
     await router.replace({ query: { goal: goal.id } })
+    try {
+      sessionStorage.removeItem(goalDraftKey)
+      draftRestored.value = false
+    } catch {
+      /* 服务端目标已经保存 */
+    }
 
     const accepted = await acceptOrRecoverRun(goal.id, { modelId: input.modelId })
     return { accepted, goalId: goal.id }
@@ -113,6 +201,19 @@ const runIsActive = computed(() => {
 })
 
 async function submitGoal() {
+  if (!user.value) {
+    if (storageIssue.value) return
+    try {
+      sessionStorage.setItem(
+        goalDraftKey,
+        JSON.stringify({ ownerId: null, savedAt: Date.now(), form: { ...form } }),
+      )
+      await router.push({ path: '/login', query: { next: '/app/plan' } })
+    } catch {
+      storageIssue.value = '请允许本站使用会话存储，避免登录时丢失填写内容。'
+    }
+    return
+  }
   fieldErrors.value = {}
   submissionError.value = null
 
@@ -147,7 +248,7 @@ async function resumeGeneration(retryOfRunId?: string) {
   const goalId = persistedGoalId.value ?? generationRun.data.value?.goalId
 
   if (!goalId || !form.modelId) {
-    submissionError.value = '缺少目标或模型信息，请返回表单重新创建。'
+    submissionError.value = '请选择一个可用模型后重试。'
     return
   }
 
@@ -209,316 +310,290 @@ function errorMessage(error: unknown): string {
 
 <template>
   <div>
-    <header class="mb-12 border-b border-hairline pb-8 md:mb-16">
-      <p class="font-mono text-caption tracking-label text-muted uppercase">Workspace / Plan</p>
-      <h1
-        class="mt-5 max-w-4xl font-display text-display-sm font-normal tracking-display uppercase md:text-display-lg"
-      >
-        从目标到可执行计划
+    <header v-if="!plan.data.value" class="mb-8 max-w-3xl">
+      <h1 class="text-2xl font-medium leading-snug md:text-workspace-title">
+        {{ canShowForm ? '想学些什么？' : '学习计划' }}
       </h1>
-      <p class="mt-5 max-w-2xl leading-7 text-body">
-        目标先持久化，生成任务在后台继续。运行 ID 保存在地址中，刷新页面不会丢失进度。
+      <p v-if="canShowForm" class="mt-3 text-reading text-body">
+        我们将根据你的学习目标和实际情况，生成定制化的个人学习路线
       </p>
     </header>
-
-    <div
-      v-if="runId && syncLabel"
-      class="mb-8 border-l border-hairline-strong pl-4 text-sm leading-6 text-body"
+    <p v-if="storageIssue" class="mb-5 text-warning" role="alert">{{ storageIssue }}</p>
+    <p
+      v-if="draftRestored"
+      class="mb-5 border-l-2 border-hairline-strong pl-4 text-body"
       role="status"
-      aria-live="polite"
-      aria-atomic="true"
     >
-      <p>{{ syncLabel }}</p>
-      <p v-if="generationRun.data.value && generationRun.error.value" class="mt-2 text-warning">
-        {{ generationRun.error.value.message }} 已保留上次读取的进度；连接问题不代表生成失败。
-      </p>
-    </div>
-
-    <section v-if="!runId && !routePlanId && !persistedGoalId" aria-labelledby="goal-form-title">
-      <div class="grid gap-12 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <form class="space-y-8" novalidate @submit.prevent="submitGoal">
-          <div>
-            <p class="font-mono text-caption tracking-label text-muted uppercase">01 / Goal</p>
-            <h2
-              id="goal-form-title"
-              class="mt-4 font-display text-3xl font-normal tracking-display uppercase"
-            >
-              定义学习目标
-            </h2>
-          </div>
-
-          <label class="block">
-            <span class="font-mono text-caption tracking-label text-muted uppercase">目标</span>
-            <input
-              v-model="form.title"
-              class="mt-2 min-h-11 w-full border-0 border-b border-hairline-strong bg-transparent px-0 py-3 text-ink outline-none focus:border-ink"
-              name="title"
-              autocomplete="off"
-              placeholder="例如：准备 9 月前端实习面试"
-              :aria-invalid="Boolean(fieldErrors.title)"
-              :aria-describedby="fieldErrors.title ? 'title-error' : undefined"
-            />
-            <span v-if="fieldErrors.title" id="title-error" class="mt-2 block text-sm text-warning">
-              {{ fieldErrors.title }}
-            </span>
-          </label>
-
-          <label class="block">
-            <span class="font-mono text-caption tracking-label text-muted uppercase">当前基础</span>
-            <textarea
-              v-model="form.currentLevel"
-              class="mt-2 min-h-28 w-full resize-y border-0 border-b border-hairline-strong bg-transparent px-0 py-3 text-ink outline-none focus:border-ink"
-              name="currentLevel"
-              placeholder="说明已经掌握和希望补足的内容"
-              :aria-invalid="Boolean(fieldErrors.currentLevel)"
-              :aria-describedby="fieldErrors.currentLevel ? 'level-error' : undefined"
-            />
-            <span
-              v-if="fieldErrors.currentLevel"
-              id="level-error"
-              class="mt-2 block text-sm text-warning"
-            >
-              {{ fieldErrors.currentLevel }}
-            </span>
-          </label>
-
-          <div class="grid gap-8 sm:grid-cols-2">
-            <label class="block">
-              <span class="font-mono text-caption tracking-label text-muted uppercase"
-                >截止日期</span
-              >
-              <input
-                v-model="form.deadline"
-                class="mt-2 min-h-11 w-full border-0 border-b border-hairline-strong bg-transparent px-0 py-3 text-ink outline-none focus:border-ink"
-                name="deadline"
-                type="date"
-                :aria-invalid="Boolean(fieldErrors.deadline)"
-              />
-              <span v-if="fieldErrors.deadline" class="mt-2 block text-sm text-warning">
-                {{ fieldErrors.deadline }}
-              </span>
-            </label>
-
-            <label class="block">
-              <span class="font-mono text-caption tracking-label text-muted uppercase"
-                >每周分钟</span
-              >
-              <input
-                v-model.number="form.weeklyMinutes"
-                class="mt-2 min-h-11 w-full border-0 border-b border-hairline-strong bg-transparent px-0 py-3 text-ink outline-none focus:border-ink"
-                name="weeklyMinutes"
-                type="number"
-                min="60"
-                max="2400"
-                step="30"
-                :aria-invalid="Boolean(fieldErrors.weeklyMinutes)"
-              />
-              <span v-if="fieldErrors.weeklyMinutes" class="mt-2 block text-sm text-warning">
-                {{ fieldErrors.weeklyMinutes }}
-              </span>
-            </label>
-          </div>
-
-          <fieldset class="border-t border-hairline pt-8">
-            <legend class="font-mono text-caption tracking-label text-muted uppercase">
-              02 / Model
-            </legend>
-            <p class="mt-3 text-sm leading-6 text-muted">
-              浏览器只接收服务端允许的模型 ID 与标签，不接触供应商密钥或真实连接配置。
-            </p>
-            <p v-if="modelCatalog.isPending.value" class="mt-5 text-body">正在读取模型目录…</p>
-            <div v-else-if="modelCatalog.isError.value" class="mt-5 text-warning">
-              模型目录加载失败，请检查 API 服务。
-            </div>
-            <div v-else class="mt-5 grid gap-3">
-              <label
-                v-for="model in modelCatalog.data.value?.models"
-                :key="model.id"
-                class="flex min-h-14 cursor-pointer items-center gap-4 border border-hairline px-4 py-3 has-checked:border-ink"
-              >
-                <input v-model="form.modelId" type="radio" name="modelId" :value="model.id" />
-                <span>
-                  <span class="block text-body-strong">{{ model.label }}</span>
-                  <span
-                    class="mt-1 block font-mono text-caption tracking-label text-muted uppercase"
-                  >
-                    {{ model.id }}
-                  </span>
-                </span>
-              </label>
-            </div>
-            <span v-if="fieldErrors.modelId" class="mt-2 block text-sm text-warning">
-              {{ fieldErrors.modelId }}
-            </span>
-          </fieldset>
-
-          <p v-if="submissionError" class="border-l border-warning pl-4 text-warning" role="alert">
-            {{ submissionError }}
-          </p>
-
-          <button
-            class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase disabled:cursor-not-allowed disabled:border-muted-soft disabled:text-muted-soft"
-            type="submit"
-            :disabled="creation.isPending.value || modelCatalog.isPending.value"
-          >
-            {{ creation.isPending.value ? '正在提交' : '创建目标并生成计划' }}
-          </button>
-        </form>
-
-        <aside class="border-t border-hairline pt-6 lg:border-t-0 lg:border-l lg:pl-8">
-          <p class="font-mono text-caption tracking-label text-muted uppercase">Execution facts</p>
-          <ol class="mt-6 space-y-6 text-sm leading-6 text-body">
-            <li>01. 目标单独写入 PostgreSQL。</li>
-            <li>02. API 返回运行 ID，不等待模型。</li>
-            <li>03. Worker 只在完整校验后落库计划。</li>
-            <li>04. 用户确认前，计划保持草稿。</li>
-          </ol>
-        </aside>
-      </div>
-    </section>
-
+      {{
+        showingForm
+          ? '已恢复你填写的内容，请确认后生成计划。'
+          : '已恢复账号原有进度。刚才填写的新目标尚未生成，内容仍保留在本标签页。'
+      }}
+    </p>
+    <p v-if="submissionError" class="mb-5 text-warning" role="alert">{{ submissionError }}</p>
     <AsyncStatePanel
-      v-else-if="persistedGoalId && !runId && !routePlanId"
-      title="目标已保存"
-      description="生成响应可能在网络中断时丢失。再次提交会恢复服务端已存在的运行，而不是创建并行运行。"
-    >
-      <template #actions>
-        <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase disabled:border-muted-soft disabled:text-muted-soft"
-          type="button"
-          :disabled="generationRetry.isPending.value || !form.modelId"
-          @click="resumeGeneration()"
-        >
-          恢复生成
-        </button>
-      </template>
-    </AsyncStatePanel>
-
-    <AsyncStatePanel
-      v-else-if="runId && generationRun.isPending.value"
-      title="正在恢复生成记录"
-      description="页面正在从 PostgreSQL 读取运行快照；刷新不会重新创建模型任务。"
-    />
-
-    <AsyncStatePanel
-      v-else-if="runId && generationRun.isError.value"
-      :title="generationRun.mode.value === 'stopped' ? '无法访问该运行' : '暂时无法读取运行'"
-      :description="generationRun.error.value?.message ?? '请检查网络或 API 服务后重试。'"
+      v-if="sessionIssue"
+      title="暂时无法确认登录状态"
+      :description="sessionIssue"
       tone="warning"
     >
-      <template #actions>
-        <button
-          v-if="generationRun.canRefresh.value"
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-          type="button"
-          @click="generationRun.refetch()"
-        >
-          重新读取
-        </button>
-        <NuxtLink
-          v-else
-          class="inline-flex min-h-11 items-center rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-          to="/app/plan"
-        >
-          返回表单
-        </NuxtLink>
-      </template>
-    </AsyncStatePanel>
-
-    <AsyncStatePanel
-      v-else-if="runIsActive"
-      :eyebrow="`Run / ${generationRun.data.value?.status ?? 'QUEUED'}`"
-      title="后台正在生成计划"
-      description="你可以离开或刷新此页面。队列与 Worker 会继续执行，页面只读取持久化状态。"
-    >
-      <template #actions>
-        <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-          type="button"
-          @click="generationRun.refetch()"
-        >
-          立即刷新
-        </button>
-      </template>
-    </AsyncStatePanel>
-
-    <AsyncStatePanel
-      v-else-if="generationRun.terminalFailure.value"
-      :eyebrow="`Run / ${generationRun.terminalFailure.value.status}`"
-      title="本次生成未完成"
-      :description="generationRun.terminalFailure.value.message"
-      tone="warning"
-    >
-      <template #actions>
-        <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase disabled:border-muted-soft disabled:text-muted-soft"
-          type="button"
-          :disabled="generationRetry.isPending.value || !form.modelId"
-          @click="resumeGeneration(runId ?? undefined)"
-        >
-          创建关联重试
-        </button>
-      </template>
-    </AsyncStatePanel>
-
-    <AsyncStatePanel
-      v-else-if="generationRun.data.value?.status === 'SUCCEEDED' && !generationRun.data.value.plan"
-      title="成功记录缺少计划"
-      description="服务端返回了不一致状态；页面不会尝试展示半份计划。"
-      tone="warning"
-    />
-
-    <AsyncStatePanel
-      v-else-if="planId && plan.isPending.value"
-      title="正在读取完整计划"
-      description="只有生成运行成功且完整计划可读取后，预览才会出现。"
-    />
-
-    <AsyncStatePanel
-      v-else-if="planId && plan.isError.value"
-      title="计划读取失败"
-      :description="plan.error.value?.message ?? '请稍后重试。'"
-      tone="warning"
-    >
-      <template #actions>
-        <button
-          class="min-h-11 rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase"
-          type="button"
-          @click="plan.refetch()"
-        >
-          重新读取
-        </button>
-      </template>
-    </AsyncStatePanel>
-
-    <section v-else-if="plan.data.value">
-      <p
-        v-if="confirmationError"
-        class="mb-8 border-l border-warning pl-4 text-warning"
-        role="alert"
+      <template #actions
+        ><button class="action-button" @click="router.go(0)">重新读取</button></template
       >
-        {{ confirmationError }}
-      </p>
-      <PlanPreview
-        :plan="plan.data.value"
-        :busy="confirmation.isPending.value"
-        @confirm="confirmPlan"
-      />
-    </section>
-
-    <AsyncStatePanel
-      v-else
-      title="还没有可展示的计划"
-      description="从目标表单开始创建一份短期学习计划。"
-    >
-      <template #actions>
-        <NuxtLink
-          class="inline-flex min-h-11 items-center rounded-full border border-ink px-8 font-mono text-sm tracking-label uppercase"
-          to="/app/plan"
-        >
-          返回表单
-        </NuxtLink>
-      </template>
     </AsyncStatePanel>
+    <AsyncStatePanel
+      v-else-if="resolving"
+      title="正在找回学习进度"
+      description="请稍候，正在读取你保存的计划。"
+    />
+    <AsyncStatePanel
+      v-else-if="entryError"
+      title="学习进度读取失败"
+      description="请检查网络后重试，已有计划仍会保留。"
+      tone="warning"
+    >
+      <template #actions
+        ><button class="action-button" @click="entry.refetch()">重新读取</button></template
+      >
+    </AsyncStatePanel>
+    <section v-else-if="canShowForm" class="max-w-3xl" aria-label="创建学习计划">
+      <form class="space-y-7" novalidate @submit.prevent="submitGoal">
+        <label class="block">
+          <span class="text-lg font-medium">学习目标</span>
+          <input
+            v-model="form.title"
+            aria-label="学习目标"
+            maxlength="160"
+            class="mt-3 min-h-12 w-full border border-hairline-strong bg-surface-soft p-3 text-reading focus-visible:outline-2 focus-visible:outline-link"
+            placeholder="例如：用两周补齐 JavaScript 异步机制"
+            :aria-invalid="Boolean(fieldErrors.title)"
+            aria-describedby="goal-hint goal-error"
+          />
+          <span id="goal-hint" class="mt-2 block text-base text-muted"
+            >选择一个具体、短期可完成的目标，例如一个知识主题或一项技能。</span
+          >
+          <span id="goal-error" class="block text-warning">{{ fieldErrors.title }}</span>
+        </label>
+        <label class="block">
+          <span class="text-lg font-medium">当前基础</span>
+          <textarea
+            v-model="form.currentLevel"
+            aria-label="当前基础"
+            maxlength="500"
+            rows="3"
+            class="mt-3 w-full border border-hairline-strong bg-surface-soft p-3 text-reading focus-visible:outline-2 focus-visible:outline-link"
+            placeholder="已经掌握什么？哪些地方还不熟悉？"
+            :aria-invalid="Boolean(fieldErrors.currentLevel)"
+            aria-describedby="level-error"
+          />
+          <span id="level-error" class="block text-warning">{{ fieldErrors.currentLevel }}</span>
+        </label>
+        <div class="grid gap-6 sm:grid-cols-2">
+          <label class="block"
+            ><span class="text-lg font-medium">截止日期</span>
+            <input
+              v-model="form.deadline"
+              aria-label="截止日期"
+              type="date"
+              class="mt-3 min-h-12 w-full min-w-0 border border-hairline-strong bg-surface-soft p-3 text-base focus-visible:outline-2 focus-visible:outline-link"
+              :aria-invalid="Boolean(fieldErrors.deadline)"
+              aria-describedby="deadline-error"
+            />
+            <span id="deadline-error" class="block text-warning">{{ fieldErrors.deadline }}</span>
+          </label>
+          <label class="block"
+            ><span class="text-lg font-medium">每周投入（分钟）</span>
+            <input
+              v-model.number="form.weeklyMinutes"
+              aria-label="每周投入（分钟）"
+              type="number"
+              min="30"
+              step="30"
+              class="mt-3 min-h-12 w-full border border-hairline-strong bg-surface-soft p-3 text-base focus-visible:outline-2 focus-visible:outline-link"
+              :aria-invalid="Boolean(fieldErrors.weeklyMinutes)"
+              aria-describedby="minutes-error"
+            />
+            <span id="minutes-error" class="block text-warning">{{
+              fieldErrors.weeklyMinutes
+            }}</span>
+          </label>
+        </div>
+        <p class="text-base text-muted">根据截止日期和每周可投入时间，安排适合你的任务量。</p>
+        <fieldset v-if="user" class="border-t border-hairline pt-5">
+          <legend class="text-lg">生成模型</legend>
+          <p v-if="modelCatalog.isPending.value" class="mt-3 text-muted">正在读取可用模型…</p>
+          <div v-else-if="modelCatalog.isError.value" class="mt-3">
+            <p class="text-warning">可用模型读取失败。</p>
+            <button type="button" class="action-button mt-3" @click="modelCatalog.refetch()">
+              重试
+            </button>
+          </div>
+          <div v-else class="mt-3 flex flex-wrap gap-3">
+            <label
+              v-for="model in modelCatalog.data.value?.models"
+              :key="model.id"
+              class="flex min-h-12 cursor-pointer items-center gap-3 border border-hairline-strong px-4 py-3 has-checked:border-ink"
+            >
+              <input v-model="form.modelId" type="radio" name="modelId" :value="model.id" /><span>{{
+                model.label
+              }}</span>
+            </label>
+          </div>
+          <p class="mt-2 text-warning">{{ fieldErrors.modelId }}</p>
+        </fieldset>
+        <div class="border-t border-hairline pt-6 text-base text-body">
+          <p>生成计划 → 学习并提交 GitHub 笔记 → 查看反馈、回答追问</p>
+          <p class="mt-2 text-muted">
+            需要使用 GitHub 仓库和 Markdown 笔记。计划生成后可先预览，确认后才开始。
+          </p>
+          <p v-if="!user" class="mt-2">可以先填写学习目标，登录后生成并保存计划。</p>
+          <button
+            class="action-button mt-5 border-ink"
+            type="submit"
+            :disabled="
+              creation.isPending.value ||
+              Boolean(user && (modelCatalog.isPending.value || modelCatalog.isError.value)) ||
+              Boolean(storageIssue)
+            "
+          >
+            {{ !user ? '登录后生成' : creation.isPending.value ? '正在提交…' : '生成计划' }}
+          </button>
+        </div>
+      </form>
+    </section>
+    <template v-else>
+      <fieldset
+        v-if="
+          user &&
+          (generationRun.terminalFailure.value || (persistedGoalId && !runId && !routePlanId))
+        "
+        class="mb-5"
+      >
+        <legend class="text-lg">重新生成使用的模型</legend>
+        <label
+          v-for="model in modelCatalog.data.value?.models"
+          :key="model.id"
+          class="mr-3 mt-3 inline-flex min-h-11 items-center gap-3 border border-hairline-strong px-4 py-2"
+        >
+          <input v-model="form.modelId" type="radio" name="retry-model" :value="model.id" />{{
+            model.label
+          }}
+        </label>
+        <p v-if="modelCatalog.isError.value" class="mt-3 text-warning">
+          模型列表读取失败。<button class="action-button ml-2" @click="modelCatalog.refetch()">
+            重试
+          </button>
+        </p>
+        <p v-if="recovered?.goal" class="mt-3 text-body">学习目标：{{ recovered.goal.title }}</p>
+      </fieldset>
+      <p
+        v-if="runId && syncLabel && !plan.data.value"
+        class="mb-5 text-base text-muted"
+        role="status"
+      >
+        {{ syncLabel }}
+      </p>
+      <p
+        v-if="runId && generationRun.data.value && generationRun.error.value"
+        class="mb-5 text-warning"
+        role="status"
+      >
+        更新暂未完成，已保留上次读取的进度。
+      </p>
+      <AsyncStatePanel
+        v-if="persistedGoalId && !runId && !routePlanId"
+        title="目标已保存"
+        description="可以继续生成，不必重新填写目标。"
+      >
+        <template #actions
+          ><button
+            class="action-button"
+            :disabled="generationRetry.isPending.value || !form.modelId"
+            @click="resumeGeneration()"
+          >
+            继续生成
+          </button></template
+        >
+      </AsyncStatePanel>
+      <AsyncStatePanel
+        v-else-if="runId && generationRun.isPending.value"
+        title="正在恢复生成进度"
+        description="刷新不会重复生成计划。"
+      />
+      <AsyncStatePanel
+        v-else-if="runId && generationRun.isError.value"
+        title="暂时无法读取生成进度"
+        :description="generationRun.error.value?.message ?? '请稍后重试。'"
+        tone="warning"
+      >
+        <template #actions
+          ><button
+            v-if="generationRun.canRefresh.value"
+            class="action-button"
+            @click="generationRun.refetch()"
+          >
+            重新读取</button
+          ><NuxtLink v-else class="action-button" to="/app/plan">返回学习计划</NuxtLink></template
+        >
+      </AsyncStatePanel>
+      <AsyncStatePanel
+        v-else-if="runIsActive"
+        title="正在为你生成学习计划"
+        description="你可以离开或刷新页面，回来后继续查看进度。"
+      >
+        <template #actions
+          ><button class="action-button" @click="generationRun.refetch()">
+            刷新进度
+          </button></template
+        >
+      </AsyncStatePanel>
+      <AsyncStatePanel
+        v-else-if="generationRun.terminalFailure.value"
+        title="本次生成未完成"
+        :description="generationRun.terminalFailure.value.message"
+        tone="warning"
+      >
+        <template #actions
+          ><button
+            class="action-button"
+            :disabled="generationRetry.isPending.value || !form.modelId"
+            @click="resumeGeneration(runId ?? undefined)"
+          >
+            重新生成
+          </button></template
+        >
+      </AsyncStatePanel>
+      <AsyncStatePanel
+        v-else-if="planId && plan.isPending.value"
+        title="正在读取计划"
+        description="正在找回完整学习路线。"
+      />
+      <AsyncStatePanel
+        v-else-if="planId && plan.isError.value"
+        title="计划读取失败"
+        description="请检查网络后重试。"
+        tone="warning"
+      >
+        <template #actions
+          ><button class="action-button" @click="plan.refetch()">重新读取</button></template
+        >
+      </AsyncStatePanel>
+      <section v-else-if="plan.data.value">
+        <p v-if="confirmationError" class="mb-5 text-warning" role="alert">
+          {{ confirmationError }}
+        </p>
+        <PlanPreview
+          :plan="plan.data.value"
+          :busy="confirmation.isPending.value"
+          @confirm="confirmPlan"
+        />
+      </section>
+      <AsyncStatePanel
+        v-else
+        title="暂时无法展示计划"
+        description="请重新读取学习进度，不必重新创建目标。"
+        tone="warning"
+      />
+    </template>
   </div>
 </template>

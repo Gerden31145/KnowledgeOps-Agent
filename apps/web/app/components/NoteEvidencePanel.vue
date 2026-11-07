@@ -62,11 +62,11 @@ watch(
 <template>
   <section class="min-w-0 border-t border-hairline pt-6" aria-labelledby="note-evidence-title">
     <div class="flex flex-wrap items-center justify-between gap-4">
-      <h3 id="note-evidence-title" class="font-display text-2xl tracking-display">本次固定证据</h3>
+      <h3 id="note-evidence-title" class="text-section-title font-medium">本次固定证据</h3>
       <button
         type="button"
         :disabled="query.isFetching.value"
-        class="min-h-11 px-3 text-sm text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+        class="action-button min-h-11 px-3 text-base text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         @click="query.refetch()"
       >
         重新读取证据
@@ -87,8 +87,8 @@ watch(
     >
       <template v-if="denied" #actions>
         <NuxtLink
-          to="/login"
-          class="inline-flex min-h-11 items-center text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          :to="{ path: '/login', query: { next: $route.fullPath } }"
+          class="action-button inline-flex min-h-11 items-center text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
           >重新登录</NuxtLink
         >
       </template>
@@ -100,7 +100,7 @@ watch(
       description="读取这次运行所用的正文和 Diff。"
     />
     <template v-else-if="data">
-      <dl class="mt-4 space-y-2 font-mono text-sm text-muted [overflow-wrap:anywhere]">
+      <dl class="mt-4 space-y-2 font-mono text-base text-muted [overflow-wrap:anywhere]">
         <div>
           <dt class="inline">文件：</dt>
           <dd class="inline">{{ data.evidence.path }}</dd>
@@ -114,18 +114,18 @@ watch(
           <dd class="inline">{{ data.evidence.previousPath }}</dd>
         </div>
       </dl>
-      <p class="mt-3 text-sm leading-6 text-muted">
+      <p class="mt-3 text-base leading-6 text-muted">
         这是本次取证保存的内容；仓库后续更新不会改变这里的正文。
       </p>
-      <p v-if="data.evidence.change === 'removed'" class="mt-3 text-sm text-warning">
+      <p v-if="data.evidence.change === 'removed'" class="mt-3 text-base text-warning">
         文件已删除，以下为删除前提交的正文，不代表当前仓库仍存在此文件。
       </p>
-      <p role="status" class="mt-3 text-sm text-link">{{ locationMessage }}</p>
+      <p role="status" class="mt-3 text-base text-link">{{ locationMessage }}</p>
       <p v-if="!data.lines.length" class="mt-4 text-body">此提交保存的是空文件。</p>
       <div
         v-else
         ref="body"
-        class="mt-4 border-y border-hairline py-3 font-mono text-sm leading-6"
+        class="mt-4 border-y border-hairline py-3 font-mono text-base leading-6"
         aria-label="固定正文（带行号）"
       >
         <div
@@ -152,13 +152,13 @@ watch(
       </div>
       <nav
         v-if="pageCount > 1"
-        class="mt-3 flex flex-wrap items-center gap-4 text-sm"
+        class="mt-3 flex flex-wrap items-center gap-4 text-base"
         aria-label="原文分页"
       >
         <button
           type="button"
           :disabled="page === 0"
-          class="min-h-11 px-3 text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-link"
+          class="action-button min-h-11 px-3 text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-link"
           @click="page--"
         >
           上一页
@@ -167,7 +167,7 @@ watch(
         <button
           type="button"
           :disabled="page + 1 >= pageCount"
-          class="min-h-11 px-3 text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-link"
+          class="action-button min-h-11 px-3 text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-link"
           @click="page++"
         >
           下一页
@@ -178,14 +178,14 @@ watch(
         本次为全文快照，未保存 Diff；不据此判断文件是否发生变更。
       </p>
       <template v-else>
-        <p class="mt-3 font-mono text-sm text-muted [overflow-wrap:anywhere]">
+        <p class="mt-3 font-mono text-base text-muted [overflow-wrap:anywhere]">
           {{ data.evidence.beforeCommitSha }} → {{ data.evidence.afterCommitSha }}
         </p>
         <pre
           v-if="data.evidence.diff"
           tabindex="0"
           aria-label="本次提交的 Diff"
-          class="mt-4 max-h-96 overflow-auto whitespace-pre-wrap border-y border-hairline py-4 font-mono text-sm leading-6 text-body [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-link"
+          class="mt-4 max-h-96 overflow-auto whitespace-pre-wrap border-y border-hairline py-4 font-mono text-base leading-6 text-body [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-link"
           >{{ data.evidence.diff }}</pre>
         <p v-else class="mt-3 text-muted">没有可展示的 Diff 文本，不代表文件未变化。</p>
       </template>

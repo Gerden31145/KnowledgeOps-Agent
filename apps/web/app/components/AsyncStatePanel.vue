@@ -7,7 +7,7 @@ withDefaults(
     tone?: 'default' | 'warning'
   }>(),
   {
-    eyebrow: 'System status',
+    eyebrow: '',
     tone: 'default',
   },
 )
@@ -20,15 +20,16 @@ withDefaults(
     role="status"
   >
     <p
+      v-if="eyebrow"
       class="font-mono text-caption tracking-label uppercase"
       :class="tone === 'warning' ? 'text-warning' : 'text-muted'"
     >
       {{ eyebrow }}
     </p>
-    <h2 class="mt-5 font-display text-3xl font-normal tracking-display uppercase md:text-4xl">
+    <h2 class="text-section-title font-medium">
       {{ title }}
     </h2>
-    <p class="mt-4 max-w-2xl leading-7 text-body">{{ description }}</p>
+    <p class="mt-3 max-w-2xl text-reading text-body">{{ description }}</p>
     <div v-if="$slots.actions" class="mt-8 flex flex-wrap gap-3">
       <slot name="actions" />
     </div>

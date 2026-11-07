@@ -17,11 +17,12 @@ import {
   type VerificationRunRevision,
 } from '../lib/verification-polling'
 
-export function useModelCatalogQuery() {
+export function useModelCatalogQuery(enabled: MaybeRefOrGetter<boolean> = true) {
   const api = useKnowledgeOpsApi()
 
   return useQuery({
     queryKey: knowledgeOpsQueryKeys.modelCatalog(),
+    enabled: computed(() => toValue(enabled)),
     queryFn: ({ signal }) => api.listModels(signal),
     staleTime: 5 * 60 * 1_000,
   })
@@ -38,6 +39,9 @@ export function usePlanQuery(planId: MaybeRefOrGetter<string | null>) {
       return api.getPlan(id, signal)
     },
     enabled: computed(() => Boolean(toValue(planId))),
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status === 'ACTIVE' && !query.state.error ? 10_000 : false,
   })
 }
 

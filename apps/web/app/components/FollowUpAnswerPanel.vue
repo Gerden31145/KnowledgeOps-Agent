@@ -175,20 +175,20 @@ async function refresh() {
     aria-labelledby="answer-title"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h4 id="answer-title" class="font-display text-2xl tracking-display">回答追问</h4>
+      <h4 id="answer-title" class="text-section-title font-medium">回答追问</h4>
       <button
         type="button"
         :disabled="acting || submitting || query.isFetching.value || query.isPaused.value"
-        class="min-h-11 px-3 text-sm text-link underline disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+        class="action-button min-h-11 px-3 text-base text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         @click="refresh"
       >
         刷新回答与任务
       </button>
     </div>
-    <p v-if="latestNote?.id !== noteRunId" class="mt-3 text-sm text-muted">
+    <p v-if="latestNote?.id !== noteRunId" class="mt-3 text-base text-muted">
       这是历史笔记的追问，可查看已有回答。提交新回答请打开最新笔记报告。
     </p>
-    <p v-else-if="!canSubmit && !pendingConfirmation" class="mt-3 text-sm text-muted">
+    <p v-else-if="!canSubmit && !pendingConfirmation" class="mt-3 text-base text-muted">
       当前任务暂不接受新的回答；验收中可稍后刷新，已通过任务无需再次提交。
     </p>
 
@@ -198,7 +198,7 @@ async function refresh() {
       novalidate
       @submit.prevent="submit"
     >
-      <label for="follow-up-answer-input" class="block text-sm text-body-strong">你的回答</label>
+      <label for="follow-up-answer-input" class="block text-base text-body-strong">你的回答</label>
       <textarea
         id="follow-up-answer-input"
         v-model="draft"
@@ -209,17 +209,17 @@ async function refresh() {
         aria-describedby="answer-input-help answer-command-status"
         class="min-h-36 w-full resize-y border border-hairline-strong bg-canvas p-3 text-body placeholder:text-muted read-only:text-muted disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
       />
-      <p id="answer-input-help" class="text-sm text-muted">
+      <p id="answer-input-help" class="text-base text-muted">
         {{ draft.length }} / 8000 字符。提交后会保存回答并开始验收，受理成功不代表回答已通过。
       </p>
-      <p v-if="pendingConfirmation" class="text-sm leading-6 text-muted">
+      <p v-if="pendingConfirmation" class="text-base leading-6 text-muted">
         本次回答已保留，确认受理结果前请重发原回答。刷新本标签页后也可继续确认。
       </p>
       <button
         v-if="!receipt && !storageBlocked && !rejection"
         type="submit"
         :disabled="acting || submitting || (!pendingConfirmation && !canSubmit)"
-        class="min-h-11 rounded-full border border-ink px-6 font-mono text-sm disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+        class="min-h-11 rounded-full border border-ink px-6 font-mono text-base disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
       >
         {{ submitting ? '正在提交' : pendingConfirmation ? '重发本次回答' : '提交回答' }}
       </button>
@@ -227,7 +227,7 @@ async function refresh() {
         v-if="receipt && canSubmit && answer && isAgentRunTerminalState(answer.run.status)"
         type="button"
         :disabled="acting"
-        class="min-h-11 px-3 text-link underline focus-visible:outline-2 focus-visible:outline-link"
+        class="action-button min-h-11 px-3 text-link focus-visible:outline-2 focus-visible:outline-link"
         @click="submission.reset"
       >
         修改并提交新的回答
@@ -235,31 +235,33 @@ async function refresh() {
       <button
         v-if="storageBlocked"
         type="button"
-        class="min-h-11 px-3 text-link underline focus-visible:outline-2 focus-visible:outline-link"
+        class="action-button min-h-11 px-3 text-link focus-visible:outline-2 focus-visible:outline-link"
         @click="submission.reset"
       >
         核对已保存回答后重新填写
       </button>
     </form>
-    <p v-if="receipt" role="status" class="mt-3 text-sm text-success">
+    <p v-if="receipt" role="status" class="mt-3 text-base text-success">
       回答已受理，可查看下方验收状态。
     </p>
-    <p id="answer-command-status" role="status" class="mt-3 text-sm text-warning">
+    <p id="answer-command-status" role="status" class="mt-3 text-base text-warning">
       {{ issue || refreshIssue }}
     </p>
     <NuxtLink
       v-if="rejection === 401 || denied"
-      to="/login"
-      class="inline-flex min-h-11 items-center text-link underline focus-visible:outline-2 focus-visible:outline-link"
+      :to="{ path: '/login', query: { next: $route.fullPath } }"
+      class="action-button inline-flex min-h-11 items-center text-link focus-visible:outline-2 focus-visible:outline-link"
       >重新登录</NuxtLink
     >
 
     <div v-if="answers.length" class="mt-6">
-      <label for="saved-answer" class="block text-sm text-muted">已保存的回答（最近 20 次）</label>
+      <label for="saved-answer" class="block text-base text-muted"
+        >已保存的回答（最近 20 次）</label
+      >
       <select
         id="saved-answer"
         :value="selectedId ?? ''"
-        class="mt-2 min-h-11 w-full border border-hairline-strong bg-canvas px-3 text-sm text-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
+        class="mt-2 min-h-11 w-full border border-hairline-strong bg-canvas px-3 text-base text-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
         @change="select(($event.target as HTMLSelectElement).value)"
       >
         <option v-if="!answers.some((item) => item.id === selectedId)" value="" disabled>
@@ -295,7 +297,7 @@ async function refresh() {
             : '请检查网络或重新选择回答；本次读取失败不会改变验收或任务状态。'
       "
     />
-    <p v-else-if="!selectedId" class="mt-5 text-sm text-muted">这个追问尚无已保存的回答。</p>
+    <p v-else-if="!selectedId" class="mt-5 text-base text-muted">这个追问尚无已保存的回答。</p>
     <AsyncStatePanel
       v-else-if="query.isPending.value"
       class="mt-5"
@@ -303,8 +305,8 @@ async function refresh() {
       description="读取保存的答案和验收结果。"
     />
     <div v-else-if="answer" class="mt-6 space-y-4 [overflow-wrap:anywhere]">
-      <p class="text-sm text-body-strong">回答验收：{{ states[answer.run.status] }}</p>
-      <p class="text-sm text-muted">
+      <p class="text-base text-body-strong">回答验收：{{ states[answer.run.status] }}</p>
+      <p class="text-base text-muted">
         本次运行：{{ new Date(answer.run.queuedAt).toLocaleString('zh-CN') }} ·
         {{ answer.run.retryOfRunId ? '重试验收' : '首次验收' }}
       </p>
@@ -346,7 +348,7 @@ async function refresh() {
             :key="index"
             class="mt-3 border-l border-hairline-strong pl-4"
           >
-            <p class="text-sm text-muted">
+            <p class="text-base text-muted">
               已提交回答的第 {{ citation.startLine }}–{{ citation.endLine }} 行
             </p>
             <p class="mt-2 whitespace-pre-wrap leading-7 text-body">{{ citation.excerpt }}</p>
@@ -360,14 +362,14 @@ async function refresh() {
           <li v-for="(citation, index) in result.citations" :key="index">
             <button
               type="button"
-              class="min-h-11 px-2 text-sm text-link underline focus-visible:outline-2 focus-visible:outline-link"
+              class="action-button min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-link"
               @click="emit('locate', citation)"
             >
               笔记依据：原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
             </button>
           </li>
         </ul>
-        <p class="text-sm text-muted">这是这次回答的验收结论；任务当前状态以上方任务信息为准。</p>
+        <p class="text-base text-muted">这是这次回答的验收结论；任务当前状态以上方任务信息为准。</p>
       </template>
       <AsyncStatePanel
         v-else

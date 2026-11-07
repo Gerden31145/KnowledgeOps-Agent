@@ -2,17 +2,29 @@
 import { computed, ref } from 'vue'
 import { useHead, useRoute, useRuntimeConfig } from '#imports'
 import { apiUrl } from '../lib/knowledge-ops-api'
+import { safeWorkspaceReturn, saveLoginReturn } from '../lib/workspace-entry'
 
 useHead({ title: '登录 · KnowledgeOps', meta: [{ name: 'robots', content: 'noindex,nofollow' }] })
 const route = useRoute()
 const config = useRuntimeConfig()
 const leaving = ref(false)
+const returnIssue = ref('')
+function beginLogin(event: MouseEvent) {
+  try {
+    if (route.query.next || !route.query.error)
+      saveLoginReturn(window.sessionStorage, safeWorkspaceReturn(route.query.next))
+    leaving.value = true
+  } catch {
+    event.preventDefault()
+    returnIssue.value = '浏览器无法保存返回位置，请允许本站使用会话存储后重试。'
+  }
+}
 const loginUrl = apiUrl(config.public.apiBaseUrl, '/auth/github/login').toString()
 const errorMessages: Record<string, string> = {
   'invalid-state': '这次登录已过期或无法匹配发起浏览器，请重新登录。',
   'access-denied': '你未完成 GitHub 授权，可以在准备好后重新登录。',
   'github-unavailable': '暂时无法从 GitHub 确认身份，请稍后重新登录。',
-  'session-unavailable': '暂时无法建立或读取会话。请检查 API 与数据库，再重试。',
+  'session-unavailable': '暂时无法确认登录状态，请检查网络后重试。',
 }
 const errorMessage = computed(() =>
   typeof route.query.error === 'string'
@@ -48,7 +60,7 @@ const errorMessage = computed(() =>
       <a
         :href="loginUrl"
         class="inline-flex min-h-11 items-center rounded-full border border-ink px-8 py-3 font-mono text-sm tracking-label focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-        @click="leaving = true"
+        @click="beginLogin"
         >{{ leaving ? '正在前往 GitHub…' : '继续使用 GitHub' }}</a
       >
       <NuxtLink
@@ -59,7 +71,7 @@ const errorMessage = computed(() =>
       >
     </div>
     <p role="status" class="mt-4 min-h-6 text-muted">
-      {{ leaving ? '请在 GitHub 页面核对 App 并完成授权。' : '' }}
+      {{ returnIssue || (leaving ? '请在 GitHub 页面核对 App 并完成授权。' : '') }}
     </p>
     <section class="mt-10 max-w-2xl border-t border-hairline pt-6" aria-labelledby="login-privacy">
       <h2 id="login-privacy" class="font-display text-2xl font-normal tracking-display">

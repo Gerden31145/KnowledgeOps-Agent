@@ -263,3 +263,4 @@ export {
   type RetryNoteVerificationInput,
   type RetryNoteVerificationResponse,
 } from './http/note-verification-retry.js'
+export { workspaceEntryResponseSchema, type WorkspaceEntryResponse } from './http/workspace.js'

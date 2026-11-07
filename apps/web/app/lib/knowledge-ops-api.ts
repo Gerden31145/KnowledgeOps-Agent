@@ -1,5 +1,7 @@
 import {
   apiErrorResponseSchema,
+  workspaceEntryResponseSchema,
+  type WorkspaceEntryResponse,
   confirmPlanResponseSchema,
   learningGoalResponseSchema,
   planDetailResponseSchema,
@@ -72,6 +74,7 @@ export class KnowledgeOpsApiError extends Error {
 }
 
 export interface KnowledgeOpsApi {
+  getWorkspaceEntry(signal?: AbortSignal): Promise<WorkspaceEntryResponse>
   retryAnswerVerification(
     answerSubmissionId: string,
     runId: string,
@@ -139,6 +142,10 @@ export interface KnowledgeOpsApi {
 
 export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
   return {
+    getWorkspaceEntry: (signal) =>
+      request(baseUrl, '/workspace/entry', workspaceEntryResponseSchema, {
+        signal: repositorySignal(signal),
+      }),
     retryAnswerVerification: (answerId, runId, input) =>
       request(
         baseUrl,

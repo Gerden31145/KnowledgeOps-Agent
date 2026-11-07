@@ -2,6 +2,7 @@ import {
   planDetailResponseSchema,
   taskDetailResponseSchema,
   todayTasksResponseSchema,
+  workspaceEntryResponseSchema,
   type PlanDetailResponse,
   type TaskDetailResponse,
   type TodayTasksResponse,
@@ -19,6 +20,13 @@ export class PlanQueryController {
     private readonly queries: PlanQueryService,
     @Inject(CURRENT_ACTOR) private readonly currentActor: CurrentActor,
   ) {}
+
+  @Get('workspace/entry')
+  async getWorkspaceEntry() {
+    return workspaceEntryResponseSchema.parse(
+      await this.queries.getWorkspaceEntry(this.currentActor.userId),
+    )
+  }
 
   @Get('plans/:planId')
   async getPlan(

@@ -10,6 +10,10 @@ import { PlanRepository } from './plan.repository.js'
 export class PlanQueryService {
   constructor(private readonly repository: PlanRepository) {}
 
+  getWorkspaceEntry(actorUserId: string) {
+    return this.repository.findWorkspaceEntryForUser(actorUserId)
+  }
+
   async getPlan(planId: string, actorUserId: string): Promise<PlanDetailResponse> {
     const plan = await this.repository.findDetailByIdForUser(planId, actorUserId)
 

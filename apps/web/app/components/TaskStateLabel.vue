@@ -18,11 +18,7 @@ const meta = computed(() => stateMeta[props.state])
 </script>
 
 <template>
-  <span
-    class="font-mono text-caption tracking-label uppercase"
-    :class="meta.className"
-    :aria-label="`任务状态：${meta.label}`"
-  >
+  <span class="text-base" :class="meta.className" :aria-label="`任务状态：${meta.label}`">
     {{ meta.label }}
   </span>
 </template>

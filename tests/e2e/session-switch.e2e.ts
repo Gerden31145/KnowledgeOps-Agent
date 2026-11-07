@@ -50,7 +50,8 @@ test('退出 A 后清除本标签页私有命令，安装 B 会话后只读 B �
     record,
   })
   await a.page.goto('/app/today')
-  await expect(a.page).toHaveURL(`${webOrigin}/login`)
+  await expect(a.page).toHaveURL(`${webOrigin}/app/plan`)
+  await expect(a.page.getByRole('heading', { name: '想学些什么？' })).toBeVisible()
   expect(await a.page.evaluate((key) => sessionStorage.getItem(key), key)).toBeNull()
 
   // 仅用已持久化的 B Cookie 代替外部 OAuth 交换，仍在 A 原来的 context/标签页中。
@@ -64,9 +65,13 @@ test('退出 A 后清除本标签页私有命令，安装 B 会话后只读 B �
     },
   ])
   await a.page.goto('/app/today')
-  await expect(a.page.getByRole('heading', { name: b.taskTitle, exact: true })).toBeVisible()
+  await expect(
+    a.page
+      .getByRole('region', { name: '接下来做什么' })
+      .getByRole('heading', { name: b.taskTitle, exact: true }),
+  ).toBeVisible()
   await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
-  await a.page.getByRole('link', { name: '查看任务', exact: true }).click()
+  await a.page.getByRole('link', { name: '查看修改建议', exact: true }).click()
   await expect(a.page.getByText(b.rationale, { exact: true })).toBeVisible()
   await expect(a.page.getByText(a.rationale, { exact: true })).toHaveCount(0)
   await a.page.goto(`/app/tasks/${a.taskId}?runId=${a.runId}`)
@@ -78,9 +83,13 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
   users: { a, b },
 }) => {
   await a.page.goto('/app/today')
-  await expect(a.page.getByRole('heading', { name: a.taskTitle, exact: true })).toBeVisible()
+  await expect(
+    a.page
+      .getByRole('region', { name: '接下来做什么' })
+      .getByRole('heading', { name: a.taskTitle, exact: true }),
+  ).toBeVisible()
   // 通过 NuxtLink 导航，保留刚读入的 today Query；不能用整页刷新替代清缓存验证。
-  await a.page.getByRole('link', { name: '查看任务', exact: true }).click()
+  await a.page.getByRole('link', { name: '查看修改建议', exact: true }).click()
   await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
   const aKey = `${commandPrefix}${a.userId}:${a.taskId}:${randomUUID()}`
   const bKey = `${commandPrefix}${b.userId}:${b.taskId}:${randomUUID()}`
@@ -107,20 +116,22 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
-  await a.page.route(`${apiOrigin}/tasks/today`, async (route) => {
+  await a.page.route(`${apiOrigin}/workspace/entry`, async (route) => {
     const response = await route.fetch()
     await gate
     await route.fulfill({ response })
   })
-  const readingB = a.page.waitForRequest((request) => request.url() === `${apiOrigin}/tasks/today`)
+  const readingB = a.page.waitForRequest(
+    (request) => request.url() === `${apiOrigin}/workspace/entry`,
+  )
   try {
     await a.page
       .getByRole('navigation', { name: '工作台导航' })
-      .getByRole('link', { name: '今日学习', exact: true })
+      .getByRole('link', { name: '学习计划', exact: true })
       .click()
     await readingB
     await expect(
-      a.page.getByRole('heading', { name: '正在读取今日任务', exact: true }),
+      a.page.getByRole('heading', { name: '正在找回学习进度', exact: true }),
     ).toBeVisible()
     await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
     expect(await a.page.evaluate((key) => sessionStorage.getItem(key), aKey)).toBeNull()
@@ -129,6 +140,10 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
   } finally {
     release()
   }
-  await expect(a.page.getByRole('heading', { name: b.taskTitle, exact: true })).toBeVisible()
+  await expect(
+    a.page
+      .getByRole('region', { name: '接下来做什么' })
+      .getByRole('heading', { name: b.taskTitle, exact: true }),
+  ).toBeVisible()
   await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
 })

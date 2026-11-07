@@ -202,6 +202,10 @@ components:
     padding: 64px
 ---
 
+## KnowledgeOps 项目覆盖规则（2026-11-07）
+
+以下用户已确认规则优先于本文其余参考设计：全站标题与正文使用无衬线字体，正文采用系统 UI 字体栈（含 Noto Sans SC、Microsoft YaHei 回退），不再使用 Cormorant Garamond、EB Garamond 或中文衬线字体；代码、路径等技术内容保留等宽字体。任务路线卡片使用 8px 轻微圆角；学习计划概况不展示进度条，保留已完成任务数量及路线圆点状态。其他颜色、间距与交互约束继续沿用。
+
 ## Overview
 
 Bugatti's marketing surface is the most austere interface in luxury automotive: a near-pure black canvas (`{colors.canvas}` — #000000) holding white uppercase **letterspaced** display type and full-bleed automotive photography. The system has no accent color, no surface card decoration, no shadows, no gradients, no chrome — only **photography, typography, and the brand wordmark**. Every other luxury auto site in this category (BMW M, Aston Martin, Lamborghini) uses some form of accent color or signature element; Bugatti uses nothing. The empty space, the photograph, and the precisely-tracked Bugatti Display headline ARE the brand.

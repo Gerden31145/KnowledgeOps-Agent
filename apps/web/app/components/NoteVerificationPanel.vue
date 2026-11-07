@@ -57,11 +57,9 @@ function criterionTitle(id: string) {
     aria-labelledby="note-report-title"
   >
     <div class="flex flex-wrap items-center justify-between gap-4">
-      <h2 id="note-report-title" class="font-display text-3xl font-normal tracking-display">
-        笔记验收报告
-      </h2>
+      <h2 id="note-report-title" class="text-section-title font-medium">笔记验收报告</h2>
       <button
-        class="min-h-11 rounded-full border border-ink px-6 font-mono text-sm disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+        class="min-h-11 rounded-full border border-ink px-6 font-mono text-base disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         type="button"
         :disabled="query.isFetching.value || query.isPaused.value"
         @click="query.refetch()"
@@ -92,8 +90,8 @@ function criterionTitle(id: string) {
     >
       <template v-if="denied" #actions>
         <NuxtLink
-          class="inline-flex min-h-11 items-center text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-          to="/login"
+          class="action-button inline-flex min-h-11 items-center text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          :to="{ path: '/login', query: { next: $route.fullPath } }"
           >重新登录</NuxtLink
         >
       </template>
@@ -105,7 +103,7 @@ function criterionTitle(id: string) {
       description="正在查询这次运行保存的状态与验收结果。"
     />
     <div v-else-if="snapshot" class="mt-6 space-y-8 [overflow-wrap:anywhere]">
-      <dl class="grid gap-4 text-sm sm:grid-cols-2">
+      <dl class="grid gap-4 text-base sm:grid-cols-2">
         <div>
           <dt class="text-muted">运行状态</dt>
           <dd class="mt-2 text-body-strong">{{ stateLabels[snapshot.status] }}</dd>
@@ -119,7 +117,7 @@ function criterionTitle(id: string) {
           </dd>
         </div>
       </dl>
-      <p class="text-sm leading-6 text-muted">
+      <p class="text-base leading-6 text-muted">
         运行状态说明这次后台执行是否结束；任务是否通过，以任务状态为准。
       </p>
       <VerificationRunCancel :key="snapshot.runId" :run="snapshot" />
@@ -151,7 +149,7 @@ function criterionTitle(id: string) {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <h3 class="text-lg text-ink">{{ criterionTitle(result.criterionId) }}</h3>
               <span
-                class="text-sm"
+                class="text-base"
                 :class="result.outcome === 'PASSED' ? 'text-success' : 'text-warning'"
                 >{{ outcomeLabels[result.outcome] }}</span
               >
@@ -168,7 +166,7 @@ function criterionTitle(id: string) {
             </ul>
             <details v-if="result.citations.length" class="mt-4">
               <summary
-                class="min-h-11 cursor-pointer py-3 text-sm text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                class="min-h-11 cursor-pointer py-3 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
               >
                 查看引用摘录（{{ result.citations.length }}）
               </summary>
@@ -177,14 +175,14 @@ function criterionTitle(id: string) {
                 :key="index"
                 class="mt-4 border-l border-hairline-strong pl-4"
               >
-                <p class="font-mono text-sm text-muted">
+                <p class="font-mono text-base text-muted">
                   {{ citation.path }} · 第 {{ citation.startLine }}–{{ citation.endLine }} 行 ·
                   {{ citation.commitSha.slice(0, 7) }}
                 </p>
                 <p class="mt-2 whitespace-pre-wrap leading-7 text-body">{{ citation.excerpt }}</p>
                 <button
                   type="button"
-                  class="mt-2 min-h-11 px-2 text-sm text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                  class="action-button mt-2 min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
                   @click="locate(citation)"
                 >
                   定位原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
@@ -199,23 +197,23 @@ function criterionTitle(id: string) {
             </p>
           </li>
         </ul>
-        <p v-if="report.pendingCriterionIds.length" class="text-sm leading-6 text-muted">
+        <p v-if="report.pendingCriterionIds.length" class="text-base leading-6 text-muted">
           仍有
           {{ report.pendingCriterionIds.length }} 项标准等待后续验收，当前报告不能替代任务最终结论。
         </p>
         <section v-if="snapshot.followUpQuestion" aria-labelledby="follow-up-title">
-          <h3 id="follow-up-title" class="font-display text-2xl tracking-display">理解追问</h3>
+          <h3 id="follow-up-title" class="text-section-title font-medium">理解追问</h3>
           <p class="mt-4 whitespace-pre-wrap leading-7 text-body">
             {{ snapshot.followUpQuestion.question }}
           </p>
-          <p class="mt-3 text-sm text-muted">
+          <p class="mt-3 text-base text-muted">
             这是本次笔记报告对应的问题，生成问题不代表回答已通过。
           </p>
           <ul class="mt-3 flex flex-wrap gap-3" aria-label="追问引用">
             <li v-for="(citation, index) in snapshot.followUpQuestion.citations" :key="index">
               <button
                 type="button"
-                class="min-h-11 px-2 text-sm text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                class="action-button min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
                 @click="locate(citation)"
               >
                 追问依据：原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
@@ -232,14 +230,14 @@ function criterionTitle(id: string) {
             @locate="locate"
           />
         </section>
-        <p v-else class="text-sm leading-6 text-muted">
+        <p v-else class="text-base leading-6 text-muted">
           本次报告没有保存追问。笔记未满足出题条件或执行预算不足时，都可能没有追问。
         </p>
       </template>
       <template v-if="snapshot.submissionId">
         <button
           type="button"
-          class="min-h-11 px-3 text-sm text-link underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+          class="action-button min-h-11 px-3 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
           :aria-expanded="evidenceOpen"
           aria-controls="note-evidence"
           @click="evidenceOpen = !evidenceOpen"

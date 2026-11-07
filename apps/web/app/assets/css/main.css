@@ -17,7 +17,7 @@
   --color-success: #5fa657;
 
   --font-display: 'Saira Condensed', 'Arial Narrow', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Cormorant Garamond', 'EB Garamond', 'Noto Serif SC', 'Songti SC', STSong, serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Cascadia Mono', monospace;
 
   --text-display-sm: 2.75rem;
@@ -28,10 +28,20 @@
   --text-display-xl--line-height: 0.94;
   --text-caption: 0.6875rem;
   --text-caption--line-height: 1rem;
+  --text-workspace-title: 2rem;
+  --text-workspace-title--line-height: 1.35;
+  --text-section-title: 1.375rem;
+  --text-section-title--line-height: 1.45;
+  --text-reading: 1.125rem;
+  --text-reading--line-height: 1.8;
 
   --tracking-display: 0.08em;
   --tracking-label: 0.16em;
   --spacing-section: 7.5rem;
+}
+
+@utility action-button {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-hairline-strong px-5 py-2 text-base text-ink no-underline transition-colors hover:border-ink hover:bg-surface-elevated focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @layer base {

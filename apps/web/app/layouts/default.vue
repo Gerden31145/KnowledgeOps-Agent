@@ -10,7 +10,7 @@
     <header
       class="mx-auto grid h-14 max-w-7xl grid-cols-[1fr_auto_1fr] items-center border-b border-hairline px-4 sm:px-6 lg:px-10"
     >
-      <span class="font-mono text-caption tracking-label text-muted uppercase">System</span>
+      <span class="text-sm text-muted">学习工作台</span>
       <NuxtLink
         class="inline-flex min-h-11 items-center font-display text-sm font-normal tracking-display uppercase focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         to="/"
@@ -18,7 +18,7 @@
         KnowledgeOps
       </NuxtLink>
       <span class="text-right font-mono text-caption tracking-label text-muted uppercase"
-        >Phase 03</span
+        >学习 · 实践 · 反馈</span
       >
     </header>
 
@@ -28,7 +28,7 @@
       class="mx-auto flex max-w-7xl flex-col gap-4 border-t border-hairline px-4 py-16 font-mono text-caption tracking-label text-muted uppercase sm:px-6 md:flex-row md:items-center md:justify-between lg:px-10"
     >
       <span>KnowledgeOps Agent / 2026</span>
-      <span>Only verified capabilities are presented</span>
+      <span>让每一步学习都有反馈</span>
     </footer>
   </div>
 </template>

@@ -137,3 +137,23 @@ export type PlanTaskSummary = z.infer<typeof planTaskSummarySchema>
 export type PlanDetailResponse = z.infer<typeof planDetailResponseSchema>
 export type TodayTasksResponse = z.infer<typeof todayTasksResponseSchema>
 export type TaskDetailResponse = z.infer<typeof taskDetailResponseSchema>
+
+// 默认入口只返回当前用户的恢复定位；完整计划和运行仍走原有查询。
+export const workspaceEntryResponseSchema = z
+  .object({
+    planId: entityIdSchema.nullable(),
+    runId: entityIdSchema.nullable(),
+    modelId: z.string().nullable(),
+    goal: z
+      .object({
+        id: entityIdSchema,
+        title: z.string(),
+        currentLevel: z.string(),
+        deadline: isoDateSchema,
+        weeklyMinutes: z.number().int().positive(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+export type WorkspaceEntryResponse = z.infer<typeof workspaceEntryResponseSchema>
