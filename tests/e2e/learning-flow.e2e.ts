@@ -1,3 +1,4 @@
+import { expandNoteResults } from './note-report.helpers.js'
 import { createHmac } from 'node:crypto'
 import {
   planGenerationAcceptedResponseSchema,
@@ -57,7 +58,7 @@ test('页面生成并确认计划 → 开始任务 → Push 取证 → 笔记与
     await page.getByRole('button', { name: '确认并开始', exact: true }).click()
     await expect(
       page
-        .getByRole('region', { name: '接下来做什么' })
+        .getByRole('article')
         .getByRole('heading', { name: pipelinePlan.stages[0].tasks[0].title, exact: true }),
     ).toBeVisible()
     await page.getByRole('link', { name: '查看任务', exact: true }).click()
@@ -124,7 +125,9 @@ test('页面生成并确认计划 → 开始任务 → Push 取证 → 笔记与
     await test.step('页面发现新报告与追问，再经现有回答流程完成验收', async () => {
       await expect(page.getByLabel('任务状态：等待回答', { exact: true })).toBeVisible()
       await page.getByRole('tab', { name: '验收与反馈' }).click()
+      await expandNoteResults(page)
       await expect(page.getByText('R16 合成笔记验收：通过', { exact: true })).toBeVisible()
+      await page.getByRole('tab', { name: '追问回答', exact: true }).click()
       await page
         .getByLabel('你的回答', { exact: true })
         .fill('微任务队列需要清空，再执行后续宏任务。')

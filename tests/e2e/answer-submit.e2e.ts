@@ -8,7 +8,7 @@ test('浏览器提交回答，经队列验收后任务通过、后续任务解�
   context,
   answerFlow: f,
 }) => {
-  await page.goto(`/app/tasks/${f.taskId}?runId=${f.noteRunId}`)
+  await page.goto(`/app/tasks/${f.taskId}?runId=${f.noteRunId}&tab=follow-up`)
   await expect(page.getByLabel('任务状态：等待回答', { exact: true })).toBeVisible()
   await page.getByLabel('你的回答', { exact: true }).fill('微任务队列需要清空，再执行后续宏任务。')
 

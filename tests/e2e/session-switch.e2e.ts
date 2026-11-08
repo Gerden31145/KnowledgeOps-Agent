@@ -1,3 +1,4 @@
+import { expandNoteResults } from './note-report.helpers.js'
 import { randomUUID } from 'node:crypto'
 import { test, expect } from './two-users.fixture.js'
 import { apiOrigin, webOrigin } from './environment.js'
@@ -8,6 +9,7 @@ test('退出 A 后清除本标签页私有命令，安装 B 会话后只读 B �
   users: { a, b, database },
 }) => {
   await a.page.goto(`/app/tasks/${a.taskId}?runId=${a.runId}`)
+  await expandNoteResults(a.page)
   await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
   // 合成一份已发出、尚待确认的本地命令；本用例不调用回答验收或模型。
   const key = `${commandPrefix}${a.userId}:${a.taskId}:${randomUUID()}`
@@ -23,6 +25,7 @@ test('退出 A 后清除本标签页私有命令，安装 B 会话后只读 B �
     { key, record },
   )
   await a.page.reload()
+  await expandNoteResults(a.page)
   await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
   expect(await a.page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)!), key)).toEqual(
     record,
@@ -66,12 +69,11 @@ test('退出 A 后清除本标签页私有命令，安装 B 会话后只读 B �
   ])
   await a.page.goto('/app/today')
   await expect(
-    a.page
-      .getByRole('region', { name: '接下来做什么' })
-      .getByRole('heading', { name: b.taskTitle, exact: true }),
+    a.page.getByRole('article').getByRole('heading', { name: b.taskTitle, exact: true }),
   ).toBeVisible()
   await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
   await a.page.getByRole('link', { name: '查看修改建议', exact: true }).click()
+  await expandNoteResults(a.page)
   await expect(a.page.getByText(b.rationale, { exact: true })).toBeVisible()
   await expect(a.page.getByText(a.rationale, { exact: true })).toHaveCount(0)
   await a.page.goto(`/app/tasks/${a.taskId}?runId=${a.runId}`)
@@ -84,12 +86,11 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
 }) => {
   await a.page.goto('/app/today')
   await expect(
-    a.page
-      .getByRole('region', { name: '接下来做什么' })
-      .getByRole('heading', { name: a.taskTitle, exact: true }),
+    a.page.getByRole('article').getByRole('heading', { name: a.taskTitle, exact: true }),
   ).toBeVisible()
   // 通过 NuxtLink 导航，保留刚读入的 today Query；不能用整页刷新替代清缓存验证。
   await a.page.getByRole('link', { name: '查看修改建议', exact: true }).click()
+  await expandNoteResults(a.page)
   await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
   const aKey = `${commandPrefix}${a.userId}:${a.taskId}:${randomUUID()}`
   const bKey = `${commandPrefix}${b.userId}:${b.taskId}:${randomUUID()}`
@@ -141,9 +142,7 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
     release()
   }
   await expect(
-    a.page
-      .getByRole('region', { name: '接下来做什么' })
-      .getByRole('heading', { name: b.taskTitle, exact: true }),
+    a.page.getByRole('article').getByRole('heading', { name: b.taskTitle, exact: true }),
   ).toBeVisible()
   await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
 })

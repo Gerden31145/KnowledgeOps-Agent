@@ -17,7 +17,9 @@ const tasks = computed(() => entries.value.map(({ task }) => task))
 const completed = computed(() => tasks.value.filter((task) => task.state === 'PASSED').length)
 const currentTaskId = computed(() =>
   props.plan.status === 'ACTIVE'
-    ? (tasks.value.find((task) => CURRENT_TASK_STATES.some((state) => state === task.state))?.id ?? null)
+    ? (tasks.value.find((task) => CURRENT_TASK_STATES.some((state) => state === task.state))?.id ??
+      tasks.value.find((task) => task.state === 'READY')?.id ??
+      null)
     : null,
 )
 const expandedTasks = ref(new Set<string>())
@@ -29,18 +31,19 @@ function toggleDescription(task: PlanTaskSummary) {
   if (expandedTasks.value.has(task.id)) expandedTasks.value.delete(task.id)
   else expandedTasks.value.add(task.id)
 }
-watch(() => props.plan.id, () => expandedTasks.value.clear())
+watch(
+  () => props.plan.id,
+  () => expandedTasks.value.clear(),
+)
 
-// 每次进入计划只定位一次；轮询刷新不抢走用户的阅读位置。
-let scrolledPlanId: string | null = null
+// 首次进入或推荐任务改变时定位；同一任务的轮询更新不重复滚动。
+let scrolledTarget: string | null = null
 watch(
   [root, () => props.plan.id, currentTaskId],
   async ([element, planId, taskId], _previous, onCleanup) => {
-    if (!element || scrolledPlanId === planId) return
-    if (!taskId) {
-      scrolledPlanId = planId
-      return
-    }
+    if (!element || !taskId) return
+    const target = `${planId}:${taskId}`
+    if (scrolledTarget === target) return
     let cancelled = false
     let frame = 0
     onCleanup(() => {
@@ -52,9 +55,11 @@ watch(
     frame = requestAnimationFrame(() => {
       const card = element.querySelector<HTMLElement>(`[id="plan-task-${taskId}"]`)
       if (cancelled || !card) return
-      scrolledPlanId = planId
+      scrolledTarget = target
       card.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'instant'
+          : 'smooth',
         block: 'start',
       })
     })
@@ -115,10 +120,7 @@ function action(task: PlanTaskSummary) {
     </p>
     <ol class="mt-2">
       <li v-for="({ task, stage, startsStage }, index) in entries" :key="task.id">
-        <div
-          v-if="startsStage"
-          class="relative py-5 pl-11 sm:pl-16"
-        >
+        <div v-if="startsStage" class="relative py-5 pl-11 sm:pl-16">
           <span
             v-if="index > 0"
             aria-hidden="true"
@@ -145,10 +147,23 @@ function action(task: PlanTaskSummary) {
           <span
             aria-hidden="true"
             class="absolute top-8 left-0 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border bg-canvas"
-            :class="task.state === 'PASSED' || task.id === currentTaskId ? 'border-ink' : 'border-muted'"
+            :class="
+              task.state === 'PASSED' || task.id === currentTaskId ? 'border-ink' : 'border-muted'
+            "
           >
-            <svg v-if="task.state === 'PASSED'" class="size-4 text-ink" viewBox="0 0 20 20" fill="none">
-              <path d="m5 10 3 3 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <svg
+              v-if="task.state === 'PASSED'"
+              class="size-4 text-ink"
+              viewBox="0 0 20 20"
+              fill="none"
+            >
+              <path
+                d="m5 10 3 3 7-7"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
           </span>
           <article
@@ -156,14 +171,49 @@ function action(task: PlanTaskSummary) {
             :aria-labelledby="`plan-task-title-${task.id}`"
             :aria-current="task.id === currentTaskId ? 'step' : undefined"
             class="scroll-mt-6 rounded-lg border p-4 transition-colors motion-reduce:transition-none sm:p-6"
-            :class="task.id === currentTaskId ? 'border-muted bg-surface-elevated' : 'border-hairline-strong bg-surface-soft'"
+            :class="
+              task.id === currentTaskId
+                ? 'border-muted bg-surface-elevated'
+                : 'border-hairline-strong bg-surface-soft'
+            "
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
-                <p v-if="task.id === currentTaskId" class="mb-2 text-base text-body">当前任务</p>
-                <h4 :id="`plan-task-title-${task.id}`" class="break-words text-xl font-medium">{{ task.title }}</h4>
+                <p v-if="task.id === currentTaskId" class="mb-2 text-base text-body">
+                  {{ task.state === 'READY' ? '接下来学习' : '当前任务' }}
+                </p>
+                <h4 :id="`plan-task-title-${task.id}`" class="break-words text-xl font-medium">
+                  {{ task.title }}
+                </h4>
               </div>
-              <div class="shrink-0"><TaskStateLabel :state="task.state" /></div>
+              <div class="flex shrink-0 items-center gap-2">
+                <TaskStateLabel :state="task.state" />
+                <button
+                  v-if="task.id !== currentTaskId"
+                  type="button"
+                  class="flex size-11 items-center justify-center rounded-full text-body hover:bg-surface-elevated hover:text-ink focus-visible:outline-2 focus-visible:outline-link"
+                  :aria-label="`${isExpanded(task) ? '收起' : '展开'}${task.title}的描述`"
+                  :aria-expanded="isExpanded(task)"
+                  :aria-controls="`plan-task-description-${task.id}`"
+                  @click="toggleDescription(task)"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="size-5 transition-transform motion-reduce:transition-none"
+                    :class="isExpanded(task) ? 'rotate-90' : ''"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                  >
+                    <path
+                      d="m7 4 6 6-6 6"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
             <p class="mt-3 text-base text-muted">
               预计 {{ task.estimatedMinutes }} 分钟 ·
@@ -173,25 +223,19 @@ function action(task: PlanTaskSummary) {
               v-show="isExpanded(task)"
               :id="`plan-task-description-${task.id}`"
               class="mt-4 whitespace-pre-line break-words text-reading text-body"
-            >{{ task.description }}</p>
+            >
+              {{ task.description }}
+            </p>
             <p v-if="task.state === 'VERIFYING'" class="mt-3 text-base text-body">
               正在验收你的提交，结果会自动更新。
             </p>
-            <div class="mt-5 flex flex-wrap gap-3">
-              <button
-                v-if="task.id !== currentTaskId"
-                type="button"
-                class="action-button"
-                :aria-expanded="isExpanded(task)"
-                :aria-controls="`plan-task-description-${task.id}`"
-                @click="toggleDescription(task)"
-              >{{ isExpanded(task) ? '收起描述' : '展开描述' }}</button>
+            <div v-if="plan.status !== 'DRAFT'" class="mt-5 flex flex-wrap gap-3">
               <NuxtLink
-                v-if="plan.status !== 'DRAFT'"
                 :to="taskLink(task)"
                 class="action-button"
                 :class="task.id === currentTaskId ? 'border-ink' : ''"
-              >{{ action(task) }}</NuxtLink>
+                >{{ action(task) }}</NuxtLink
+              >
             </div>
             <details v-if="plan.status === 'DRAFT'" class="mt-3">
               <summary

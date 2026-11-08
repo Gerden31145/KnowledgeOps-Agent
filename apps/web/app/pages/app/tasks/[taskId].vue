@@ -32,27 +32,35 @@ async function copyPath() {
     copied.value = '未能复制，请手动选择路径文字复制。'
   }
 }
-const tab = computed(() =>
-  route.query.tab === 'instructions'
-    ? 'instructions'
-    : route.query.tab === 'feedback' || route.query.runId || route.hash === '#note-report'
-      ? 'feedback'
-      : 'instructions',
-)
-async function selectTab(value: 'instructions' | 'feedback') {
+const tabs = [
+  { id: 'instructions', label: '任务说明' },
+  { id: 'feedback', label: '验收与反馈' },
+  { id: 'follow-up', label: '追问回答' },
+] as const
+type TaskTab = (typeof tabs)[number]['id']
+const tab = computed<TaskTab>(() => {
+  const explicit = tabs.find((item) => item.id === route.query.tab)
+  if (explicit) return explicit.id
+  if (route.query.answerId || route.query.answerRunId || route.hash === '#follow-up-answer')
+    return 'follow-up'
+  return route.query.runId || route.hash === '#note-report' ? 'feedback' : 'instructions'
+})
+async function selectTab(value: TaskTab) {
   await router.replace({ query: { ...route.query, tab: value }, hash: '' })
 }
 async function tabKey(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
-  const next =
+  const index = tabs.findIndex(
+    (item) => 'tab-' + item.id === (event.currentTarget as HTMLElement).id,
+  )
+  const nextIndex =
     event.key === 'Home'
-      ? 'instructions'
+      ? 0
       : event.key === 'End'
-        ? 'feedback'
-        : (event.currentTarget as HTMLElement).id === 'tab-instructions'
-          ? 'feedback'
-          : 'instructions'
+        ? tabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+  const next = tabs[nextIndex]!.id
   await selectTab(next)
   await nextTick()
   document.getElementById('tab-' + next)?.focus()
@@ -314,31 +322,21 @@ async function startTask() {
       <div
         role="tablist"
         aria-label="任务内容"
-        class="mb-6 flex gap-2 border-b border-hairline pb-3"
+        class="mb-6 flex flex-wrap gap-2 border-b border-hairline pb-3"
       >
         <button
-          id="tab-instructions"
+          v-for="item in tabs"
+          :id="`tab-${item.id}`"
+          :key="item.id"
           class="action-button aria-selected:border-ink aria-selected:bg-surface-elevated"
           role="tab"
-          :aria-selected="tab === 'instructions'"
-          aria-controls="panel-instructions"
-          :tabindex="tab === 'instructions' ? 0 : -1"
-          @click="selectTab('instructions')"
+          :aria-selected="tab === item.id"
+          :aria-controls="`panel-${item.id}`"
+          :tabindex="tab === item.id ? 0 : -1"
+          @click="selectTab(item.id)"
           @keydown="tabKey"
         >
-          任务说明
-        </button>
-        <button
-          id="tab-feedback"
-          class="action-button aria-selected:border-ink aria-selected:bg-surface-elevated"
-          role="tab"
-          :aria-selected="tab === 'feedback'"
-          aria-controls="panel-feedback"
-          :tabindex="tab === 'feedback' ? 0 : -1"
-          @click="selectTab('feedback')"
-          @keydown="tabKey"
-        >
-          验收与反馈
+          {{ item.label }}
         </button>
       </div>
       <div
@@ -356,11 +354,11 @@ async function startTask() {
         </p>
         <section aria-labelledby="steps-title">
           <h2 id="steps-title" class="text-section-title font-medium">建议步骤</h2>
-          <ol class="mt-6 border-t border-hairline">
+          <ol class="mt-3">
             <li
               v-for="(step, index) in task.data.value.suggestedSteps"
               :key="step"
-              class="grid grid-cols-[3rem_1fr] gap-4 border-b border-hairline py-5 text-body"
+              class="grid grid-cols-[2rem_1fr] gap-3 py-2 text-base leading-6 text-body"
             >
               <span class="text-base text-muted">
                 {{ String(index + 1).padStart(2, '0') }}
@@ -372,12 +370,8 @@ async function startTask() {
 
         <section aria-labelledby="criteria-title">
           <h2 id="criteria-title" class="text-section-title font-medium">验收标准</h2>
-          <ul class="mt-6 border-t border-hairline">
-            <li
-              v-for="criterion in task.data.value.criteria"
-              :key="criterion.id"
-              class="border-b border-hairline py-5"
-            >
+          <ul class="mt-6">
+            <li v-for="criterion in task.data.value.criteria" :key="criterion.id" class="py-5">
               <p class="text-base text-muted">
                 {{ criterion.type }} · {{ criterion.required ? '必需' : '可选' }}
               </p>
@@ -393,14 +387,14 @@ async function startTask() {
         </section>
       </div>
       <div
-        v-show="tab === 'feedback'"
-        id="panel-feedback"
+        v-show="tab !== 'instructions'"
+        :id="tab === 'follow-up' ? 'panel-follow-up' : 'panel-feedback'"
         role="tabpanel"
-        aria-labelledby="tab-feedback"
+        :aria-labelledby="tab === 'follow-up' ? 'tab-follow-up' : 'tab-feedback'"
         tabindex="0"
         class="space-y-6 focus-visible:outline-2 focus-visible:outline-link"
       >
-        <details class="border-b border-hairline pb-4">
+        <details>
           <summary
             class="min-h-11 cursor-pointer py-3 text-base focus-visible:outline-2 focus-visible:outline-link"
           >
@@ -442,11 +436,11 @@ async function startTask() {
                     query: {
                       ...route.query,
                       runId: run.id,
-                      tab: 'feedback',
+                      tab: tab === 'follow-up' ? 'follow-up' : 'feedback',
                       answerId: undefined,
                       answerRunId: undefined,
                     },
-                    hash: '#note-report',
+                    hash: tab === 'follow-up' ? '' : '#note-report',
                   }"
                   :aria-current="selectedRunId === run.id ? 'true' : undefined"
                   >笔记验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN')
@@ -467,6 +461,7 @@ async function startTask() {
           :run-id="selectedRunId"
           :criteria="task.data.value.criteria"
           :task="task.data.value"
+          :view="tab === 'follow-up' ? 'follow-up' : 'feedback'"
         />
         <AsyncStatePanel
           v-else-if="route.query.runId !== undefined"

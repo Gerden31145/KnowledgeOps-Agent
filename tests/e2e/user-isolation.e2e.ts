@@ -1,3 +1,4 @@
+import { expandNoteResults } from './note-report.helpers.js'
 import { randomUUID } from 'node:crypto'
 import { test, expect } from './two-users.fixture.js'
 import { apiOrigin, webOrigin } from './environment.js'
@@ -15,6 +16,7 @@ test('A、B 各自读取计划与报告；替换资源 ID 不能读取对方数�
       await expect(
         actor.page.getByRole('heading', { name: actor.taskTitle, exact: true }),
       ).toBeVisible()
+      await expandNoteResults(actor.page)
       await expect(actor.page.getByText(actor.rationale, { exact: true })).toBeVisible()
       await expect(actor.page.getByText(other.rationale, { exact: true })).toHaveCount(0)
     })

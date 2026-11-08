@@ -73,17 +73,5 @@ const errorMessage = computed(() =>
     <p role="status" class="mt-4 min-h-6 text-muted">
       {{ returnIssue || (leaving ? '请在 GitHub 页面核对 App 并完成授权。' : '') }}
     </p>
-    <section class="mt-10 max-w-2xl border-t border-hairline pt-6" aria-labelledby="login-privacy">
-      <h2 id="login-privacy" class="font-display text-2xl font-normal tracking-display">
-        这次会保存什么
-      </h2>
-      <p class="mt-4 leading-7 text-muted">
-        保存 GitHub 用户 ID、用户名和本项目会话记录；GitHub Token
-        不发送给浏览器，也不写入数据库。会话最长 7 天，可在工作台退出。
-      </p>
-      <p class="mt-3 leading-7 text-muted">
-        学习数据默认私有。退出登录不会删除数据；自助数据删除尚未提供。旧开发账号的计划不会自动转入你的账号，仓库接入将在后续单独说明与授权。
-      </p>
-    </section>
   </main>
 </template>

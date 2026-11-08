@@ -1,3 +1,4 @@
+import { expandNoteResults } from './note-report.helpers.js'
 import { test, expect } from './two-users.fixture.js'
 import { apiOrigin, webOrigin } from './environment.js'
 
@@ -9,7 +10,7 @@ test('默认入口恢复各自活动计划，旧入口兼容且读取失败不�
     expect(response.status()).toBe(200)
     expect(await response.json()).toMatchObject({ planId: actor.planId, runId: null })
     await actor.page.goto('/')
-    await expect(actor.page.getByRole('heading', { name: '接下来做什么' })).toBeVisible()
+    await expect(actor.page.getByRole('heading', { name: '完整学习路线' })).toBeVisible()
     await expect(
       actor.page.getByRole('navigation').getByText('今日学习', { exact: true }),
     ).toHaveCount(0)
@@ -55,7 +56,7 @@ test('访客表单保留输入，登录回到已有计划且不会自动生成',
     },
   ])
   await a.page.goto('/app/plan')
-  await expect(a.page.getByRole('heading', { name: '接下来做什么' })).toBeVisible()
+  await expect(a.page.getByRole('heading', { name: '完整学习路线' })).toBeVisible()
   await expect(a.page.getByText('刚才填写的新目标尚未生成', { exact: false })).toBeVisible()
   expect(
     await a.page.evaluate(
@@ -92,6 +93,7 @@ test('登录后回到原任务的指定报告和页签，不触发业务写入',
   ])
   await a.page.goto('/app/plan')
   await expect(a.page).toHaveURL(`${webOrigin}${target}`)
+  await expandNoteResults(a.page)
   await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
   expect(
     await a.page.evaluate(() => sessionStorage.getItem('knowledgeops:login-return')),
@@ -133,7 +135,7 @@ test('没有活动计划时从默认入口恢复草稿及生成中的运行', as
 })
 
 for (const width of [390, 1280]) {
-  test(`任务页 ${width}px：路径突出、双页签键盘切换、刷新恢复指定报告`, async ({
+  test(`任务页 ${width}px：紧凑报告默认折叠、三页签键盘切换、刷新恢复指定报告`, async ({
     users: { a },
   }, testInfo) => {
     await a.page.setViewportSize({ width, height: 900 })
@@ -142,6 +144,19 @@ for (const width of [390, 1280]) {
       'aria-selected',
       'true',
     )
+    const results = a.page.getByRole('list', { name: '逐项验收结果', exact: true })
+    await expect(results.locator(':scope > li > details')).toHaveCount(3)
+    await expect(results.locator(':scope > li > details[open]')).toHaveCount(0)
+    await expect(a.page.getByText('2/3 项通过', { exact: true })).toBeVisible()
+    await expect(a.page.getByText(a.rationale, { exact: true })).not.toBeVisible()
+    await a.page.screenshot({
+      path: testInfo.outputPath(`report-collapsed-${width}.png`),
+      fullPage: true,
+    })
+    await results.locator('summary').filter({ hasText: '正确解释顺序' }).click()
+    await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
+    await results.locator('summary').filter({ hasText: '正确解释顺序' }).click()
+    await expect(a.page.getByText(a.rationale, { exact: true })).not.toBeVisible()
     const location = a.page.getByRole('region', { name: '笔记提交位置' })
     await expect(location.getByRole('heading', { name: '待验收笔记路径' })).toBeVisible()
     await expect(location.getByRole('button', { name: '复制路径' })).toBeVisible()
@@ -152,7 +167,15 @@ for (const width of [390, 1280]) {
     await a.page.getByRole('tab', { name: '任务说明' }).click()
     await a.page.getByRole('tab', { name: '任务说明' }).press('ArrowRight')
     await expect(a.page.getByRole('tab', { name: '验收与反馈' })).toBeFocused()
+    await a.page.getByRole('tab', { name: '验收与反馈' }).press('ArrowRight')
+    await expect(a.page.getByRole('tab', { name: '追问回答' })).toBeFocused()
+    await expect(a.page.getByText('本次报告没有保存追问。', { exact: false })).toBeVisible()
+    await expect(results).not.toBeVisible()
+    await a.page.getByRole('tab', { name: '追问回答' }).press('ArrowLeft')
+    await expect(a.page.getByRole('tab', { name: '验收与反馈' })).toBeFocused()
+    await expect(a.page).toHaveURL((url) => url.searchParams.get('tab') === 'feedback')
     await a.page.reload()
+    await expandNoteResults(a.page)
     await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
     expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,

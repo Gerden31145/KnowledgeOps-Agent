@@ -127,11 +127,6 @@ const labels: Record<RepositoryEvidenceStatus, string> = {
         {{ history.isFetching.value ? '正在读取…' : '刷新取证记录' }}
       </button>
     </div>
-    <p class="leading-7 text-muted">
-      显示接收时明确属于本次绑定的最近 20 条 Push 通知，包括未进入取证的忽略记录。
-      无法确认归属的历史通知不展示。
-      刷新只读取已保存结果；“重试取证”和“按本次提交全文重新同步”才会提交恢复请求。
-    </p>
     <p v-if="retryNotice" role="status" class="leading-7 text-body">{{ retryNotice }}</p>
     <p v-if="errorText" role="alert" class="text-warning">{{ errorText }}</p>
     <p v-else-if="history.isPending.value" role="status" class="text-muted">正在读取取证记录…</p>
@@ -185,6 +180,7 @@ const labels: Record<RepositoryEvidenceStatus, string> = {
           </p>
         </li>
       </ol>
+      <p class="text-sm text-muted">仅展示最近20条</p>
     </template>
   </section>
 </template>

@@ -15,6 +15,7 @@ const props = defineProps<{
   runId: string
   criteria: AcceptanceCriterionSummary[]
   task: TaskDetailResponse
+  view?: 'feedback' | 'follow-up'
 }>()
 const user = useSessionUser()
 const query = useNoteVerificationRunQuery(
@@ -23,6 +24,10 @@ const query = useNoteVerificationRunQuery(
 )
 const snapshot = query.data
 const report = computed(() => snapshot.value?.report?.body)
+const passedCount = computed(
+  () => report.value?.results.filter((result) => result.outcome === 'PASSED').length ?? 0,
+)
+const showingFollowUp = computed(() => props.view === 'follow-up')
 const evidenceOpen = ref(false)
 const selection = shallowRef<{ citation: NoteCitation; request: number } | null>(null)
 function locate(citation: NoteCitation) {
@@ -51,20 +56,24 @@ function criterionTitle(id: string) {
 </script>
 
 <template>
-  <section
-    id="note-report"
-    class="scroll-mt-8 border-t border-hairline pt-8"
-    aria-labelledby="note-report-title"
-  >
+  <section id="note-report" class="scroll-mt-8 text-base" aria-labelledby="note-report-title">
     <div class="flex flex-wrap items-center justify-between gap-4">
-      <h2 id="note-report-title" class="text-section-title font-medium">笔记验收报告</h2>
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="note-report-title" class="text-xl font-medium">
+          {{ showingFollowUp ? '追问回答' : '笔记验收报告' }}
+        </h2>
+        <span v-if="!showingFollowUp && report && !query.isError.value" class="text-sm text-body">
+          {{ passedCount }}/{{ report.results.length }} 项通过
+          <span v-if="report.exemptions.length"> · {{ report.exemptions.length }} 项不适用</span>
+        </span>
+      </div>
       <button
         class="min-h-11 rounded-full border border-ink px-6 font-mono text-base disabled:border-muted-soft disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
         type="button"
         :disabled="query.isFetching.value || query.isPaused.value"
         @click="query.refetch()"
       >
-        {{ query.isFetching.value ? '读取中' : '刷新报告' }}
+        {{ query.isFetching.value ? '读取中' : showingFollowUp ? '刷新追问' : '刷新报告' }}
       </button>
     </div>
 
@@ -102,26 +111,25 @@ function criterionTitle(id: string) {
       title="正在读取报告"
       description="正在查询这次运行保存的状态与验收结果。"
     />
-    <div v-else-if="snapshot" class="mt-6 space-y-8 [overflow-wrap:anywhere]">
-      <dl class="grid gap-4 text-base sm:grid-cols-2">
-        <div>
-          <dt class="text-muted">运行状态</dt>
-          <dd class="mt-2 text-body-strong">{{ stateLabels[snapshot.status] }}</dd>
-        </div>
-        <div>
-          <dt class="text-muted">开始排队</dt>
-          <dd class="mt-2 text-body-strong">
-            <time :datetime="snapshot.queuedAt">{{
-              new Date(snapshot.queuedAt).toLocaleString('zh-CN')
-            }}</time>
-          </dd>
-        </div>
-      </dl>
-      <p class="text-base leading-6 text-muted">
-        运行状态说明这次后台执行是否结束；任务是否通过，以任务状态为准。
-      </p>
-      <VerificationRunCancel :key="snapshot.runId" :run="snapshot" />
-      <NoteVerificationRetry :key="snapshot.runId" :run="snapshot" :task="task" />
+    <div v-else-if="snapshot" class="mt-4 space-y-5 [overflow-wrap:anywhere]">
+      <div v-show="!showingFollowUp" class="space-y-4">
+        <dl class="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+          <div>
+            <dt class="text-muted">运行状态</dt>
+            <dd class="mt-2 text-body-strong">{{ stateLabels[snapshot.status] }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted">开始排队</dt>
+            <dd class="mt-2 text-body-strong">
+              <time :datetime="snapshot.queuedAt">{{
+                new Date(snapshot.queuedAt).toLocaleString('zh-CN')
+              }}</time>
+            </dd>
+          </div>
+        </dl>
+        <VerificationRunCancel :key="snapshot.runId" :run="snapshot" />
+        <NoteVerificationRetry :key="snapshot.runId" :run="snapshot" :task="task" />
+      </div>
 
       <AsyncStatePanel
         v-if="!report"
@@ -144,95 +152,133 @@ function criterionTitle(id: string) {
         "
       />
       <template v-else>
-        <ul class="divide-y divide-hairline border-y border-hairline" aria-label="逐项验收结果">
-          <li v-for="result in report.results" :key="result.criterionId" class="py-6">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <h3 class="text-lg text-ink">{{ criterionTitle(result.criterionId) }}</h3>
-              <span
-                class="text-base"
-                :class="result.outcome === 'PASSED' ? 'text-success' : 'text-warning'"
-                >{{ outcomeLabels[result.outcome] }}</span
-              >
-            </div>
-            <p class="mt-3 whitespace-pre-wrap leading-7 text-body">{{ result.rationale }}</p>
-            <ul
-              v-if="result.suggestions.length"
-              class="mt-3 list-disc space-y-2 pl-5 text-body"
-              aria-label="修改建议"
-            >
-              <li v-for="(suggestion, index) in result.suggestions" :key="index">
-                {{ suggestion }}
-              </li>
-            </ul>
-            <details v-if="result.citations.length" class="mt-4">
+        <ul v-show="!showingFollowUp" class="space-y-1" aria-label="逐项验收结果">
+          <li v-for="result in report.results" :key="result.criterionId">
+            <details class="group/criterion">
               <summary
-                class="min-h-11 cursor-pointer py-3 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                class="flex min-h-11 cursor-pointer list-none items-start gap-2 py-2 text-base leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link [&::-webkit-details-marker]:hidden"
               >
-                查看引用摘录（{{ result.citations.length }}）
-              </summary>
-              <blockquote
-                v-for="(citation, index) in result.citations"
-                :key="index"
-                class="mt-4 border-l border-hairline-strong pl-4"
-              >
-                <p class="font-mono text-base text-muted">
-                  {{ citation.path }} · 第 {{ citation.startLine }}–{{ citation.endLine }} 行 ·
-                  {{ citation.commitSha.slice(0, 7) }}
-                </p>
-                <p class="mt-2 whitespace-pre-wrap leading-7 text-body">{{ citation.excerpt }}</p>
-                <button
-                  type="button"
-                  class="action-button mt-2 min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-                  @click="locate(citation)"
+                <svg
+                  aria-hidden="true"
+                  class="mt-1 size-4 shrink-0 transition-transform group-open/criterion:rotate-90 motion-reduce:transition-none"
+                  viewBox="0 0 20 20"
+                  fill="none"
                 >
-                  定位原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
-                </button>
-              </blockquote>
+                  <path
+                    d="m7 4 6 6-6 6"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span class="min-w-0 flex-1 text-ink">{{
+                  criterionTitle(result.criterionId)
+                }}</span>
+                <span
+                  class="shrink-0 text-sm"
+                  :class="result.outcome === 'PASSED' ? 'text-success' : 'text-warning'"
+                  >{{ outcomeLabels[result.outcome] }}</span
+                >
+              </summary>
+              <div class="pb-3 pl-6 text-sm leading-6">
+                <p class="whitespace-pre-wrap text-body">{{ result.rationale }}</p>
+                <ul
+                  v-if="result.suggestions.length"
+                  class="mt-2 list-disc space-y-1 pl-5 text-body"
+                  aria-label="修改建议"
+                >
+                  <li v-for="(suggestion, index) in result.suggestions" :key="index">
+                    {{ suggestion }}
+                  </li>
+                </ul>
+                <details v-if="result.citations.length" class="mt-2">
+                  <summary
+                    class="min-h-11 cursor-pointer py-3 text-sm text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                  >
+                    查看引用摘录（{{ result.citations.length }}）
+                  </summary>
+                  <blockquote
+                    v-for="(citation, index) in result.citations"
+                    :key="index"
+                    class="mt-2 border-l border-hairline-strong pl-3"
+                  >
+                    <p class="font-mono text-sm text-muted">
+                      {{ citation.path }} · 第 {{ citation.startLine }}–{{ citation.endLine }} 行 ·
+                      {{ citation.commitSha.slice(0, 7) }}
+                    </p>
+                    <p class="mt-2 whitespace-pre-wrap text-body">{{ citation.excerpt }}</p>
+                    <button
+                      type="button"
+                      class="action-button mt-2 min-h-11 px-3 text-sm text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                      @click="locate(citation)"
+                    >
+                      定位原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
+                    </button>
+                  </blockquote>
+                </details>
+              </div>
             </details>
           </li>
-          <li v-for="item in report.exemptions" :key="item.criterionId" class="py-6">
-            <h3 class="text-lg">{{ criterionTitle(item.criterionId) }} · 不适用</h3>
-            <p class="mt-3 leading-7 text-body">
-              本次使用提交全文快照，没有原始 Diff，因此不检查文件变更；不代表此项通过。
-            </p>
+          <li v-for="item in report.exemptions" :key="item.criterionId">
+            <details class="group/criterion">
+              <summary
+                class="flex min-h-11 cursor-pointer list-none items-start gap-2 py-2 text-base leading-6 focus-visible:outline-2 focus-visible:outline-link [&::-webkit-details-marker]:hidden"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="mt-1 size-4 shrink-0 transition-transform group-open/criterion:rotate-90 motion-reduce:transition-none"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                >
+                  <path
+                    d="m7 4 6 6-6 6"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span class="min-w-0 flex-1">{{ criterionTitle(item.criterionId) }}</span>
+                <span class="shrink-0 text-sm text-muted">不适用</span>
+              </summary>
+              <p class="pb-3 pl-6 text-sm leading-6 text-body">
+                本次使用提交全文快照，没有原始 Diff，因此不检查文件变更；不代表此项通过。
+              </p>
+            </details>
           </li>
         </ul>
-        <p v-if="report.pendingCriterionIds.length" class="text-base leading-6 text-muted">
-          仍有
-          {{ report.pendingCriterionIds.length }} 项标准等待后续验收，当前报告不能替代任务最终结论。
-        </p>
-        <section v-if="snapshot.followUpQuestion" aria-labelledby="follow-up-title">
-          <h3 id="follow-up-title" class="text-section-title font-medium">理解追问</h3>
-          <p class="mt-4 whitespace-pre-wrap leading-7 text-body">
-            {{ snapshot.followUpQuestion.question }}
+        <div v-show="showingFollowUp">
+          <section v-if="snapshot.followUpQuestion" aria-labelledby="follow-up-title">
+            <h3 id="follow-up-title" class="sr-only">理解追问</h3>
+            <p class="whitespace-pre-wrap leading-7 text-body">
+              {{ snapshot.followUpQuestion.question }}
+            </p>
+            <ul class="mt-3 flex flex-wrap gap-3" aria-label="追问引用">
+              <li v-for="(citation, index) in snapshot.followUpQuestion.citations" :key="index">
+                <button
+                  type="button"
+                  class="action-button min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                  @click="locate(citation)"
+                >
+                  追问依据：原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
+                </button>
+              </li>
+            </ul>
+            <FollowUpAnswerPanel
+              v-if="user"
+              :key="`${user.id}:${snapshot.followUpQuestion.id}`"
+              :user-id="user.id"
+              :task="task"
+              :note-run-id="runId"
+              :question="snapshot.followUpQuestion"
+              @locate="locate"
+            />
+          </section>
+          <p v-else class="text-base leading-6 text-muted">
+            本次报告没有保存追问。笔记未满足出题条件或执行预算不足时，都可能没有追问。
           </p>
-          <p class="mt-3 text-base text-muted">
-            这是本次笔记报告对应的问题，生成问题不代表回答已通过。
-          </p>
-          <ul class="mt-3 flex flex-wrap gap-3" aria-label="追问引用">
-            <li v-for="(citation, index) in snapshot.followUpQuestion.citations" :key="index">
-              <button
-                type="button"
-                class="action-button min-h-11 px-2 text-base text-link focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-                @click="locate(citation)"
-              >
-                追问依据：原文第 {{ citation.startLine }}–{{ citation.endLine }} 行
-              </button>
-            </li>
-          </ul>
-          <FollowUpAnswerPanel
-            v-if="user"
-            :key="`${user.id}:${snapshot.followUpQuestion.id}`"
-            :user-id="user.id"
-            :task="task"
-            :note-run-id="runId"
-            :question="snapshot.followUpQuestion"
-            @locate="locate"
-          />
-        </section>
-        <p v-else class="text-base leading-6 text-muted">
-          本次报告没有保存追问。笔记未满足出题条件或执行预算不足时，都可能没有追问。
-        </p>
+        </div>
       </template>
       <template v-if="snapshot.submissionId">
         <button

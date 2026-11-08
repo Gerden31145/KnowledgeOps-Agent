@@ -1,3 +1,4 @@
+import { expandNoteResults } from './note-report.helpers.js'
 import { test, expect } from './saved-note.fixture.js'
 import { apiOrigin, webOrigin } from './environment.js'
 
@@ -18,6 +19,7 @@ test('刷新后从 URL 找回同一笔记 Run，并读取已保存的报告', as
     await page.goto(path)
     const report = page.getByRole('region', { name: '笔记验收报告', exact: true })
     await expect(report.getByText('执行完成', { exact: true })).toBeVisible()
+    await expandNoteResults(page)
     await expect(report.getByText(savedNote.rationale, { exact: true })).toBeVisible()
   })
 
@@ -38,6 +40,7 @@ test('刷新后从 URL 找回同一笔记 Run，并读取已保存的报告', as
     await expect(page).toHaveURL(`${webOrigin}${path}`)
     const report = page.getByRole('region', { name: '笔记验收报告', exact: true })
     await expect(report.getByText('执行完成', { exact: true })).toBeVisible()
+    await expandNoteResults(page)
     await expect(report.getByText(savedNote.rationale, { exact: true })).toBeVisible()
     expect(writes).toEqual([])
   })

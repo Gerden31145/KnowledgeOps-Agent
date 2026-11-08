@@ -25,7 +25,7 @@ test('浏览器离线期间 Worker 完成回答验收，联网后自动读回原
 
   try {
     const accepted = await test.step('提交回答并看到运行中，模型尚未返回结果', async () => {
-      await page.goto(`/app/tasks/${f.taskId}?runId=${f.noteRunId}`)
+      await page.goto(`/app/tasks/${f.taskId}?runId=${f.noteRunId}&tab=follow-up`)
       await expect(page.getByLabel('任务状态：等待回答', { exact: true })).toBeVisible()
       await page
         .getByLabel('你的回答', { exact: true })

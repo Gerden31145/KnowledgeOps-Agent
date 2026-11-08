@@ -12,7 +12,12 @@ const { busy, issue, retryRunId, retryableState, canRetry, retry } = useRetryAns
 )
 const target = (answerRunId: string) => ({
   path: `/app/tasks/${props.task.id}`,
-  query: { runId: props.noteRunId, answerId: props.answer.answerSubmissionId, answerRunId },
+  query: {
+    tab: 'follow-up',
+    runId: props.noteRunId,
+    answerId: props.answer.answerSubmissionId,
+    answerRunId,
+  },
   hash: '#follow-up-answer',
 })
 </script>

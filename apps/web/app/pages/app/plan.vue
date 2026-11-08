@@ -18,7 +18,8 @@ import { knowledgeOpsQueryKeys } from '../../lib/query-keys'
 import { useSessionUser } from '../../composables/use-session-user'
 import { goalDraftKey, goalDraftSchema } from '../../lib/workspace-entry'
 
-definePageMeta({ layout: 'workspace' })
+// 由计划卡片负责定位，避免路由默认回顶覆盖 scrollIntoView。
+definePageMeta({ layout: 'workspace', scrollToTop: false })
 useHead({ title: '学习计划 · KnowledgeOps Agent' })
 
 const route = useRoute()
@@ -88,6 +89,7 @@ const canShowForm = computed(
 )
 let draftReady = false
 onMounted(() => {
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   try {
     const raw = sessionStorage.getItem(goalDraftKey)
     if (raw) {

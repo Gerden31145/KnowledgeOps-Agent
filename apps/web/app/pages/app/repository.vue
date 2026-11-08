@@ -191,10 +191,6 @@ async function refresh() {
           分支：{{ binding.data.value.repository.branch }} ·
           {{ binding.data.value.repository.isPrivate ? '私有仓库' : '公开仓库' }}
         </p>
-        <p class="text-muted">
-          这里显示已保存的绑定，不代表 GitHub 当前权限仍然有效。本次绑定的 Push
-          接收和取证结果见下方通知。
-        </p>
         <button
           v-if="!confirmingUnbind"
           type="button"

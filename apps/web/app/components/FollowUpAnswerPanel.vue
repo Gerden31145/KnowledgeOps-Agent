@@ -110,7 +110,7 @@ const outcomes = { PASSED: '通过', FAILED: '未通过', INSUFFICIENT_EVIDENCE:
 async function select(id: string) {
   if (!disposed)
     await router.replace({
-      query: { ...route.query, answerId: id, answerRunId: undefined },
+      query: { ...route.query, tab: 'follow-up', answerId: id, answerRunId: undefined },
       hash: '#follow-up-answer',
     })
 }
