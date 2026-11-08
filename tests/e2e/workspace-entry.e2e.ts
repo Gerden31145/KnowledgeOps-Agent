@@ -35,10 +35,37 @@ test('访客表单保留输入，登录回到已有计划且不会自动生成',
   expect((await a.context.request.get(`${apiOrigin}/workspace/entry`)).status()).toBe(401)
   await a.page.goto('/')
   await expect(a.page.getByRole('heading', { name: '想学些什么？' })).toBeVisible()
-  await a.page.screenshot({ path: testInfo.outputPath('form-desktop.png'), fullPage: true })
-  await a.page.setViewportSize({ width: 390, height: 900 })
-  expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await a.page.screenshot({ path: testInfo.outputPath('form-mobile.png'), fullPage: true })
+  for (const width of [1280, 390]) {
+    await a.page.setViewportSize({ width, height: 900 })
+    const unusedWidth = await a.page
+      .getByRole('region', { name: '创建学习计划' })
+      .evaluate((el) => {
+        const main = document.querySelector('main')!
+        const style = getComputedStyle(main)
+        return (
+          main.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight) -
+          el.getBoundingClientRect().width
+        )
+      })
+    expect(Math.abs(unusedWidth)).toBeLessThanOrEqual(1)
+    expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    )
+    await a.page.screenshot({ path: testInfo.outputPath(`form-${width}.png`), fullPage: true })
+  }
+  // 从生产构建实际读取图标，防止只有 head 声明、资源却未交付。
+  for (const [href, contentType, signature] of [
+    ['/favicon.ico', /image\/(?:x-icon|vnd.microsoft.icon)/, '00000100'],
+    ['/favicon-96x96.png', /image\/png/, '89504e47'],
+  ] as const) {
+    await expect(a.page.locator(`head link[rel="icon"][href="${href}"]`)).toHaveCount(1)
+    const response = await a.context.request.get(`${webOrigin}${href}`)
+    expect(response.status()).toBe(200)
+    expect(response.headers()['content-type']).toMatch(contentType)
+    expect((await response.body()).subarray(0, 4).toString('hex')).toBe(signature)
+  }
   await a.page.getByPlaceholder('例如：用两周补齐 JavaScript 异步机制').fill('学习浏览器渲染')
   await a.page
     .getByPlaceholder('已经掌握什么？哪些地方还不熟悉？')

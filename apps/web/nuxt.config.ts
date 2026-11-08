@@ -19,6 +19,14 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   css: ['~/assets/css/main.css'],
   devtools: { enabled: true },
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/favicon-96x96.png' },
+      ],
+    },
+  },
   runtimeConfig: {
     public: {
       apiBaseUrl: environmentResult.data.NUXT_PUBLIC_API_BASE_URL,

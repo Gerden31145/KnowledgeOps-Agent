@@ -312,7 +312,7 @@ function errorMessage(error: unknown): string {
 
 <template>
   <div>
-    <header v-if="!plan.data.value" class="mb-8 max-w-3xl">
+    <header v-if="!plan.data.value" class="mb-8">
       <h1 class="text-2xl font-medium leading-snug md:text-workspace-title">
         {{ canShowForm ? '想学些什么？' : '学习计划' }}
       </h1>
@@ -358,7 +358,7 @@ function errorMessage(error: unknown): string {
         ><button class="action-button" @click="entry.refetch()">重新读取</button></template
       >
     </AsyncStatePanel>
-    <section v-else-if="canShowForm" class="max-w-3xl" aria-label="创建学习计划">
+    <section v-else-if="canShowForm" aria-label="创建学习计划">
       <form class="space-y-7" novalidate @submit.prevent="submitGoal">
         <label class="block">
           <span class="text-lg font-medium">学习目标</span>
