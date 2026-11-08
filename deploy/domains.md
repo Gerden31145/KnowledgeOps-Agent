@@ -65,3 +65,5 @@ sudo certbot renew --cert-name knowops.site --dry-run --run-deploy-hooks
 - 证书续期演练 **未通过**：`certbot renew --cert-name knowops.site --dry-run --run-deploy-hooks` 的 HTTP-01 验证记录先解析到正确 VPS `175.178.45.54`，随后跳转到 `https://dnspod.qcloud.com/static/webblock.html?d=<域名>`，在该拦截页失败。`43.174.224.202` 是重定向目标的地址，不能误记为本域名 DNS 配错；本机、公共解析器及权威 A 记录均指向 VPS。需由用户核对腾讯云备案/接入或拦截原因，处理后重跑演练。现有证书有效至 2027-02-06，但自动续期不能视为已验收。演练前约 366 秒等待是 Certbot 随机延迟，后续手动验证可添加 `--no-random-sleep-on-renew`。
 
 本次为用户授权的域名运维补充，UI01/UI02 学习确认及 R18/R19 状态不变。
+
+用户已确认新域名备案/接入“尚未完成”。后续由用户在腾讯云控制台处理该账户事项，完成后重新验证 HTTP-01 与续期钩子；当前登录成功不代表其他网络路径或后续续期一定可用。
