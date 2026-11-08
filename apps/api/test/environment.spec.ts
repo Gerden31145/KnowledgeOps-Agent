@@ -59,6 +59,36 @@ describe('API environment', () => {
       }),
     ).toThrow('GITHUB_APP_CALLBACK_URL')
   })
+  it('accepts the dedicated HTTPS API subdomain but rejects unrelated hosts and scheme changes', () => {
+    const source = {
+      NODE_ENV: 'production',
+      WEB_ORIGIN: 'https://knowops.site',
+      GITHUB_APP_CLIENT_ID: 'client',
+      GITHUB_APP_CLIENT_SECRET: 'fixture-secret',
+      GITHUB_APP_CALLBACK_URL: 'https://api.knowops.site/auth/github/callback',
+    }
+    expect(readApiEnvironment(source).GITHUB_APP_CALLBACK_URL).toBe(source.GITHUB_APP_CALLBACK_URL)
+    for (const host of ['other.site', 'knowops.site.other.site', 'other.knowops.site']) {
+      expect(() =>
+        readApiEnvironment({
+          ...source,
+          GITHUB_APP_CALLBACK_URL: `https://${host}/auth/github/callback`,
+        }),
+      ).toThrow('GITHUB_APP_CALLBACK_URL')
+    }
+    expect(() =>
+      readApiEnvironment({
+        ...source,
+        GITHUB_APP_CALLBACK_URL: 'http://api.knowops.site/auth/github/callback',
+      }),
+    ).toThrow('GITHUB_APP_CALLBACK_URL')
+    expect(() =>
+      readApiEnvironment({
+        WEB_ORIGIN: 'http://localhost:3000',
+        GITHUB_APP_CALLBACK_URL: 'http://api.localhost:4000/auth/github/callback',
+      }),
+    ).toThrow('GITHUB_APP_CALLBACK_URL')
+  })
   it('coerces the API port and preserves explicit connection URLs', () => {
     const environment = readApiEnvironment({
       API_PORT: '4100',

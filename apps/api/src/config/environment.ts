@@ -134,16 +134,21 @@ const apiEnvironmentSchema = z
         })
       }
     }
-    if (
-      environment.GITHUB_APP_CALLBACK_URL &&
-      (new URL(environment.GITHUB_APP_CALLBACK_URL).hostname !== web.hostname ||
-        new URL(environment.GITHUB_APP_CALLBACK_URL).protocol !== web.protocol)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['GITHUB_APP_CALLBACK_URL'],
-        message: 'Web and API must share a hostname and scheme for this cookie deployment',
-      })
+    if (environment.GITHUB_APP_CALLBACK_URL) {
+      const callback = new URL(environment.GITHUB_APP_CALLBACK_URL)
+      // Production may put the API on the dedicated api.<web-host> subdomain.
+      // Both remain HTTPS and same-site; cookies stay host-only on the API.
+      const dedicatedApi = web.protocol === 'https:' && callback.hostname === `api.${web.hostname}`
+      if (
+        (callback.hostname !== web.hostname && !dedicatedApi) ||
+        callback.protocol !== web.protocol
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['GITHUB_APP_CALLBACK_URL'],
+          message: 'Web and API must share a scheme and use the same host or its API subdomain',
+        })
+      }
     }
     if (environment.NODE_ENV === 'production') {
       for (const field of [

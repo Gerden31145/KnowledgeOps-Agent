@@ -71,9 +71,9 @@ function environment() {
   return {
     DATABASE_URL: 'postgresql://app:p%40ss@127.0.0.1:15432/knowledgeops?schema=public',
     REDIS_URL: 'redis://127.0.0.1:16379',
-    WEB_ORIGIN: 'https://game.gerden-shop.cn',
-    NUXT_PUBLIC_API_BASE_URL: 'https://game.gerden-shop.cn/api',
-    GITHUB_APP_CALLBACK_URL: 'https://game.gerden-shop.cn/api/auth/github/callback',
+    WEB_ORIGIN: 'https://knowops.site',
+    NUXT_PUBLIC_API_BASE_URL: 'https://api.knowops.site',
+    GITHUB_APP_CALLBACK_URL: 'https://api.knowops.site/auth/github/callback',
     GITHUB_APP_CLIENT_ID: 'synthetic',
     GITHUB_APP_CLIENT_SECRET: 'synthetic-$-secret',
     GITHUB_WEBHOOK_SECRET: 'synthetic-webhook',
@@ -220,6 +220,9 @@ describe('CD03 release selection and failure boundaries', () => {
       { HTTPS_PROXY: 'http://127.0.0.1:7890' },
       { OPENAI_API_KEY: 'first\nOTHER=value' },
       { REDIS_URL: 'redis://password@127.0.0.1:16379' },
+      { WEB_ORIGIN: 'https://game.gerden-shop.cn' },
+      { NUXT_PUBLIC_API_BASE_URL: 'https://knowops.site/api' },
+      { GITHUB_APP_CALLBACK_URL: 'https://game.gerden-shop.cn/api/auth/github/callback' },
     ]) {
       expect(() => prepareRuntime({ ...environment(), ...patch })).toThrow()
     }
