@@ -2,9 +2,9 @@
 
 KnowledgeOps Agent 是一个 GitHub 驱动的开发者学习验收工具。用户通过提交 Markdown 笔记提供真实学习证据，系统按确定性规则与受控 Agent 工作流生成可追溯报告和理解追问。
 
-截至 2026-11-09，已验证 GitHub 登录与仓库绑定、异步生成计划、固定提交取证、笔记与追问回答验收、Task 通过和依赖解锁的完整链路；生产第二账号闭环及容器发布、兼容回退已有观察记录。6fbde60 已正式部署；后续换域名时 API 使用独立记录的本地配置修复镜像，尚需经 CI 生成正式镜像接续发布，不能将原发布记录视为覆盖该修复。
+截至 2026-11-09，已验证 GitHub 登录与仓库绑定、异步生成计划、固定提交取证、笔记与追问回答验收、Task 通过和依赖解锁的完整链路；生产第二账号闭环及容器发布、兼容回退已有观察记录。R19 的正式发布接续、新域名业务检查及公网/续期核对由维护者确认已完成；最新产物标识与本轮证据来源说明见[交付记录](docs/demo/r19-delivery.md)。
 
-线上入口：[KnowledgeOps Agent](https://knowops.site)，API 为 `https://api.knowops.site`。备案/接入尚未完成，公网访问与证书续期仍有待验证项，详见[生产域名记录](deploy/domains.md)。真实学习流程需要 GitHub 登录与仓库授权；当前不提供免登录公开示例或演示视频。项目讲解路线、能力证据与材料初稿见 [R18 演示与事实清单](docs/demo/r18-demo.md)，各次验收记录见[开发计划](docs/KnowledgeOps-Agent-逐日开发计划.md)。
+线上入口：[KnowledgeOps Agent](https://knowops.site)，API 为 `https://api.knowops.site`，路径不带 `/api` 前缀；域名迁移过程见[生产域名记录](deploy/domains.md)。真实学习流程需要 GitHub 登录与仓库授权；当前不提供免登录公开示例或演示视频。项目讲解路线和能力依据见 [R18 事实清单](docs/demo/r18-demo.md)，简历项目表述见 [R19 材料定稿](docs/demo/r19-delivery.md)，各次验收记录见[开发计划](docs/KnowledgeOps-Agent-逐日开发计划.md)。
 
 ## 核心流程与职责
 
