@@ -26,7 +26,8 @@ const legacy = '/opt/knowledgeops-agent'
 const stateRoot = '/var/lib/knowledgeops-delivery'
 const maintenance = '/var/lib/knowledgeops-maintenance'
 const pm2 = '/root/.nvm/versions/node/v24.19.0/bin/pm2'
-const domain = 'game.gerden-shop.cn'
+const domain = 'knowops.site'
+const apiDomain = 'api.knowops.site'
 
 export function validatePulledImage(expected, actual) {
   // .Id is backend-specific (config digest vs manifest/index digest). The exact
@@ -57,8 +58,8 @@ export function prepareRuntime(source) {
     'Review Redis authentication before changing its address',
   )
   assert.equal(source.WEB_ORIGIN, `https://${domain}`)
-  assert.equal(source.NUXT_PUBLIC_API_BASE_URL, `https://${domain}/api`)
-  assert.equal(source.GITHUB_APP_CALLBACK_URL, `https://${domain}/api/auth/github/callback`)
+  assert.equal(source.NUXT_PUBLIC_API_BASE_URL, `https://${apiDomain}`)
+  assert.equal(source.GITHUB_APP_CALLBACK_URL, `https://${apiDomain}/auth/github/callback`)
   for (const key of [
     'GITHUB_APP_CLIENT_ID',
     'GITHUB_APP_CLIENT_SECRET',
@@ -217,11 +218,11 @@ async function release() {
       '--noproxy',
       '*',
       '--resolve',
-      `${domain}:443:127.0.0.1`,
+      `${apiDomain}:443:127.0.0.1`,
       '--max-time',
       '10',
       '-fsS',
-      `https://${domain}/api/health/ready`,
+      `https://${apiDomain}/health/ready`,
     ])
   }
   try {
@@ -442,13 +443,16 @@ async function release() {
         'maintenance-and-stop',
         () => {
           writeFileSync(maintenance, deploymentId + '\n', { mode: 0o644 })
-          for (const path of ['/', '/api/auth/session'])
+          for (const [host, path] of [
+            [domain, '/'],
+            [apiDomain, '/auth/session'],
+          ])
             assert.equal(
               output('curl', [
                 '--noproxy',
                 '*',
                 '--resolve',
-                `${domain}:443:127.0.0.1`,
+                `${host}:443:127.0.0.1`,
                 '--max-time',
                 '10',
                 '-sS',
@@ -456,7 +460,7 @@ async function release() {
                 '/dev/null',
                 '-w',
                 '%{http_code}',
-                `https://${domain}${path}`,
+                `https://${host}${path}`,
               ]),
               '503',
               'Maintenance hook is not active',

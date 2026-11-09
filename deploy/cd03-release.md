@@ -89,7 +89,9 @@ awk '{print $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
 
 将输出前面加上 VPS_HOST 和一个空格，形成 `主机名或IP ssh-ed25519 AAAA...`，存为 VPS_KNOWN_HOSTS。这里验证服务器身份，防止连接到错误主机；VPS_SSH_KEY 验证 Actions 的登录身份，两者职责不同。
 
-维护开关需要在 Nginx 的两个业务 location 中增加条件判断。由用户先把本地 `deploy/nginx.game.gerden-shop.cn.conf` 上传到 `/root/knowledgeops-nginx.cd03.conf`，再在 VPS 比较：
+2026-11-08 起使用新域名，站点安装及镜像兼容性以 [生产域名与切换记录](domains.md) 为准。`nginx.knowops.site.conf` 的 Web/API 两个业务入口已保留维护开关；`nginx.game.gerden-shop.cn.conf` 仅负责旧域名退役。以下首次 CD03 配置与候选版本号是历史操作记录，不再照搬到当前环境。
+
+首次 CD03 维护开关需要在 Nginx 的两个业务 location 中增加条件判断。当时先把 `deploy/nginx.game.gerden-shop.cn.conf` 上传到 `/root/knowledgeops-nginx.cd03.conf`，再在 VPS 比较：
 
 ```bash
 diff -u /etc/nginx/sites-available/game.gerden-shop.cn /root/knowledgeops-nginx.cd03.conf
