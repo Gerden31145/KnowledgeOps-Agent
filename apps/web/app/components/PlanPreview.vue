@@ -75,6 +75,12 @@ function taskLink(task: PlanTaskSummary) {
   }
 }
 function action(task: PlanTaskSummary) {
+  if (task.type === 'COURSE' && task.state === 'READY') {
+    if (task.course?.status === 'GENERATING') return '查看生成进度'
+    if (task.course?.status === 'FAILED') return '处理生成失败'
+    if (task.course?.status === 'READY') return '开始学习'
+    return '准备课程'
+  }
   switch (task.state) {
     case 'READY':
       return '查看任务'
@@ -226,6 +232,18 @@ function action(task: PlanTaskSummary) {
             >
               {{ task.description }}
             </p>
+            <p
+              v-if="task.type === 'COURSE' && task.course?.status === 'GENERATING'"
+              class="mt-3 text-base text-body"
+            >
+              正在准备课程讲解与练习，刷新或稍后回来仍可继续。
+            </p>
+            <p
+              v-else-if="task.type === 'COURSE' && task.course?.status === 'FAILED'"
+              class="mt-3 text-base text-warning"
+            >
+              课程内容生成失败，可进入课程重试；不会影响已保存的路线。
+            </p>
             <p v-if="task.state === 'VERIFYING'" class="mt-3 text-base text-body">
               正在验收你的提交，结果会自动更新。
             </p>
@@ -237,7 +255,7 @@ function action(task: PlanTaskSummary) {
                 >{{ action(task) }}</NuxtLink
               >
             </div>
-            <details v-if="plan.status === 'DRAFT'" class="mt-3">
+            <details v-if="plan.status === 'DRAFT' && task.type === 'MARKDOWN_NOTE'" class="mt-3">
               <summary
                 class="min-h-11 cursor-pointer py-3 text-base text-link focus-visible:outline-2 focus-visible:outline-link"
               >

@@ -27,6 +27,22 @@ export {
   hasPlanGenerationDependencyCycle,
 } from './plan-generation/plan-dependency-graph.exercise.js'
 export {
+  COURSE_GENERATION_OUTPUT_SCHEMA_VERSION,
+  COURSE_GENERATION_PROMPT_VERSION,
+  InvalidCourseGenerationOutputError,
+  InvalidCourseGenerationRequestError,
+  courseGenerationRequestSchema,
+  generateCourseCandidate,
+  type CourseGenerationOptions,
+  type CourseGenerationOutput,
+  type CourseGenerationPort,
+  type CourseGenerationRequest,
+} from './course-generation/course-generation.js'
+export {
+  CourseGenerationModelError,
+  LangChainCourseGenerator,
+} from './course-generation/langchain-course-generator.js'
+export {
   noteSemanticCriterionTypeSchema,
   noteVerificationCandidateSchema,
   noteVerificationRequestSchema,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const PLAN_STATUSES = ['DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'ARCHIVED'] as const
 
-export const TASK_TYPES = ['MARKDOWN_NOTE'] as const
+export const TASK_TYPES = ['MARKDOWN_NOTE', 'COURSE'] as const
 
 export const ACCEPTANCE_CRITERION_TYPES = [
   'FILE_CHANGED',

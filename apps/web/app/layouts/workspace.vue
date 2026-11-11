@@ -36,10 +36,7 @@ useHead({
   meta: [{ name: 'robots', content: 'noindex,nofollow' }],
 })
 
-const navigation = [
-  { label: '学习计划', to: '/app/plan' },
-  { label: '仓库接入', to: '/app/repository' },
-]
+const navigation = [{ label: '学习计划', to: '/app/plan' }]
 </script>
 
 <template>

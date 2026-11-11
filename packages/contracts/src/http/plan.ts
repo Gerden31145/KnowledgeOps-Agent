@@ -24,7 +24,7 @@ export const startTaskResponseSchema = z
     taskId: entityIdSchema,
     state: taskStateSchema.extract(['IN_PROGRESS']),
     version: z.number().int().nonnegative(),
-    targetPath: markdownTargetPathSchema,
+    targetPath: markdownTargetPathSchema.nullable(),
   })
   .strict()
 

@@ -29,6 +29,19 @@ enum TaskState {
 
 enum TaskType {
   MARKDOWN_NOTE
+  COURSE
+}
+
+enum CourseStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+enum CourseKnowledgeRole {
+  TEACH
+  REVIEW
 }
 
 enum AcceptanceCriterionType {
@@ -51,6 +64,7 @@ enum PlanGenerationRunState {
 
 enum OutboxEventType {
   PLAN_GENERATION_REQUESTED
+  COURSE_GENERATION_REQUESTED
   GITHUB_PUSH_RECEIVED
   GITHUB_EVIDENCE_RETRY_REQUESTED
   NOTE_VERIFICATION_REQUESTED
@@ -160,6 +174,7 @@ model Plan {
   goal            LearningGoal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
   generationRun   PlanGenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: Restrict)
   stages          Stage[]
+  knowledgePoints KnowledgePoint[]
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -200,6 +215,7 @@ model Task {
   criteria         AcceptanceCriterion[]
   runs             AgentRun[]
   submissions      Submission[]
+  course           Course?
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -369,30 +385,128 @@ model Evidence {
   @@map("evidence")
 }
 
-model PlanGenerationRun {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  goalId              String                 @map("goal_id") @db.Uuid
-  status              PlanGenerationRunState @default(QUEUED)
-  retryOfRunId        String?                @map("retry_of_run_id") @db.Uuid
-  modelCatalogId      String                 @map("model_catalog_id") @db.VarChar(100)
-  modelProvider       String                 @map("model_provider") @db.VarChar(64)
-  modelName           String                 @map("model_name") @db.VarChar(160)
+model Course {
+  id             String                 @id @default(uuid()) @db.Uuid
+  taskId         String                 @unique @map("task_id") @db.Uuid
+  status         CourseStatus           @default(PENDING)
+  task           Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  versions       CourseVersion[]
+  generationRuns CourseGenerationRun[]
+  knowledge      CourseKnowledgePoint[]
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@map("courses")
+}
+
+model CourseGenerationRun {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  courseId             String                 @map("course_id") @db.Uuid
+  status               PlanGenerationRunState @default(QUEUED)
+  retryOfRunId         String?                @map("retry_of_run_id") @db.Uuid
+  modelCatalogId       String                 @map("model_catalog_id") @db.VarChar(100)
+  modelProvider        String                 @map("model_provider") @db.VarChar(64)
+  modelName            String                 @map("model_name") @db.VarChar(160)
   modelReasoningEffort String?                @map("model_reasoning_effort") @db.VarChar(16)
-  promptVersion       String                 @map("prompt_version") @db.VarChar(64)
-  outputSchemaVersion String                 @map("output_schema_version") @db.VarChar(64)
-  errorCode           String?                @map("error_code") @db.VarChar(64)
-  errorMessage        String?                @map("error_message") @db.VarChar(500)
-  version             Int                    @default(0)
-  deadlineAt          DateTime               @map("deadline_at") @db.Timestamptz(3)
-  queuedAt            DateTime               @default(now()) @map("queued_at") @db.Timestamptz(3)
-  startedAt           DateTime?              @map("started_at") @db.Timestamptz(3)
-  finishedAt          DateTime?              @map("finished_at") @db.Timestamptz(3)
-  goal                LearningGoal           @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  retryOfRun          PlanGenerationRun?     @relation("PlanGenerationRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
-  retries             PlanGenerationRun[]    @relation("PlanGenerationRunRetries")
-  plan                Plan?
-  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  promptVersion        String                 @map("prompt_version") @db.VarChar(64)
+  outputSchemaVersion  String                 @map("output_schema_version") @db.VarChar(64)
+  profileSnapshot      Json                   @default("[]") @map("profile_snapshot") @db.JsonB
+  errorCode            String?                @map("error_code") @db.VarChar(64)
+  errorMessage         String?                @map("error_message") @db.VarChar(500)
+  version              Int                    @default(0)
+  deadlineAt           DateTime               @map("deadline_at") @db.Timestamptz(3)
+  queuedAt             DateTime               @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt            DateTime?              @map("started_at") @db.Timestamptz(3)
+  finishedAt           DateTime?              @map("finished_at") @db.Timestamptz(3)
+  course               Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  retryOfRun           CourseGenerationRun?   @relation("CourseGenerationRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries              CourseGenerationRun[]  @relation("CourseGenerationRunRetries")
+  courseVersion        CourseVersion?
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([courseId], map: "course_generation_runs_one_active_per_course", where: raw("(status = ANY (ARRAY['QUEUED'::\"PlanGenerationRunState\", 'RUNNING'::\"PlanGenerationRunState\"]))"))
+  @@index([courseId, queuedAt])
+  @@index([status, deadlineAt])
+  @@map("course_generation_runs")
+}
+
+model CourseVersion {
+  id              String              @id @default(uuid()) @db.Uuid
+  courseId        String              @map("course_id") @db.Uuid
+  generationRunId String              @unique @map("generation_run_id") @db.Uuid
+  version         Int
+  content         Json                @db.JsonB
+  course          Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  generationRun   CourseGenerationRun @relation(fields: [generationRunId], references: [id], onDelete: Restrict)
+  exerciseSet     ExerciseSet?
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([courseId, version])
+  @@map("course_versions")
+}
+
+model ExerciseSet {
+  id              String        @id @default(uuid()) @db.Uuid
+  courseVersionId String        @unique @map("course_version_id") @db.Uuid
+  body            Json          @db.JsonB
+  courseVersion   CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("exercise_sets")
+}
+
+model KnowledgePoint {
+  id          String                 @id @default(uuid()) @db.Uuid
+  planId      String                 @map("plan_id") @db.Uuid
+  key         String                 @db.VarChar(64)
+  title       String                 @db.VarChar(120)
+  description String                 @db.VarChar(500)
+  plan        Plan                   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  courses     CourseKnowledgePoint[]
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([planId, key])
+  @@map("knowledge_points")
+}
+
+model CourseKnowledgePoint {
+  courseId         String              @map("course_id") @db.Uuid
+  knowledgePointId String              @map("knowledge_point_id") @db.Uuid
+  role             CourseKnowledgeRole @default(TEACH)
+  course           Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint      @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, knowledgePointId])
+  @@index([knowledgePointId])
+  @@map("course_knowledge_points")
+}
+
+model PlanGenerationRun {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  goalId               String                 @map("goal_id") @db.Uuid
+  status               PlanGenerationRunState @default(QUEUED)
+  retryOfRunId         String?                @map("retry_of_run_id") @db.Uuid
+  modelCatalogId       String                 @map("model_catalog_id") @db.VarChar(100)
+  modelProvider        String                 @map("model_provider") @db.VarChar(64)
+  modelName            String                 @map("model_name") @db.VarChar(160)
+  modelReasoningEffort String?                @map("model_reasoning_effort") @db.VarChar(16)
+  promptVersion        String                 @map("prompt_version") @db.VarChar(64)
+  outputSchemaVersion  String                 @map("output_schema_version") @db.VarChar(64)
+  errorCode            String?                @map("error_code") @db.VarChar(64)
+  errorMessage         String?                @map("error_message") @db.VarChar(500)
+  version              Int                    @default(0)
+  deadlineAt           DateTime               @map("deadline_at") @db.Timestamptz(3)
+  queuedAt             DateTime               @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt            DateTime?              @map("started_at") @db.Timestamptz(3)
+  finishedAt           DateTime?              @map("finished_at") @db.Timestamptz(3)
+  goal                 LearningGoal           @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  retryOfRun           PlanGenerationRun?     @relation("PlanGenerationRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retries              PlanGenerationRun[]    @relation("PlanGenerationRunRetries")
+  plan                 Plan?
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([goalId], map: "plan_generation_runs_one_active_per_goal", where: raw("(status = ANY (ARRAY['QUEUED'::\"PlanGenerationRunState\", 'RUNNING'::\"PlanGenerationRunState\"]))"))
   @@index([goalId, queuedAt])

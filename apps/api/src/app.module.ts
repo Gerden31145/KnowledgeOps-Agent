@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 
 import { AppController } from './app.controller.js'
 import { ConfigModule } from './config/config.module.js'
+import { CoursesModule } from './courses/courses.module.js'
 import { DatabaseModule } from './database/database.module.js'
 import { HealthModule } from './health/health.module.js'
 import { IdentityModule } from './identity/identity.module.js'
@@ -21,6 +22,7 @@ import { NoteVerificationModule } from './verification/note-verification.module.
     HealthModule,
     PlanGenerationModule,
     PlansModule,
+    CoursesModule,
     RepositoriesModule,
     GitHubWebhookModule,
     NoteVerificationModule,

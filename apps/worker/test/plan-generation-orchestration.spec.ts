@@ -21,8 +21,8 @@ const request = {
     catalogId: 'openai-primary',
     provider: 'openai',
     modelName: 'test-model',
-    promptVersion: 'plan-generation-v1',
-    outputSchemaVersion: 'plan-generation-output-v1',
+    promptVersion: 'plan-generation-v3',
+    outputSchemaVersion: 'plan-generation-output-v3',
   },
   goal: {
     title: 'Prepare for frontend interviews',
@@ -39,18 +39,15 @@ const candidate = {
       title: 'Core concepts',
       tasks: ['one', 'two', 'three'].map((id, index) => ({
         id,
-        title: `Task ${index + 1}`,
-        description: `Explain core concept number ${index + 1}.`,
-        type: 'MARKDOWN_NOTE' as const,
+        title: `Course ${index + 1}`,
+        description: `Learn core concept number ${index + 1} through a concrete scenario.`,
+        type: 'COURSE' as const,
         estimatedMinutes: 60,
-        suggestedSteps: ['Write one concrete explanation'],
-        targetPath: `notes/${id}.md`,
-        acceptanceCriteria: [
+        knowledgePoints: [
           {
-            type: 'SECTION_PRESENT' as const,
-            config: { heading: '事件循环' },
-            description: 'Contains the required explanation section.',
-            required: true,
+            id: `point-${id}`,
+            title: `知识点 ${index + 1}`,
+            description: `理解第 ${index + 1} 个核心概念及其使用边界。`,
           },
         ],
         dependsOnTaskIds: index === 0 ? [] : [index === 1 ? 'one' : 'two'],

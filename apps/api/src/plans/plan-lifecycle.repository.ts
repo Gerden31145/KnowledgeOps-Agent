@@ -5,6 +5,7 @@ import {
   type StartTaskResponse,
 } from '@knowledgeops/contracts'
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
+import { requestCourseGenerationForTask } from '../courses/course-generation.repository.js'
 
 import {
   AnotherActivePlanError,
@@ -22,6 +23,7 @@ export class PlanLifecycleRepository {
   constructor(
     private readonly database: DatabaseClient,
     private readonly clock: Clock = () => new Date(),
+    private readonly courseGenerationTimeoutMs = 180_000,
   ) {}
 
   async confirmPlan(planId: string, actorUserId: string): Promise<ConfirmPlanResponse> {
@@ -95,6 +97,17 @@ export class PlanLifecycleRepository {
           version: { increment: 1 },
         },
       })
+      const initialCourses = await transaction.task.findMany({
+        where: { stage: { planId: plan.id }, state: 'READY', type: 'COURSE' },
+        select: { id: true },
+      })
+      for (const task of initialCourses)
+        await requestCourseGenerationForTask(
+          transaction,
+          task.id,
+          confirmedAt,
+          this.courseGenerationTimeoutMs,
+        )
 
       return this.readConfirmedPlan(transaction, plan.id, confirmedAt)
     })
@@ -118,6 +131,8 @@ export class PlanLifecycleRepository {
           state: true,
           version: true,
           targetPath: true,
+          type: true,
+          course: { select: { status: true } },
           stage: {
             select: {
               plan: { select: { status: true } },
@@ -135,12 +150,12 @@ export class PlanLifecycleRepository {
       }
 
       if (task.state === 'IN_PROGRESS') {
-        if (input.targetPath && input.targetPath !== task.targetPath) {
-          throw new TaskTargetPathConflictError()
-        }
-
-        if (!task.targetPath) {
-          throw new TaskTargetPathRequiredError()
+        if (task.type === 'COURSE') {
+          if (input.targetPath) throw new TaskTargetPathConflictError()
+        } else {
+          if (input.targetPath && input.targetPath !== task.targetPath)
+            throw new TaskTargetPathConflictError()
+          if (!task.targetPath) throw new TaskTargetPathRequiredError()
         }
 
         return {
@@ -157,9 +172,12 @@ export class PlanLifecycleRepository {
         )
       }
 
-      const targetPath = input.targetPath ?? task.targetPath
+      if (task.type === 'COURSE' && task.course?.status !== 'READY')
+        throw new InvalidPlanLifecycleStateError('The course learning package is not ready')
 
-      if (!targetPath) {
+      const targetPath = task.type === 'COURSE' ? null : (input.targetPath ?? task.targetPath)
+
+      if (task.type !== 'COURSE' && !targetPath) {
         throw new TaskTargetPathRequiredError()
       }
 

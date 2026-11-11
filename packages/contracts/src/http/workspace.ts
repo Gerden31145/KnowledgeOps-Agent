@@ -9,6 +9,7 @@ import {
   taskTypeSchema,
 } from '../domain/plan.js'
 import { CURRENT_TASK_STATES, taskStateSchema } from '../domain/task-state.js'
+import { courseGenerationSummarySchema, courseSectionSchema } from '../domain/course.js'
 import { entityIdSchema, isoDateSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const acceptanceCriterionSummarySchema = z
@@ -36,6 +37,7 @@ export const planTaskSummarySchema = z
     version: z.number().int().nonnegative(),
     prerequisiteTaskIds: z.array(entityIdSchema),
     criteria: z.array(acceptanceCriterionSummarySchema),
+    course: courseGenerationSummarySchema.nullable(),
   })
   .strict()
 
@@ -103,6 +105,9 @@ export const todayTasksResponseSchema = z
 
 export const taskDetailResponseSchema = planTaskSummarySchema
   .extend({
+    course: courseGenerationSummarySchema
+      .extend({ sections: z.array(courseSectionSchema).nullable() })
+      .nullable(),
     stage: z
       .object({
         id: entityIdSchema,

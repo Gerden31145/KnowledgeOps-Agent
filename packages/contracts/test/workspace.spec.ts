@@ -28,6 +28,7 @@ const task = {
   state: 'READY',
   version: 1,
   prerequisiteTaskIds: [],
+  course: null,
   criteria: [
     {
       id: ids.criterion,
@@ -126,4 +127,40 @@ describe('workspace HTTP contracts', () => {
       ).toHaveLength(1)
     },
   )
+
+  it('exposes generated course sections without exposing exercise answers', () => {
+    const response = taskDetailResponseSchema.parse({
+      ...task,
+      type: 'COURSE',
+      description: 'Learn event loop ordering through a browser scenario.',
+      suggestedSteps: [],
+      targetPath: null,
+      criteria: [],
+      course: {
+        status: 'READY',
+        generationRunId: ids.run,
+        sections: [
+          {
+            id: 'event-loop',
+            title: '事件循环',
+            explanation: '当前任务完成后，浏览器会继续处理已经排队的微任务。',
+            scenario: '一次按钮点击同时修改状态并安排异步回调。',
+            example: 'Promise.resolve().then(() => console.log("microtask"))',
+            misconception: '零延迟定时器不等于立即执行。',
+          },
+        ],
+        error: null,
+      },
+      stage: {
+        id: ids.stage,
+        title: 'JavaScript foundations',
+        position: 0,
+        plan: { id: ids.plan, status: 'ACTIVE' },
+      },
+      runs: [],
+    })
+    expect(response.course?.sections).toHaveLength(1)
+    expect(response.course).not.toHaveProperty('exercises')
+    expect(response.course).not.toHaveProperty('correctOptionId')
+  })
 })

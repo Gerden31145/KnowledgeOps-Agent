@@ -17,9 +17,15 @@ const route = useRoute()
 const api = useKnowledgeOpsApi()
 const router = useRouter()
 const user = useSessionUser()
+const taskId = computed(() => {
+  const value = route.params.taskId
+  return typeof value === 'string' ? value : null
+})
+const task = useTaskQuery(taskId)
 const binding = useQuery({
   queryKey: computed(() => ['knowledgeops', 'repository-binding', user.value?.id]),
   queryFn: ({ signal }) => api.getRepositoryBinding(signal),
+  enabled: computed(() => Boolean(user.value) && task.data.value?.type === 'MARKDOWN_NOTE'),
   retry: false,
   staleTime: 0,
 })
@@ -67,11 +73,6 @@ async function tabKey(event: KeyboardEvent) {
 }
 const pinnedRunId = ref<string | null>(null)
 const queryClient = useQueryClient()
-const taskId = computed(() => {
-  const value = route.params.taskId
-  return typeof value === 'string' ? value : null
-})
-const task = useTaskQuery(taskId)
 const noteRuns = computed(
   () => task.data.value?.runs.filter((run) => run.kind === 'NOTE_VERIFICATION') ?? [],
 )
@@ -123,10 +124,24 @@ watch(
   { immediate: true },
 )
 
-const start = useMutation({
-  mutationFn: async (path: string) => {
+const courseGeneration = useMutation({
+  mutationFn: async () => {
     if (!taskId.value) throw new Error('Task ID is missing')
-    return api.startTask(taskId.value, { targetPath: path })
+    const retryOfRunId = task.data.value?.course?.generationRunId
+    return api.requestCourseGeneration(taskId.value, {
+      ...(task.data.value?.course?.status === 'FAILED' && retryOfRunId ? { retryOfRunId } : {}),
+    })
+  },
+  onSuccess: async () => {
+    if (taskId.value)
+      await queryClient.invalidateQueries({ queryKey: knowledgeOpsQueryKeys.task(taskId.value) })
+  },
+})
+
+const start = useMutation({
+  mutationFn: async (path: string | null) => {
+    if (!taskId.value) throw new Error('Task ID is missing')
+    return api.startTask(taskId.value, path ? { targetPath: path } : {})
   },
   onSuccess: async (started) => {
     const planId = task.data.value?.stage.plan.id
@@ -139,6 +154,24 @@ const start = useMutation({
     ])
   },
 })
+
+async function startCourse() {
+  startError.value = null
+  try {
+    await start.mutateAsync(null)
+  } catch (error: unknown) {
+    startError.value = error instanceof Error ? error.message : '课程启动失败。'
+  }
+}
+
+async function prepareCourse() {
+  startError.value = null
+  try {
+    await courseGeneration.mutateAsync()
+  } catch (error: unknown) {
+    startError.value = error instanceof Error ? error.message : '课程生成请求失败。'
+  }
+}
 
 async function startTask() {
   targetPathError.value = null
@@ -218,7 +251,81 @@ async function startTask() {
         </div>
         <TaskStateLabel :state="task.data.value.state" />
       </header>
+      <template v-if="task.data.value.type === 'COURSE'">
+        <section
+          class="my-6 border border-hairline-strong bg-surface-soft p-5"
+          aria-label="课程准备状态"
+        >
+          <p class="text-body">{{ task.data.value.description }}</p>
+          <p class="mt-3 text-base text-muted">预计 {{ task.data.value.estimatedMinutes }} 分钟</p>
+          <AsyncStatePanel
+            v-if="task.data.value.course?.status === 'GENERATING'"
+            class="mt-5"
+            title="正在准备课程"
+            description="课程讲解和练习会一起保存，完成后即可开始学习。"
+          />
+          <div v-else-if="task.data.value.course?.status !== 'READY'" class="mt-5">
+            <p class="text-body">
+              {{
+                task.data.value.course?.status === 'FAILED'
+                  ? '本次课程生成未完成，可以重试。'
+                  : '开始学习前，先生成完整课程与练习。'
+              }}
+            </p>
+            <button
+              class="action-button mt-4 border-ink"
+              :disabled="courseGeneration.isPending.value"
+              @click="prepareCourse"
+            >
+              {{
+                courseGeneration.isPending.value
+                  ? '正在提交…'
+                  : task.data.value.course?.status === 'FAILED'
+                    ? '重新生成课程'
+                    : '生成课程'
+              }}
+            </button>
+          </div>
+          <p v-if="startError" class="mt-3 text-warning" role="alert">{{ startError }}</p>
+        </section>
+        <template v-if="task.data.value.course?.status === 'READY'">
+          <div v-if="task.data.value.state === 'READY'" class="mb-6">
+            <button
+              class="action-button border-ink"
+              :disabled="start.isPending.value"
+              @click="startCourse"
+            >
+              {{ start.isPending.value ? '启动中…' : '开始学习' }}
+            </button>
+          </div>
+          <div v-if="task.data.value.course.sections" class="space-y-8">
+            <section
+              v-for="section in task.data.value.course.sections"
+              :key="section.id"
+              class="border-b border-hairline pb-8"
+            >
+              <h2 class="text-section-title font-medium">{{ section.title }}</h2>
+              <p class="mt-4 whitespace-pre-line text-body">{{ section.explanation }}</p>
+              <h3 class="mt-5 text-base font-medium text-ink">开发情景</h3>
+              <p class="mt-2 whitespace-pre-line text-body">{{ section.scenario }}</p>
+              <h3 class="mt-5 text-base font-medium text-ink">示例</h3>
+              <p class="mt-2 whitespace-pre-line text-body">{{ section.example }}</p>
+              <p class="mt-4 border-l-2 border-warning pl-4 text-base text-body">
+                易错点：{{ section.misconception }}
+              </p>
+            </section>
+            <p class="text-base text-muted">练习已随课程准备完成；作答与验收将在下一阶段开放。</p>
+          </div>
+          <AsyncStatePanel
+            v-else
+            title="课程内容读取异常"
+            description="已保存的课程内容未通过结构校验，请重新读取或联系管理员。"
+            tone="warning"
+          />
+        </template>
+      </template>
       <section
+        v-if="task.data.value.type === 'MARKDOWN_NOTE'"
         class="my-6 border border-hairline-strong bg-surface-soft p-5"
         aria-label="笔记提交位置"
       >
@@ -304,176 +411,178 @@ async function startTask() {
           <NuxtLink class="action-button mt-3" to="/app/repository">绑定仓库</NuxtLink>
         </div>
       </section>
-      <p v-if="newRunAvailable" class="mb-4 text-base text-body" role="status">
-        有新的验收记录，当前查看的内容保持不变。<button
-          class="action-button ml-2"
-          @click="showLatest"
-        >
-          查看最新验收
-        </button>
-      </p>
-      <p
-        v-else-if="tab === 'instructions' && selectedRunId"
-        class="mb-4 text-base text-muted"
-        role="status"
-      >
-        已有验收记录，可切换到“验收与反馈”查看。
-      </p>
-      <div
-        role="tablist"
-        aria-label="任务内容"
-        class="mb-6 flex flex-wrap gap-2 border-b border-hairline pb-3"
-      >
-        <button
-          v-for="item in tabs"
-          :id="`tab-${item.id}`"
-          :key="item.id"
-          class="action-button aria-selected:border-ink aria-selected:bg-surface-elevated"
-          role="tab"
-          :aria-selected="tab === item.id"
-          :aria-controls="`panel-${item.id}`"
-          :tabindex="tab === item.id ? 0 : -1"
-          @click="selectTab(item.id)"
-          @keydown="tabKey"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-      <div
-        v-show="tab === 'instructions'"
-        id="panel-instructions"
-        role="tabpanel"
-        aria-labelledby="tab-instructions"
-        tabindex="0"
-        class="space-y-7 focus-visible:outline-2 focus-visible:outline-link"
-      >
-        <p class="text-body">{{ task.data.value.description }}</p>
-        <p class="text-base text-muted">
-          预计 {{ task.data.value.estimatedMinutes }} 分钟 ·
-          {{ task.data.value.prerequisiteTaskIds.length }} 项前置任务
-        </p>
-        <section aria-labelledby="steps-title">
-          <h2 id="steps-title" class="text-section-title font-medium">建议步骤</h2>
-          <ol class="mt-3">
-            <li
-              v-for="(step, index) in task.data.value.suggestedSteps"
-              :key="step"
-              class="grid grid-cols-[2rem_1fr] gap-3 py-2 text-base leading-6 text-body"
-            >
-              <span class="text-base text-muted">
-                {{ String(index + 1).padStart(2, '0') }}
-              </span>
-              <span>{{ step }}</span>
-            </li>
-          </ol>
-        </section>
-
-        <section aria-labelledby="criteria-title">
-          <h2 id="criteria-title" class="text-section-title font-medium">验收标准</h2>
-          <ul class="mt-6">
-            <li v-for="criterion in task.data.value.criteria" :key="criterion.id" class="py-5">
-              <p class="text-base text-muted">
-                {{ criterion.type }} · {{ criterion.required ? '必需' : '可选' }}
-              </p>
-              <p class="mt-3 leading-7 text-body">{{ criterion.description }}</p>
-              <p
-                v-if="criterion.parameterDescription"
-                class="mt-2 text-base leading-7 text-body-strong [overflow-wrap:anywhere]"
-              >
-                {{ criterion.parameterDescription }}
-              </p>
-            </li>
-          </ul>
-        </section>
-      </div>
-      <div
-        v-show="tab !== 'instructions'"
-        :id="tab === 'follow-up' ? 'panel-follow-up' : 'panel-feedback'"
-        role="tabpanel"
-        :aria-labelledby="tab === 'follow-up' ? 'tab-follow-up' : 'tab-feedback'"
-        tabindex="0"
-        class="space-y-6 focus-visible:outline-2 focus-visible:outline-link"
-      >
-        <details>
-          <summary
-            class="min-h-11 cursor-pointer py-3 text-base focus-visible:outline-2 focus-visible:outline-link"
+      <template v-if="task.data.value.type === 'MARKDOWN_NOTE'">
+        <p v-if="newRunAvailable" class="mb-4 text-base text-body" role="status">
+          有新的验收记录，当前查看的内容保持不变。<button
+            class="action-button ml-2"
+            @click="showLatest"
           >
-            选择历史验收（{{ noteRuns.length }}）
-          </summary>
-          <section aria-labelledby="runs-title">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <h2 id="runs-title" class="text-section-title font-medium">历次运行</h2>
-              <button
-                type="button"
-                class="action-button text-base text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-                :disabled="task.isFetching.value || task.isPaused.value"
-                @click="task.refetch()"
-              >
-                更新运行记录
-              </button>
-            </div>
-            <button
-              v-if="!newRunAvailable && route.query.runId"
-              class="action-button mt-3"
-              @click="showLatest"
-            >
-              查看最新验收
-            </button>
-            <p v-if="task.data.value.runs.length === 0" class="mt-6 text-muted">
-              尚未产生验收运行。将目标笔记推送到绑定仓库后，可在这里查看记录。
-            </p>
-            <ul v-else class="mt-6 border-t border-hairline">
+            查看最新验收
+          </button>
+        </p>
+        <p
+          v-else-if="tab === 'instructions' && selectedRunId"
+          class="mb-4 text-base text-muted"
+          role="status"
+        >
+          已有验收记录，可切换到“验收与反馈”查看。
+        </p>
+        <div
+          role="tablist"
+          aria-label="任务内容"
+          class="mb-6 flex flex-wrap gap-2 border-b border-hairline pb-3"
+        >
+          <button
+            v-for="item in tabs"
+            :id="`tab-${item.id}`"
+            :key="item.id"
+            class="action-button aria-selected:border-ink aria-selected:bg-surface-elevated"
+            role="tab"
+            :aria-selected="tab === item.id"
+            :aria-controls="`panel-${item.id}`"
+            :tabindex="tab === item.id ? 0 : -1"
+            @click="selectTab(item.id)"
+            @keydown="tabKey"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <div
+          v-show="tab === 'instructions'"
+          id="panel-instructions"
+          role="tabpanel"
+          aria-labelledby="tab-instructions"
+          tabindex="0"
+          class="space-y-7 focus-visible:outline-2 focus-visible:outline-link"
+        >
+          <p class="text-body">{{ task.data.value.description }}</p>
+          <p class="text-base text-muted">
+            预计 {{ task.data.value.estimatedMinutes }} 分钟 ·
+            {{ task.data.value.prerequisiteTaskIds.length }} 项前置任务
+          </p>
+          <section aria-labelledby="steps-title">
+            <h2 id="steps-title" class="text-section-title font-medium">建议步骤</h2>
+            <ol class="mt-3">
               <li
-                v-for="run in task.data.value.runs"
-                :key="run.id"
-                class="flex flex-wrap justify-between gap-4 border-b border-hairline py-5"
+                v-for="(step, index) in task.data.value.suggestedSteps"
+                :key="step"
+                class="grid grid-cols-[2rem_1fr] gap-3 py-2 text-base leading-6 text-body"
               >
-                <NuxtLink
-                  v-if="run.kind === 'NOTE_VERIFICATION'"
-                  class="action-button text-link aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
-                  :to="{
-                    path: route.path,
-                    query: {
-                      ...route.query,
-                      runId: run.id,
-                      tab: tab === 'follow-up' ? 'follow-up' : 'feedback',
-                      answerId: undefined,
-                      answerRunId: undefined,
-                    },
-                    hash: tab === 'follow-up' ? '' : '#note-report',
-                  }"
-                  :aria-current="selectedRunId === run.id ? 'true' : undefined"
-                  >笔记验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN')
-                  }}<span v-if="selectedRunId === run.id"> · 当前查看</span></NuxtLink
+                <span class="text-base text-muted">
+                  {{ String(index + 1).padStart(2, '0') }}
+                </span>
+                <span>{{ step }}</span>
+              </li>
+            </ol>
+          </section>
+
+          <section aria-labelledby="criteria-title">
+            <h2 id="criteria-title" class="text-section-title font-medium">验收标准</h2>
+            <ul class="mt-6">
+              <li v-for="criterion in task.data.value.criteria" :key="criterion.id" class="py-5">
+                <p class="text-base text-muted">
+                  {{ criterion.type }} · {{ criterion.required ? '必需' : '可选' }}
+                </p>
+                <p class="mt-3 leading-7 text-body">{{ criterion.description }}</p>
+                <p
+                  v-if="criterion.parameterDescription"
+                  class="mt-2 text-base leading-7 text-body-strong [overflow-wrap:anywhere]"
                 >
-                <span v-else class="inline-flex min-h-11 items-center text-sm text-muted"
-                  >回答验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN') }}</span
-                >
-                <span class="text-base text-muted">{{ run.status }}</span>
+                  {{ criterion.parameterDescription }}
+                </p>
               </li>
             </ul>
           </section>
-        </details>
-        <NoteVerificationPanel
-          v-if="selectedRunId && taskId"
-          :key="`${taskId}:${selectedRunId}`"
-          :task-id="taskId"
-          :run-id="selectedRunId"
-          :criteria="task.data.value.criteria"
-          :task="task.data.value"
-          :view="tab === 'follow-up' ? 'follow-up' : 'feedback'"
-        />
-        <AsyncStatePanel
-          v-else-if="route.query.runId !== undefined"
-          title="无法选择此笔记运行"
-          description="这条运行不在当前任务的笔记验收列表中，请从上方记录重新选择。"
-          tone="warning"
-        />
+        </div>
+        <div
+          v-show="tab !== 'instructions'"
+          :id="tab === 'follow-up' ? 'panel-follow-up' : 'panel-feedback'"
+          role="tabpanel"
+          :aria-labelledby="tab === 'follow-up' ? 'tab-follow-up' : 'tab-feedback'"
+          tabindex="0"
+          class="space-y-6 focus-visible:outline-2 focus-visible:outline-link"
+        >
+          <details>
+            <summary
+              class="min-h-11 cursor-pointer py-3 text-base focus-visible:outline-2 focus-visible:outline-link"
+            >
+              选择历史验收（{{ noteRuns.length }}）
+            </summary>
+            <section aria-labelledby="runs-title">
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <h2 id="runs-title" class="text-section-title font-medium">历次运行</h2>
+                <button
+                  type="button"
+                  class="action-button text-base text-link disabled:text-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                  :disabled="task.isFetching.value || task.isPaused.value"
+                  @click="task.refetch()"
+                >
+                  更新运行记录
+                </button>
+              </div>
+              <button
+                v-if="!newRunAvailable && route.query.runId"
+                class="action-button mt-3"
+                @click="showLatest"
+              >
+                查看最新验收
+              </button>
+              <p v-if="task.data.value.runs.length === 0" class="mt-6 text-muted">
+                尚未产生验收运行。将目标笔记推送到绑定仓库后，可在这里查看记录。
+              </p>
+              <ul v-else class="mt-6 border-t border-hairline">
+                <li
+                  v-for="run in task.data.value.runs"
+                  :key="run.id"
+                  class="flex flex-wrap justify-between gap-4 border-b border-hairline py-5"
+                >
+                  <NuxtLink
+                    v-if="run.kind === 'NOTE_VERIFICATION'"
+                    class="action-button text-link aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link"
+                    :to="{
+                      path: route.path,
+                      query: {
+                        ...route.query,
+                        runId: run.id,
+                        tab: tab === 'follow-up' ? 'follow-up' : 'feedback',
+                        answerId: undefined,
+                        answerRunId: undefined,
+                      },
+                      hash: tab === 'follow-up' ? '' : '#note-report',
+                    }"
+                    :aria-current="selectedRunId === run.id ? 'true' : undefined"
+                    >笔记验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN')
+                    }}<span v-if="selectedRunId === run.id"> · 当前查看</span></NuxtLink
+                  >
+                  <span v-else class="inline-flex min-h-11 items-center text-sm text-muted"
+                    >回答验收 · {{ new Date(run.queuedAt).toLocaleString('zh-CN') }}</span
+                  >
+                  <span class="text-base text-muted">{{ run.status }}</span>
+                </li>
+              </ul>
+            </section>
+          </details>
+          <NoteVerificationPanel
+            v-if="selectedRunId && taskId"
+            :key="`${taskId}:${selectedRunId}`"
+            :task-id="taskId"
+            :run-id="selectedRunId"
+            :criteria="task.data.value.criteria"
+            :task="task.data.value"
+            :view="tab === 'follow-up' ? 'follow-up' : 'feedback'"
+          />
+          <AsyncStatePanel
+            v-else-if="route.query.runId !== undefined"
+            title="无法选择此笔记运行"
+            description="这条运行不在当前任务的笔记验收列表中，请从上方记录重新选择。"
+            tone="warning"
+          />
 
-        <p v-if="!selectedRunId && route.query.runId === undefined" class="text-body">
-          尚未收到笔记验收结果。开始任务后，将笔记推送到上方仓库和路径。
-        </p>
-      </div>
+          <p v-if="!selectedRunId && route.query.runId === undefined" class="text-body">
+            尚未收到笔记验收结果。开始任务后，将笔记推送到上方仓库和路径。
+          </p>
+        </div>
+      </template>
     </article>
   </div>
 </template>

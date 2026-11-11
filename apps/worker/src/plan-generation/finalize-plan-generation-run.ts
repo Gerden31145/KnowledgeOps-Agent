@@ -146,31 +146,55 @@ export class FinalizePlanGenerationRun implements PlanGenerationSuccessFinalizer
                 stageId: stageResult.id,
                 title: task.title,
                 position: index,
-                type: 'MARKDOWN_NOTE',
+                type: task.type,
                 estimatedMinutes: task.estimatedMinutes,
-                suggestedSteps: task.suggestedSteps,
-                targetPath: task.targetPath,
+                suggestedSteps: task.type === 'COURSE' ? [] : task.suggestedSteps,
+                targetPath: task.type === 'COURSE' ? null : task.targetPath,
                 state: 'BLOCKED',
                 version: 0,
                 description: task.description,
+                ...(task.type === 'COURSE'
+                  ? { course: { create: { status: 'PENDING' as const } } }
+                  : {}),
               },
             })
             taskMap.set(task.id, taskResult.id)
 
-            for (const [index, criteria] of task.acceptanceCriteria.entries()) {
-              await tx.acceptanceCriterion.create({
-                data: {
-                  taskId: taskResult.id,
-                  type: criteria.type,
-                  description: criteria.description,
-                  required: criteria.required,
-                  ...(criteria.config === null ? {} : { config: criteria.config }),
-                  position: index,
-                },
-              })
+            if (task.type === 'COURSE') {
+              for (const point of task.knowledgePoints) {
+                const knowledgePoint = await tx.knowledgePoint.upsert({
+                  where: { planId_key: { planId: plan.id, key: point.id } },
+                  create: {
+                    planId: plan.id,
+                    key: point.id,
+                    title: point.title,
+                    description: point.description,
+                  },
+                  update: {},
+                })
+                await tx.courseKnowledgePoint.create({
+                  data: {
+                    course: { connect: { taskId: taskResult.id } },
+                    knowledgePoint: { connect: { id: knowledgePoint.id } },
+                    role: 'TEACH',
+                  },
+                })
+              }
+            } else {
+              for (const [index, criteria] of task.acceptanceCriteria.entries()) {
+                await tx.acceptanceCriterion.create({
+                  data: {
+                    taskId: taskResult.id,
+                    type: criteria.type,
+                    description: criteria.description,
+                    required: criteria.required,
+                    ...(criteria.config === null ? {} : { config: criteria.config }),
+                    position: index,
+                  },
+                })
+              }
+              await ensureRequiredFollowUpCriterion(tx, taskResult.id)
             }
-            // 模型提供笔记标准；唯一必答追问由服务端补齐，与整份计划同事务。
-            await ensureRequiredFollowUpCriterion(tx, taskResult.id)
           }
         }
 

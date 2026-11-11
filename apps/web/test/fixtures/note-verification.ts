@@ -22,6 +22,7 @@ export function taskDetail(overrides: Partial<TaskDetailResponse> = {}): TaskDet
     state: 'IN_PROGRESS',
     version: 2,
     prerequisiteTaskIds: [],
+    course: null,
     criteria: [],
     stage: {
       id: criterionId,

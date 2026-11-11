@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common'
 
 import { toError } from '../outbox/outbox-dispatch-error.js'
+import type { CourseGenerationRunRepository } from '../course-generation/course-generation-run.repository.js'
 import {
   PlanGenerationRunRepository,
   sanitizePlanGenerationErrorMessage,
@@ -15,6 +16,7 @@ export class PlanGenerationTimeoutSweepLoop {
     private readonly repository: PlanGenerationRunRepository,
     private readonly batchSize: number,
     private readonly intervalMs: number,
+    private readonly courseRuns?: CourseGenerationRunRepository,
   ) {}
 
   async start(): Promise<void> {
@@ -51,11 +53,14 @@ export class PlanGenerationTimeoutSweepLoop {
     try {
       const timedOutRunIds = await this.repository.timeoutExpired(this.batchSize, new Date())
 
-      if (timedOutRunIds.length > 0) {
+      const timedOutCourseRunIds = await this.courseRuns?.timeoutExpired(this.batchSize, new Date())
+
+      if (timedOutRunIds.length > 0 || (timedOutCourseRunIds?.length ?? 0) > 0) {
         this.logger.warn({
-          event: 'plan_generation_timeout_sweep_completed',
+          event: 'generation_timeout_sweep_completed',
           generationRunIds: timedOutRunIds,
-          timedOutCount: timedOutRunIds.length,
+          courseGenerationRunIds: timedOutCourseRunIds ?? [],
+          timedOutCount: timedOutRunIds.length + (timedOutCourseRunIds?.length ?? 0),
         })
       }
     } catch (error: unknown) {

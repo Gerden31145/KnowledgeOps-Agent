@@ -3,6 +3,7 @@ export {
   AcceptanceCriterionType,
   AgentRunKind,
   AgentRunState,
+  CourseStatus,
   OutboxEventType,
   PlanGenerationRunState,
   PlanStatus,

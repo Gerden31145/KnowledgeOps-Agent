@@ -1,10 +1,11 @@
 import {
   LEARNING_GOAL_INPUT_LIMITS,
+  courseKnowledgePointSchema,
   entityIdSchema,
+  generatedAcceptanceCriterionSchema,
   isoDateSchema,
   markdownTargetPathSchema,
   planGenerationModelSnapshotSchema,
-  generatedAcceptanceCriterionSchema,
 } from '@knowledgeops/contracts'
 import { z } from 'zod'
 
@@ -14,12 +15,11 @@ export const PLAN_GENERATION_LIMITS = {
   stages: { min: 1, max: 3 },
   tasks: { min: 3, max: 8 },
   taskMinutes: { min: 15, max: 480 },
-  suggestedSteps: { min: 1, max: 6 },
-  acceptanceCriteria: { min: 1, max: 6 },
+  knowledgePointsPerTask: { min: 1, max: 4 },
 } as const
 
-export const PLAN_GENERATION_PROMPT_VERSION = 'plan-generation-v2'
-export const PLAN_GENERATION_OUTPUT_SCHEMA_VERSION = 'plan-generation-output-v2'
+export const PLAN_GENERATION_PROMPT_VERSION = 'plan-generation-v3'
+export const PLAN_GENERATION_OUTPUT_SCHEMA_VERSION = 'plan-generation-output-v3'
 
 const taskReferenceIdSchema = z
   .string()
@@ -76,21 +76,40 @@ const generatedTaskSchema = z
     id: taskReferenceIdSchema,
     title: z.string().trim().min(3).max(160),
     description: z.string().trim().min(10).max(1_000),
-    type: z.literal('MARKDOWN_NOTE'),
+    type: z.literal('COURSE'),
     estimatedMinutes: z
       .number()
       .int()
       .min(PLAN_GENERATION_LIMITS.taskMinutes.min)
       .max(PLAN_GENERATION_LIMITS.taskMinutes.max),
-    suggestedSteps: z
-      .array(z.string().trim().min(3).max(240))
-      .min(PLAN_GENERATION_LIMITS.suggestedSteps.min)
-      .max(PLAN_GENERATION_LIMITS.suggestedSteps.max),
+    knowledgePoints: z
+      .array(courseKnowledgePointSchema)
+      .min(PLAN_GENERATION_LIMITS.knowledgePointsPerTask.min)
+      .max(PLAN_GENERATION_LIMITS.knowledgePointsPerTask.max),
+    dependsOnTaskIds: z.array(taskReferenceIdSchema).max(PLAN_GENERATION_LIMITS.tasks.max - 1),
+  })
+  .strict()
+  .superRefine((task, context) => {
+    const ids = new Set(task.knowledgePoints.map((point) => point.id))
+    if (ids.size !== task.knowledgePoints.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Knowledge point IDs must be unique within a course',
+        path: ['knowledgePoints'],
+      })
+    }
+  })
+
+const legacyGeneratedTaskSchema = z
+  .object({
+    id: taskReferenceIdSchema,
+    title: z.string().trim().min(3).max(160),
+    description: z.string().trim().min(10).max(1_000),
+    type: z.literal('MARKDOWN_NOTE'),
+    estimatedMinutes: z.number().int().min(15).max(480),
+    suggestedSteps: z.array(z.string().trim().min(3).max(240)).min(1).max(6),
     targetPath: markdownTargetPathSchema,
-    acceptanceCriteria: z
-      .array(generatedAcceptanceCriterionSchema)
-      .min(PLAN_GENERATION_LIMITS.acceptanceCriteria.min)
-      .max(PLAN_GENERATION_LIMITS.acceptanceCriteria.max),
+    acceptanceCriteria: z.array(generatedAcceptanceCriterionSchema).min(1).max(6),
     dependsOnTaskIds: z.array(taskReferenceIdSchema).max(PLAN_GENERATION_LIMITS.tasks.max - 1),
   })
   .strict()
@@ -98,7 +117,10 @@ const generatedTaskSchema = z
 const generatedStageSchema = z
   .object({
     title: z.string().trim().min(3).max(160),
-    tasks: z.array(generatedTaskSchema).min(1).max(PLAN_GENERATION_LIMITS.tasks.max),
+    tasks: z
+      .array(z.union([generatedTaskSchema, legacyGeneratedTaskSchema]))
+      .min(1)
+      .max(PLAN_GENERATION_LIMITS.tasks.max),
   })
   .strict()
 
@@ -163,6 +185,24 @@ export const planGenerationOutputSchema = planGenerationOutputShapeSchema.superR
         })
       })
     })
+
+    const knowledgePoints = new Map<string, string>()
+    plan.stages.forEach((stage, stageIndex) => {
+      stage.tasks.forEach((task, taskIndex) => {
+        if (task.type !== 'COURSE') return
+        task.knowledgePoints.forEach((point, pointIndex) => {
+          const definition = JSON.stringify(point)
+          const previous = knowledgePoints.get(point.id)
+          if (previous && previous !== definition) {
+            context.addIssue({
+              code: 'custom',
+              message: 'A reused knowledge point ID must keep the same definition',
+              path: ['stages', stageIndex, 'tasks', taskIndex, 'knowledgePoints', pointIndex],
+            })
+          } else knowledgePoints.set(point.id, definition)
+        })
+      })
+    })
   },
 )
 
@@ -210,6 +250,10 @@ export async function generatePlanCandidate(
   if (!parsedCandidate.success) {
     throw new InvalidPlanGenerationOutputError(parsedCandidate.error)
   }
+  if (
+    parsedCandidate.data.stages.some((stage) => stage.tasks.some((task) => task.type !== 'COURSE'))
+  )
+    throw new InvalidPlanGenerationOutputError()
 
   return parsedCandidate.data
 }

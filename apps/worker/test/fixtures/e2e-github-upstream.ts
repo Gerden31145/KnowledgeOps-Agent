@@ -1,12 +1,9 @@
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { DatabaseClient } from '@knowledgeops/database'
-import { validPlanGenerationOutput } from '../../../../packages/agent-core/test/fixtures/plan-generation.js'
 import { BoundCommitEvidenceReader } from '../../src/github/read-bound-commit-evidence.js'
-
-export const pipelinePlan = validPlanGenerationOutput
 export const noteContent = '# 事件循环\n\n当前任务结束后，先清空微任务队列。'
-export const targetPath = pipelinePlan.stages[0].tasks[0].targetPath
+export const targetPath = 'notes/javascript/event-loop.md'
 export const beforeSha = 'a'.repeat(40)
 export const afterSha = 'b'.repeat(40)
 export const repositoryName = 'r16-fixture/learning-notes'

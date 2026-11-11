@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readWorkerEnvironment } from '../src/config/environment.js'
 
 import { DatabaseService } from '../src/database/database.service.js'
+import { CourseGenerationJobProcessor } from '../src/course-generation/course-generation-job-processor.js'
+import { CourseGenerationRunRepository } from '../src/course-generation/course-generation-run.repository.js'
 import { GitHubEvidenceJobProcessor } from '../src/github/github-evidence-job-processor.js'
 import { GitHubEvidenceReconciler } from '../src/github/github-evidence-reconciler.js'
 import { OutboxDispatcher } from '../src/outbox/outbox-dispatcher.js'
@@ -37,6 +39,21 @@ const queue = vi.hoisted(() => ({
   constructed: vi.fn(),
   start: vi.fn(),
   close: vi.fn().mockResolvedValue(undefined),
+}))
+
+const courseQueue = vi.hoisted(() => ({
+  constructed: vi.fn(),
+  start: vi.fn(),
+  close: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../src/queue/bullmq-course-generation-queue.js', () => ({
+  BullMqCourseGenerationQueue: class {
+    constructor(options: unknown) {
+      courseQueue.constructed(options)
+    }
+    start = courseQueue.start
+    close = courseQueue.close
+  },
 }))
 
 const evidenceQueue = vi.hoisted(() => ({
@@ -94,6 +111,7 @@ describe('Worker runtime dependency injection', () => {
     const sweep = vi
       .spyOn(PlanGenerationRunRepository.prototype, 'timeoutExpired')
       .mockResolvedValue([])
+    vi.spyOn(CourseGenerationRunRepository.prototype, 'timeoutExpired').mockResolvedValue([])
     const dispatch = vi.spyOn(OutboxDispatcher.prototype, 'dispatchAvailable').mockResolvedValue({
       deadLettered: 0,
       dispatched: 0,
@@ -148,6 +166,8 @@ describe('Worker runtime dependency injection', () => {
       { close } as unknown as DatabaseService,
       {} as PlanGenerationJobProcessor,
       {} as PlanGenerationRunRepository,
+      {} as CourseGenerationJobProcessor,
+      { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as CourseGenerationRunRepository,
       {} as GitHubEvidenceJobProcessor,
       {} as NoteVerificationJobProcessor,
       {} as NoteVerificationRunRepository,
@@ -189,6 +209,8 @@ describe('Worker runtime dependency injection', () => {
       { close } as unknown as DatabaseService,
       {} as PlanGenerationJobProcessor,
       { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as PlanGenerationRunRepository,
+      {} as CourseGenerationJobProcessor,
+      { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as CourseGenerationRunRepository,
       {} as GitHubEvidenceJobProcessor,
       noteProcessor,
       { reconcile } as unknown as NoteVerificationRunRepository,

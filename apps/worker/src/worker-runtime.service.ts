@@ -1,4 +1,6 @@
 import { SERVICE_NAMES } from '@knowledgeops/contracts'
+import { CourseGenerationJobProcessor } from './course-generation/course-generation-job-processor.js'
+import { CourseGenerationRunRepository } from './course-generation/course-generation-run.repository.js'
 import {
   Inject,
   Injectable,
@@ -18,6 +20,7 @@ import { PlanGenerationJobProcessor } from './plan-generation/plan-generation-jo
 import { PlanGenerationRunRepository } from './plan-generation/plan-generation-run.repository.js'
 import { PlanGenerationTimeoutSweepLoop } from './plan-generation/plan-generation-timeout-sweep-loop.js'
 import { BullMqPlanGenerationQueue } from './queue/bullmq-plan-generation-queue.js'
+import { BullMqCourseGenerationQueue } from './queue/bullmq-course-generation-queue.js'
 import { BullMqGitHubEvidenceQueue } from './queue/bullmq-github-evidence-queue.js'
 import { BullMqNoteVerificationQueue } from './queue/bullmq-note-verification-queue.js'
 import { NoteVerificationJobProcessor } from './verification/note-verification-job-processor.js'
@@ -31,6 +34,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
   private readonly logger = new Logger(WorkerRuntimeService.name)
   private dispatchLoop: OutboxDispatchLoop | undefined
   private queue: BullMqPlanGenerationQueue | undefined
+  private courseQueue: BullMqCourseGenerationQueue | undefined
   private evidenceQueue: BullMqGitHubEvidenceQueue | undefined
   private noteQueue: BullMqNoteVerificationQueue | undefined
   private answerQueue: BullMqAnswerVerificationQueue | undefined
@@ -43,6 +47,10 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
     private readonly planGenerationProcessor: PlanGenerationJobProcessor,
     @Inject(PlanGenerationRunRepository)
     private readonly planGenerationRunRepository: PlanGenerationRunRepository,
+    @Inject(CourseGenerationJobProcessor)
+    private readonly courseGenerationProcessor: CourseGenerationJobProcessor,
+    @Inject(CourseGenerationRunRepository)
+    private readonly courseGenerationRuns: CourseGenerationRunRepository,
     @Inject(GitHubEvidenceJobProcessor)
     private readonly gitHubEvidenceProcessor: GitHubEvidenceJobProcessor,
     @Inject(NoteVerificationJobProcessor)
@@ -65,6 +73,15 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         processor: this.planGenerationProcessor,
         redisUrl: this.environment.REDIS_URL,
       })
+      this.courseQueue = new BullMqCourseGenerationQueue({
+        concurrency: this.environment.WORKER_CONCURRENCY,
+        jobOptions: {
+          attempts: this.environment.BULLMQ_JOB_ATTEMPTS,
+          backoffDelayMs: this.environment.BULLMQ_JOB_BACKOFF_MS,
+        },
+        processor: this.courseGenerationProcessor,
+        redisUrl: this.environment.REDIS_URL,
+      })
       this.evidenceQueue = new BullMqGitHubEvidenceQueue({
         concurrency: this.environment.WORKER_CONCURRENCY,
         jobOptions: {
@@ -75,6 +92,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         redisUrl: this.environment.REDIS_URL,
       })
       this.queue.start()
+      this.courseQueue.start()
       this.evidenceQueue.start()
       if (this.environment.NOTE_VERIFICATION_MODEL_JSON) {
         this.noteQueue = new BullMqNoteVerificationQueue({
@@ -103,10 +121,12 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         this.planGenerationRunRepository,
         this.environment.PLAN_GENERATION_TIMEOUT_SWEEP_BATCH_SIZE,
         this.environment.PLAN_GENERATION_TIMEOUT_SWEEP_INTERVAL_MS,
+        this.courseGenerationRuns,
       )
       await this.timeoutSweepLoop.start()
 
       const planQueue = this.queue
+      const courseQueue = this.courseQueue
       const evidenceQueue = this.evidenceQueue
       const noteQueue = this.noteQueue
       const answerQueue = this.answerQueue
@@ -114,6 +134,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         this.database.client,
         {
           publish: (message) => planQueue.publish(message),
+          publishCourseGeneration: (message) => courseQueue.publish(message),
           publishGitHubPush: (message) => evidenceQueue.publish(message),
           publishGitHubEvidenceRetry: (message) => evidenceQueue.publish(message),
           ...(noteQueue
@@ -185,6 +206,7 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         }
       }
       this.queue = undefined
+      this.courseQueue = undefined
       this.evidenceQueue = undefined
       this.noteQueue = undefined
       this.answerQueue = undefined
@@ -215,7 +237,11 @@ export class WorkerRuntimeService implements OnApplicationBootstrap, OnApplicati
         await this.evidenceQueue?.close()
       }
     } finally {
-      await this.queue?.close()
+      try {
+        await this.courseQueue?.close()
+      } finally {
+        await this.queue?.close()
+      }
     }
   }
 }

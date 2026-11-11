@@ -1,6 +1,7 @@
 import {
   CURRENT_TASK_STATES,
   contentMinimumConfigSchema,
+  courseSectionSchema,
   planDetailResponseSchema,
   sectionPresentConfigSchema,
   taskDetailResponseSchema,
@@ -11,7 +12,14 @@ import {
   type TodayTasksResponse,
   type WorkspaceEntryResponse,
 } from '@knowledgeops/contracts'
-import type { DatabaseClient, PlanStatus, TaskState, TaskType } from '@knowledgeops/database'
+import type {
+  CourseStatus,
+  DatabaseClient,
+  PlanStatus,
+  TaskState,
+  TaskType,
+} from '@knowledgeops/database'
+import { z } from 'zod'
 
 export interface PlanGraphTask {
   id: string
@@ -152,6 +160,16 @@ export class PlanRepository {
                 state: true,
                 version: true,
                 prerequisites: { select: { prerequisiteTaskId: true } },
+                course: {
+                  select: {
+                    status: true,
+                    generationRuns: {
+                      orderBy: { queuedAt: 'desc' },
+                      take: 1,
+                      select: { id: true, errorCode: true, errorMessage: true },
+                    },
+                  },
+                },
                 criteria: {
                   orderBy: { position: 'asc' },
                   select: {
@@ -183,10 +201,11 @@ export class PlanRepository {
       },
       stages: plan.stages.map((stage) => ({
         ...stage,
-        tasks: stage.tasks.map(({ prerequisites, ...task }) => ({
+        tasks: stage.tasks.map(({ prerequisites, course, ...task }) => ({
           ...task,
           criteria: task.criteria.map(summarizeCriterion),
           prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
+          course: summarizeCourse(course),
         })),
       })),
     })
@@ -269,6 +288,17 @@ export class PlanRepository {
         state: true,
         version: true,
         prerequisites: { select: { prerequisiteTaskId: true } },
+        course: {
+          select: {
+            status: true,
+            generationRuns: {
+              orderBy: { queuedAt: 'desc' },
+              take: 1,
+              select: { id: true, errorCode: true, errorMessage: true },
+            },
+            versions: { orderBy: { version: 'desc' }, take: 1, select: { content: true } },
+          },
+        },
         criteria: {
           orderBy: { position: 'asc' },
           select: {
@@ -307,10 +337,11 @@ export class PlanRepository {
       return null
     }
 
-    const { prerequisites, ...taskWithoutPrerequisites } = task
+    const { prerequisites, course, ...taskWithoutPrerequisites } = task
 
     return taskDetailResponseSchema.parse({
       ...taskWithoutPrerequisites,
+      course: summarizeCourse(course, true),
       criteria: task.criteria.map(summarizeCriterion),
       prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
       runs: task.runs.map((run) => ({
@@ -346,4 +377,30 @@ function summarizeCriterion({
   }
 
   return { ...criterion, parameterDescription }
+}
+
+function summarizeCourse(
+  course: {
+    status: CourseStatus
+    generationRuns: { id: string; errorCode: string | null; errorMessage: string | null }[]
+    versions?: { content: unknown }[]
+  } | null,
+  includeContent = false,
+) {
+  if (!course) return null
+  const latest = course.generationRuns[0]
+  const content = z
+    .object({ sections: z.array(courseSectionSchema) })
+    .safeParse(course.versions?.[0]?.content)
+  return {
+    status: course.status,
+    generationRunId: latest?.id ?? null,
+    ...(includeContent ? { sections: content.success ? content.data.sections : null } : {}),
+    error: latest?.errorCode
+      ? {
+          code: latest.errorCode,
+          message: latest.errorMessage ?? '课程生成失败，请重试。',
+        }
+      : null,
+  }
 }

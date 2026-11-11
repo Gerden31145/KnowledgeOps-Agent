@@ -59,6 +59,38 @@ export {
   type TaskType,
 } from './domain/plan.js'
 export {
+  COURSE_GENERATION_OUTPUT_SCHEMA_VERSION,
+  COURSE_GENERATION_PROMPT_VERSION,
+  COURSE_KNOWLEDGE_ROLES,
+  COURSE_STATUSES,
+  courseGenerationSummarySchema,
+  courseKnowledgePointSchema,
+  courseKnowledgeRoleSchema,
+  courseLearningPackageSchema,
+  courseReferenceIdSchema,
+  courseSectionSchema,
+  courseStatusSchema,
+  exerciseSetBodySchema,
+  followUpExerciseSchema,
+  multipleChoiceQuestionSchema,
+  type CourseGenerationSummary,
+  type CourseKnowledgePoint,
+  type CourseKnowledgeRole,
+  type CourseLearningPackage,
+  type CourseSection,
+  type CourseStatus,
+  type ExerciseSetBody,
+} from './domain/course.js'
+export {
+  COURSE_GENERATION_JOB_ID_PREFIX,
+  COURSE_GENERATION_JOB_NAME,
+  COURSE_GENERATION_OUTBOX_SCHEMA_VERSION,
+  COURSE_GENERATION_QUEUE_NAME,
+  buildCourseGenerationJobId,
+  courseGenerationRequestedEventPayloadSchema,
+  type CourseGenerationRequestedEventPayload,
+} from './events/course-generation.js'
+export {
   planGenerationModelSnapshotSchema,
   type PlanGenerationModelSnapshot,
 } from './domain/plan-generation-model.js'
@@ -179,6 +211,12 @@ export {
   type PlanGenerationStreamError,
   type StartPlanGenerationInput,
 } from './http/plan-generation.js'
+export {
+  courseGenerationAcceptedResponseSchema,
+  requestCourseGenerationInputSchema,
+  type CourseGenerationAcceptedResponse,
+  type RequestCourseGenerationInput,
+} from './http/course-generation.js'
 export {
   confirmPlanResponseSchema,
   startTaskInputSchema,

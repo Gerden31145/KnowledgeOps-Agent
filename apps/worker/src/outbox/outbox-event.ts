@@ -1,6 +1,9 @@
 import {
   ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  COURSE_GENERATION_OUTBOX_SCHEMA_VERSION,
   answerVerificationRequestedEventPayloadSchema,
+  courseGenerationRequestedEventPayloadSchema,
+  type CourseGenerationRequestedEventPayload,
   type AnswerVerificationRequestedPayload,
   NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
   noteVerificationRequestedEventPayloadSchema,
@@ -51,6 +54,27 @@ export interface NoteVerificationOutboxMessage {
 export interface AnswerVerificationOutboxMessage {
   eventId: string
   payload: AnswerVerificationRequestedPayload
+}
+export interface CourseGenerationOutboxMessage {
+  eventId: string
+  payload: CourseGenerationRequestedEventPayload
+}
+export function parseCourseGenerationOutboxEvent(
+  event: LockedOutboxEvent,
+): CourseGenerationOutboxMessage {
+  const parsed = courseGenerationRequestedEventPayloadSchema.safeParse(event.payload)
+  if (
+    event.type !== 'COURSE_GENERATION_REQUESTED' ||
+    event.schemaVersion !== COURSE_GENERATION_OUTBOX_SCHEMA_VERSION ||
+    !parsed.success ||
+    event.aggregateId !== parsed.data.generationRunId ||
+    event.deduplicationKey !== `course-generation-requested-${parsed.data.generationRunId}`
+  )
+    throw new NonRetryableOutboxDispatchError(
+      'OUTBOX_PAYLOAD_INVALID',
+      'Invalid course generation intent',
+    )
+  return { eventId: event.id, payload: parsed.data }
 }
 export function parseAnswerVerificationOutboxEvent(
   event: LockedOutboxEvent,

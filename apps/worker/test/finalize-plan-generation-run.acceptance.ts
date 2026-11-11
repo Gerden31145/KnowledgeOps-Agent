@@ -189,6 +189,7 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
           const savedStage = plan.stages[stageIndex]!
           expect(savedStage).toMatchObject({ title: stage.title, position: stageIndex })
           stage.tasks.forEach((task, taskIndex) => {
+            if (task.type !== 'MARKDOWN_NOTE') return
             const savedTask = savedStage.tasks[taskIndex]!
             expect(savedTask).toMatchObject({
               title: task.title,
@@ -491,13 +492,13 @@ describe('Stage 2 core handwrite: atomic plan generation finalizer', () => {
 
   it('persists the configured content threshold without deriving it from description', async () => {
     const ids = await createRun()
-    const configured: PlanGenerationOutput = structuredClone(candidate)
-    configured.stages[0]!.tasks[0]!.acceptanceCriteria[0] = {
+    const configured = structuredClone(candidate)
+    Object.assign(configured.stages[0]!.tasks[0]!.acceptanceCriteria[0]!, {
       type: 'CONTENT_MINIMUM',
       description: '正文与代码至少包含 200 个非空白字符。',
       required: true,
       config: { minCharacters: 200 },
-    }
+    })
     try {
       await new FinalizePlanGenerationRun(database).execute({
         candidate: configured,

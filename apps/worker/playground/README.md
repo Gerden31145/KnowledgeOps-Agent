@@ -126,8 +126,8 @@ AI 已运行；用户已确认参数链路理解，未单独报告运行本脚�
 新生成契约为 v2。实际启用新版生成前，真实 .env 的两项配置需为：
 
 ```dotenv
-PLAN_GENERATION_PROMPT_VERSION=plan-generation-v2
-PLAN_GENERATION_OUTPUT_SCHEMA_VERSION=plan-generation-output-v2
+PLAN_GENERATION_PROMPT_VERSION=plan-generation-v3
+PLAN_GENERATION_OUTPUT_SCHEMA_VERSION=plan-generation-output-v3
 ```
 
 同步后按原流程重建并重启 API/Worker；已有 v1 Run 冻结快照不会被改写，当前适配器会拒绝它，

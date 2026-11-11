@@ -444,10 +444,8 @@ function errorMessage(error: unknown): string {
           <p class="mt-2 text-warning">{{ fieldErrors.modelId }}</p>
         </fieldset>
         <div class="border-t border-hairline pt-6 text-base text-body">
-          <p>生成计划 → 学习并提交 GitHub 笔记 → 查看反馈、回答追问</p>
-          <p class="mt-2 text-muted">
-            需要使用 GitHub 仓库和 Markdown 笔记。计划生成后可先预览，确认后才开始。
-          </p>
+          <p>生成课程路线 → 学习课程内容 → 完成练习并获得针对性复习</p>
+          <p class="mt-2 text-muted">课程直接在站内学习，不需要绑定仓库或提交笔记。</p>
           <p v-if="!user" class="mt-2">可以先填写学习目标，登录后生成并保存计划。</p>
           <button
             class="action-button mt-5 border-ink"

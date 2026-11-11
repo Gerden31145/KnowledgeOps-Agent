@@ -3,6 +3,7 @@ import {
   workspaceEntryResponseSchema,
   type WorkspaceEntryResponse,
   confirmPlanResponseSchema,
+  courseGenerationAcceptedResponseSchema,
   learningGoalResponseSchema,
   planDetailResponseSchema,
   planGenerationAcceptedResponseSchema,
@@ -12,6 +13,8 @@ import {
   taskDetailResponseSchema,
   todayTasksResponseSchema,
   type ConfirmPlanResponse,
+  type CourseGenerationAcceptedResponse,
+  type RequestCourseGenerationInput,
   type LearningGoalInput,
   type LearningGoalResponse,
   type PlanDetailResponse,
@@ -124,6 +127,10 @@ export interface KnowledgeOpsApi {
   ): Promise<PlanGenerationRunStatusResponse>
   getPlan(planId: string, signal?: AbortSignal): Promise<PlanDetailResponse>
   confirmPlan(planId: string): Promise<ConfirmPlanResponse>
+  requestCourseGeneration(
+    taskId: string,
+    input: RequestCourseGenerationInput,
+  ): Promise<CourseGenerationAcceptedResponse>
   getTodayTasks(signal?: AbortSignal): Promise<TodayTasksResponse>
   getTask(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse>
   getNoteVerificationRun(runId: string, signal?: AbortSignal): Promise<NoteVerificationRunResponse>
@@ -267,6 +274,13 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
       request(baseUrl, `/plans/${encodeURIComponent(planId)}/confirm`, confirmPlanResponseSchema, {
         method: 'POST',
       }),
+    requestCourseGeneration: (taskId, input) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/course-generation-runs`,
+        courseGenerationAcceptedResponseSchema,
+        jsonRequest('POST', input),
+      ),
     getTodayTasks: (signal) =>
       request(baseUrl, '/tasks/today', todayTasksResponseSchema, { signal }),
     getTask: (taskId, signal) =>

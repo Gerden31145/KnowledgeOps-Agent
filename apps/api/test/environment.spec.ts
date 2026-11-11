@@ -4,10 +4,10 @@ import { resolve } from 'node:path'
 import { readApiEnvironment } from '../src/config/environment.js'
 
 describe('API environment', () => {
-  it('defaults new plan runs to the parameterized v2 contract', () => {
+  it('defaults new plan runs to the course-only v3 contract', () => {
     const environment = readApiEnvironment({})
-    expect(environment.PLAN_GENERATION_PROMPT_VERSION).toBe('plan-generation-v2')
-    expect(environment.PLAN_GENERATION_OUTPUT_SCHEMA_VERSION).toBe('plan-generation-output-v2')
+    expect(environment.PLAN_GENERATION_PROMPT_VERSION).toBe('plan-generation-v3')
+    expect(environment.PLAN_GENERATION_OUTPUT_SCHEMA_VERSION).toBe('plan-generation-output-v3')
   })
 
   it('accepts an optional absolute private key path without loading or exposing the key', () => {

@@ -6,8 +6,8 @@ export const validPlanGenerationRequest = {
     catalogId: 'openai-primary',
     provider: 'openai',
     modelName: 'test-model',
-    promptVersion: 'plan-generation-v2',
-    outputSchemaVersion: 'plan-generation-output-v2',
+    promptVersion: 'plan-generation-v3',
+    outputSchemaVersion: 'plan-generation-output-v3',
   },
   goal: {
     title: 'Prepare for frontend internship interviews',
@@ -18,6 +18,12 @@ export const validPlanGenerationRequest = {
   },
 } as const satisfies PlanGenerationRequest
 
+const eventLoopPoint = {
+  id: 'event-loop',
+  title: '事件循环',
+  description: '理解任务、微任务与渲染之间的调度顺序。',
+} as const
+
 export const validPlanGenerationOutput = {
   stages: [
     {
@@ -26,41 +32,24 @@ export const validPlanGenerationOutput = {
         {
           id: 'event-loop',
           title: 'Explain the event loop',
-          description: 'Write a note explaining tasks, microtasks, and rendering order.',
-          type: 'MARKDOWN_NOTE',
+          description: 'Learn tasks, microtasks, and rendering order through browser scenarios.',
+          type: 'COURSE',
           estimatedMinutes: 90,
-          suggestedSteps: ['Draw one execution timeline', 'Explain one browser rendering example'],
-          targetPath: 'notes/javascript/event-loop.md',
-          acceptanceCriteria: [
-            {
-              type: 'SECTION_PRESENT',
-              config: { heading: '事件循环' },
-              description: 'Contains a section comparing tasks and microtasks.',
-              required: true,
-            },
-            {
-              type: 'SEMANTIC_CORRECTNESS',
-              config: null,
-              description: 'Explains the ordering without reversing tasks and microtasks.',
-              required: true,
-            },
-          ],
+          knowledgePoints: [eventLoopPoint],
           dependsOnTaskIds: [],
         },
         {
           id: 'browser-rendering',
           title: 'Connect scheduling to rendering',
-          description: 'Write a note connecting JavaScript scheduling to browser rendering.',
-          type: 'MARKDOWN_NOTE',
+          description: 'Connect JavaScript scheduling to browser rendering in one frame.',
+          type: 'COURSE',
           estimatedMinutes: 75,
-          suggestedSteps: ['Describe style and layout work', 'Add one frame lifecycle example'],
-          targetPath: 'notes/browser/rendering.md',
-          acceptanceCriteria: [
+          knowledgePoints: [
+            eventLoopPoint,
             {
-              type: 'TOPIC_COVERAGE',
-              config: null,
-              description: 'Covers style, layout, paint, and composite.',
-              required: true,
+              id: 'rendering-pipeline',
+              title: '渲染流水线',
+              description: '理解样式、布局、绘制与合成的关系。',
             },
           ],
           dependsOnTaskIds: ['event-loop'],
@@ -68,17 +57,15 @@ export const validPlanGenerationOutput = {
         {
           id: 'vue-scheduling',
           title: 'Explain Vue update scheduling',
-          description: 'Write a note relating Vue updates to the browser scheduling model.',
-          type: 'MARKDOWN_NOTE',
+          description: 'Relate Vue batched updates to the browser scheduling model.',
+          type: 'COURSE',
           estimatedMinutes: 75,
-          suggestedSteps: ['Explain nextTick', 'Compare one synchronous and batched update'],
-          targetPath: 'notes/vue/update-scheduling.md',
-          acceptanceCriteria: [
+          knowledgePoints: [
+            eventLoopPoint,
             {
-              type: 'EXPLANATION_QUALITY',
-              config: null,
-              description: 'Uses a concrete example to explain batched updates.',
-              required: true,
+              id: 'vue-next-tick',
+              title: 'Vue 批量更新',
+              description: '理解批量更新与 nextTick 的执行时机。',
             },
           ],
           dependsOnTaskIds: ['event-loop', 'browser-rendering'],

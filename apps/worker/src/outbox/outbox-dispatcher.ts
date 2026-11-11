@@ -7,6 +7,8 @@ import {
 } from './outbox-dispatch-error.js'
 import {
   parseAnswerVerificationOutboxEvent,
+  parseCourseGenerationOutboxEvent,
+  type CourseGenerationOutboxMessage,
   type AnswerVerificationOutboxMessage,
   parseNoteVerificationOutboxEvent,
   type NoteVerificationOutboxMessage,
@@ -24,6 +26,7 @@ const DISPATCH_TRANSACTION_TIMEOUT_MS = 5_000
 
 export interface OutboxPublisher {
   publish(message: PlanGenerationOutboxMessage): Promise<{ jobId: string }>
+  publishCourseGeneration?(message: CourseGenerationOutboxMessage): Promise<{ jobId: string }>
   // 只有装配了取证消费者的 Runtime 才认领此类待办；旧的计划生成装配保持可用。
   publishGitHubPush?(message: GitHubPushOutboxMessage): Promise<{ jobId: string }>
   publishGitHubEvidenceRetry?(message: GitHubEvidenceRetryOutboxMessage): Promise<{ jobId: string }>
@@ -111,6 +114,7 @@ export class OutboxDispatcher {
             WHERE "dispatched_at" IS NULL
               AND (
                 "type" = 'PLAN_GENERATION_REQUESTED'
+                ${this.publisher.publishCourseGeneration ? Prisma.sql`OR "type" = 'COURSE_GENERATION_REQUESTED'` : Prisma.empty}
                 ${this.publisher.publishGitHubPush ? Prisma.sql`OR "type" = 'GITHUB_PUSH_RECEIVED'` : Prisma.empty}
                 ${this.publisher.publishGitHubEvidenceRetry ? Prisma.sql`OR "type" = 'GITHUB_EVIDENCE_RETRY_REQUESTED'` : Prisma.empty}
                 ${this.publisher.publishNoteVerification ? Prisma.sql`OR "type" = 'NOTE_VERIFICATION_REQUESTED'` : Prisma.empty}
@@ -133,6 +137,13 @@ export class OutboxDispatcher {
 
         try {
           if (
+            event.type === 'COURSE_GENERATION_REQUESTED' &&
+            this.publisher.publishCourseGeneration
+          ) {
+            published = await this.publisher.publishCourseGeneration(
+              parseCourseGenerationOutboxEvent(event),
+            )
+          } else if (
             event.type === 'ANSWER_VERIFICATION_REQUESTED' &&
             this.publisher.publishAnswerVerification
           ) {

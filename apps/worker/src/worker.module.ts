@@ -1,4 +1,5 @@
 import {
+  LangChainCourseGenerator,
   LangChainPlanGenerator,
   LangChainNoteVerifier,
   LangChainFollowUpGenerator,
@@ -11,6 +12,9 @@ import { ConfigModule, WORKER_ENVIRONMENT } from './config/config.module.js'
 import type { WorkerEnvironment } from './config/environment.js'
 import { DatabaseModule } from './database/database.module.js'
 import { DatabaseService } from './database/database.service.js'
+import { CourseGenerationJobProcessor } from './course-generation/course-generation-job-processor.js'
+import { CourseGenerationRunRepository } from './course-generation/course-generation-run.repository.js'
+import { FinalizeCourseGenerationRun } from './course-generation/finalize-course-generation-run.js'
 import { BoundCommitEvidenceReader } from './github/read-bound-commit-evidence.js'
 import { GitHubEvidenceJobProcessor } from './github/github-evidence-job-processor.js'
 import {
@@ -135,6 +139,26 @@ const answerProcessorProvider: Provider<AnswerVerificationJobProcessor> = {
     ),
 }
 
+const courseGenerationRunRepositoryProvider: Provider<CourseGenerationRunRepository> = {
+  provide: CourseGenerationRunRepository,
+  inject: [DatabaseService],
+  useFactory: (database: DatabaseService) => new CourseGenerationRunRepository(database.client),
+}
+const courseGenerationJobProcessorProvider: Provider<CourseGenerationJobProcessor> = {
+  provide: CourseGenerationJobProcessor,
+  inject: [DatabaseService, WORKER_ENVIRONMENT],
+  useFactory: (database: DatabaseService, environment: WorkerEnvironment) =>
+    new CourseGenerationJobProcessor(
+      new CourseGenerationRunRepository(database.client),
+      new LangChainCourseGenerator({
+        structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
+        ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
+        ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
+      }),
+      new FinalizeCourseGenerationRun(database.client),
+    ),
+}
+
 @Module({
   imports: [ConfigModule, DatabaseModule],
   providers: [
@@ -142,6 +166,8 @@ const answerProcessorProvider: Provider<AnswerVerificationJobProcessor> = {
     planGenerationPortProvider,
     planGenerationFinalizerProvider,
     planGenerationJobProcessorProvider,
+    courseGenerationRunRepositoryProvider,
+    courseGenerationJobProcessorProvider,
     gitHubEvidenceProcessorProvider,
     noteRunRepositoryProvider,
     noteProcessorProvider,

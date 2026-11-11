@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { NonRetryableOutboxDispatchError } from '../src/outbox/outbox-dispatch-error.js'
 import {
   parsePlanGenerationOutboxEvent,
+  parseCourseGenerationOutboxEvent,
   parseGitHubPushOutboxEvent,
   parseGitHubEvidenceRetryOutboxEvent,
   type LockedOutboxEvent,
@@ -91,6 +92,28 @@ describe('Plan generation outbox event parsing', () => {
     expect(() => parsePlanGenerationOutboxEvent(createEvent({ schemaVersion: 2 }))).toThrow(
       'Unsupported outbox schema version 2',
     )
+  })
+})
+
+describe('Course generation outbox event parsing', () => {
+  it('keeps the run identity aligned across payload, aggregate, and deduplication key', () => {
+    const generationRunId = randomUUID()
+    const event = createEvent({
+      type: 'COURSE_GENERATION_REQUESTED',
+      aggregateId: generationRunId,
+      deduplicationKey: `course-generation-requested-${generationRunId}`,
+      payload: { generationRunId },
+    })
+    expect(parseCourseGenerationOutboxEvent(event)).toEqual({
+      eventId: event.id,
+      payload: { generationRunId },
+    })
+    expect(() =>
+      parseCourseGenerationOutboxEvent({
+        ...event,
+        deduplicationKey: `course-generation-requested-${randomUUID()}`,
+      }),
+    ).toThrow(NonRetryableOutboxDispatchError)
   })
 })
 
