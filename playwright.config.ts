@@ -46,7 +46,8 @@ export default defineConfig({
         GITHUB_WEBHOOK_SECRET: webhookSecret,
         PLAN_GENERATION_MODELS_JSON:
           '[{"id":"r16-fixture","label":"R16 合成模型","model":"r16-fixture"}]',
-        OPENAI_API_KEY: '',
+        OPENAI_API_KEY: 'r16-synthetic-model-key',
+        OPENAI_BASE_URL: 'http://127.0.0.1:4500/v1',
       },
     },
     {

@@ -46,6 +46,86 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   await page.getByRole('button', { name: '开始学习', exact: true }).click()
   await expect(page.getByLabel('任务状态：进行中', { exact: true })).toBeVisible()
 
+  const explanation = page
+    .getByRole('heading', { name: '任务与调用栈', exact: true })
+    .locator('..')
+    .locator('p')
+    .first()
+  await explanation.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+  })
+  await expect(page.getByText('任务与调用栈 · 选中原文', { exact: true })).toBeVisible()
+  await page.getByLabel('深入原理', { exact: false }).check()
+  await page.getByLabel('你的问题', { exact: true }).fill('为什么这里不会阻塞下一次渲染？')
+  f.questionUpstream.state.failNext = true
+  await page.getByRole('button', { name: '发送问题', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'AI 暂时无法回答' })).toBeVisible()
+  await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue(
+    '为什么这里不会阻塞下一次渲染？',
+  )
+  await page.getByRole('button', { name: '重试回答', exact: true }).click()
+  await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false })).toBeVisible({
+    timeout: 15_000,
+  })
+  expect(f.questionUpstream.calls).toHaveLength(2)
+  expect(f.questionUpstream.calls[1]?.maxTokens).toBe(2048)
+  const modelRequest = JSON.parse(f.questionUpstream.calls[1]!.body) as {
+    messages: { role: string; content: string }[]
+  }
+  const learnerContext = modelRequest.messages.find((message) => message.role === 'user')?.content
+  expect(learnerContext).not.toContain('correctOptionId')
+  expect(learnerContext).not.toContain('rubric')
+  expect(learnerContext).not.toContain('exercises')
+
+  await page.reload()
+  await expect(
+    page.getByText('为什么这里不会阻塞下一次渲染？', { exact: true }).first(),
+  ).toBeVisible()
+  await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false })).toBeVisible()
+  expect(f.questionUpstream.calls).toHaveLength(2)
+
+  const questionRequestIds: string[] = []
+  let unreadableNextResponse = true
+  await page.route(`**/tasks/${course.id}/course-questions`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    const input = route.request().postDataJSON() as { requestId: string }
+    questionRequestIds.push(input.requestId)
+    if (unreadableNextResponse) {
+      unreadableNextResponse = false
+      await route.fetch()
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+      return
+    }
+    await route.continue()
+  })
+  await page.getByRole('button', { name: '就本节提问', exact: true }).first().click()
+  await page.getByLabel('你的问题', { exact: true }).fill('刷新后还能确认这次提问吗？')
+  await page.getByRole('button', { name: '发送问题', exact: true }).click()
+  await expect(page.getByRole('button', { name: '重试回答', exact: true })).toBeVisible()
+  expect(f.questionUpstream.calls).toHaveLength(3)
+
+  await page.reload()
+  await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue(
+    '刷新后还能确认这次提问吗？',
+  )
+  await page.getByRole('button', { name: '发送问题', exact: true }).click()
+  await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue('')
+  expect(questionRequestIds).toHaveLength(2)
+  expect(questionRequestIds[1]).toBe(questionRequestIds[0])
+  expect(f.questionUpstream.calls).toHaveLength(3)
+  expect(
+    await page.evaluate(
+      ({ userId, taskId }) =>
+        sessionStorage.getItem(`knowledgeops:course-question-command:v1:${userId}:${taskId}`),
+      { userId: f.userId, taskId: course.id },
+    ),
+  ).toBeNull()
+
   const saved = await f.database.course.findUniqueOrThrow({
     where: { taskId: course.id },
     include: { versions: { include: { exerciseSet: true } }, generationRuns: true },
@@ -64,4 +144,10 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
+  await page.getByRole('button', { name: '关闭答疑', exact: true }).click()
+  await page.getByRole('button', { name: '课程答疑', exact: true }).click()
+  await expect(page.getByRole('button', { name: '关闭答疑', exact: true })).toBeVisible()
+  await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false }).last()).toBeVisible()
+  await page.getByRole('button', { name: '关闭答疑', exact: true }).click()
+  await expect(page.getByRole('button', { name: '课程答疑', exact: true })).toBeVisible()
 })

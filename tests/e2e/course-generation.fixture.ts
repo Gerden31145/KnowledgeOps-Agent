@@ -3,6 +3,7 @@ import { test as base, expect } from '@playwright/test'
 import { createDatabaseClient } from '../../packages/database/dist/index.js'
 import { hashToken, opaqueToken } from '../../apps/api/src/identity/auth-http.js'
 import { createCoursePipelineWorker } from '../../apps/worker/test/fixtures/e2e-course-worker.js'
+import { createCourseQuestionUpstream } from '../../apps/worker/test/fixtures/e2e-course-question-upstream.js'
 import { databaseUrl, redisUrl, webOrigin } from './environment.js'
 
 export const test = base.extend<{
@@ -10,6 +11,7 @@ export const test = base.extend<{
     userId: string
     database: ReturnType<typeof createDatabaseClient>
     worker: ReturnType<typeof createCoursePipelineWorker>
+    questionUpstream: ReturnType<typeof createCourseQuestionUpstream>
   }
 }>({
   courseFlow: async ({ context }, use) => {
@@ -17,6 +19,7 @@ export const test = base.extend<{
     const userId = randomUUID()
     const token = opaqueToken()
     const worker = createCoursePipelineWorker(database, redisUrl)
+    const questionUpstream = createCourseQuestionUpstream()
     try {
       await database.user.create({
         data: {
@@ -31,6 +34,7 @@ export const test = base.extend<{
         },
       })
       await worker.start()
+      await questionUpstream.start()
       await context.addCookies([
         {
           name: 'knowledgeops_session',
@@ -41,10 +45,11 @@ export const test = base.extend<{
           sameSite: 'Lax',
         },
       ])
-      await use({ userId, database, worker })
+      await use({ userId, database, worker, questionUpstream })
     } finally {
       try {
         await worker.close()
+        await questionUpstream.close()
         const planRuns = await database.planGenerationRun.findMany({
           where: { goal: { userId } },
           select: { id: true },

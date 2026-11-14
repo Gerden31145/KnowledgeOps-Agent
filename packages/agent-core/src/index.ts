@@ -43,6 +43,24 @@ export {
   LangChainCourseGenerator,
 } from './course-generation/langchain-course-generator.js'
 export {
+  COURSE_QUESTION_OUTPUT_SCHEMA_VERSION,
+  COURSE_QUESTION_POLICIES,
+  COURSE_QUESTION_PROMPT_VERSION,
+  InvalidCourseQuestionAnswerError,
+  InvalidCourseQuestionRequestError,
+  courseQuestionAnswerSchema,
+  courseQuestionRequestSchema,
+  generateCourseQuestionAnswer,
+  type CourseQuestionAnswer,
+  type CourseQuestionOptions,
+  type CourseQuestionPort,
+  type CourseQuestionRequest,
+} from './course-question/course-question.js'
+export {
+  CourseQuestionModelError,
+  LangChainCourseQuestionAnswering,
+} from './course-question/langchain-course-question-answering.js'
+export {
   noteSemanticCriterionTypeSchema,
   noteVerificationCandidateSchema,
   noteVerificationRequestSchema,

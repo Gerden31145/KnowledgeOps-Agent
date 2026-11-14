@@ -4,6 +4,8 @@ import {
   type WorkspaceEntryResponse,
   confirmPlanResponseSchema,
   courseGenerationAcceptedResponseSchema,
+  courseQuestionHistoryResponseSchema,
+  courseQuestionSchema,
   learningGoalResponseSchema,
   planDetailResponseSchema,
   planGenerationAcceptedResponseSchema,
@@ -15,6 +17,9 @@ import {
   type ConfirmPlanResponse,
   type CourseGenerationAcceptedResponse,
   type RequestCourseGenerationInput,
+  type AskCourseQuestionInput,
+  type CourseQuestion,
+  type CourseQuestionHistoryResponse,
   type LearningGoalInput,
   type LearningGoalResponse,
   type PlanDetailResponse,
@@ -131,6 +136,8 @@ export interface KnowledgeOpsApi {
     taskId: string,
     input: RequestCourseGenerationInput,
   ): Promise<CourseGenerationAcceptedResponse>
+  askCourseQuestion(taskId: string, input: AskCourseQuestionInput): Promise<CourseQuestion>
+  getCourseQuestions(taskId: string, signal?: AbortSignal): Promise<CourseQuestionHistoryResponse>
   getTodayTasks(signal?: AbortSignal): Promise<TodayTasksResponse>
   getTask(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse>
   getNoteVerificationRun(runId: string, signal?: AbortSignal): Promise<NoteVerificationRunResponse>
@@ -280,6 +287,20 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         `/tasks/${encodeURIComponent(taskId)}/course-generation-runs`,
         courseGenerationAcceptedResponseSchema,
         jsonRequest('POST', input),
+      ),
+    askCourseQuestion: (taskId, input) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/course-questions`,
+        courseQuestionSchema,
+        { ...jsonRequest('POST', input), signal: AbortSignal.timeout(70_000) },
+      ),
+    getCourseQuestions: (taskId, signal) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/course-questions`,
+        courseQuestionHistoryResponseSchema,
+        { signal: repositorySignal(signal) },
       ),
     getTodayTasks: (signal) =>
       request(baseUrl, '/tasks/today', todayTasksResponseSchema, { signal }),

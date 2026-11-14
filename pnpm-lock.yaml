@@ -74,6 +74,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@knowledgeops/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       '@knowledgeops/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

@@ -82,6 +82,20 @@ export {
   type ExerciseSetBody,
 } from './domain/course.js'
 export {
+  COURSE_QUESTION_DEPTHS,
+  COURSE_QUESTION_STATUSES,
+  askCourseQuestionInputSchema,
+  courseQuestionDepthSchema,
+  courseQuestionHistoryResponseSchema,
+  courseQuestionSchema,
+  courseQuestionStatusSchema,
+  type AskCourseQuestionInput,
+  type CourseQuestion,
+  type CourseQuestionDepth,
+  type CourseQuestionHistoryResponse,
+  type CourseQuestionStatus,
+} from './http/course-question.js'
+export {
   COURSE_GENERATION_JOB_ID_PREFIX,
   COURSE_GENERATION_JOB_NAME,
   COURSE_GENERATION_OUTBOX_SCHEMA_VERSION,

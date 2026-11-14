@@ -166,7 +166,7 @@ export class PlanRepository {
                     generationRuns: {
                       orderBy: { queuedAt: 'desc' },
                       take: 1,
-                      select: { id: true, errorCode: true, errorMessage: true },
+                      select: { id: true, queuedAt: true, errorCode: true, errorMessage: true },
                     },
                   },
                 },
@@ -294,7 +294,7 @@ export class PlanRepository {
             generationRuns: {
               orderBy: { queuedAt: 'desc' },
               take: 1,
-              select: { id: true, errorCode: true, errorMessage: true },
+              select: { id: true, queuedAt: true, errorCode: true, errorMessage: true },
             },
             versions: { orderBy: { version: 'desc' }, take: 1, select: { content: true } },
           },
@@ -382,7 +382,12 @@ function summarizeCriterion({
 function summarizeCourse(
   course: {
     status: CourseStatus
-    generationRuns: { id: string; errorCode: string | null; errorMessage: string | null }[]
+    generationRuns: {
+      id: string
+      queuedAt: Date
+      errorCode: string | null
+      errorMessage: string | null
+    }[]
     versions?: { content: unknown }[]
   } | null,
   includeContent = false,
@@ -395,6 +400,7 @@ function summarizeCourse(
   return {
     status: course.status,
     generationRunId: latest?.id ?? null,
+    generationQueuedAt: latest?.queuedAt.toISOString() ?? null,
     ...(includeContent ? { sections: content.success ? content.data.sections : null } : {}),
     error: latest?.errorCode
       ? {

@@ -139,6 +139,7 @@ describe('workspace HTTP contracts', () => {
       course: {
         status: 'READY',
         generationRunId: ids.run,
+        generationQueuedAt: null,
         sections: [
           {
             id: 'event-loop',

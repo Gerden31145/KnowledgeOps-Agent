@@ -7,6 +7,8 @@ export const knowledgeOpsQueryKeys = {
   tasks: () => ['knowledgeops', 'tasks'] as const,
   todayTasks: () => ['knowledgeops', 'tasks', 'today'] as const,
   task: (taskId: string) => ['knowledgeops', 'tasks', taskId] as const,
+  courseQuestions: (taskId: string) =>
+    ['knowledgeops', 'tasks', taskId, 'course-questions'] as const,
   noteVerificationRun: (taskId: string, runId: string) =>
     ['knowledgeops', 'tasks', taskId, 'note-verification-runs', runId] as const,
   noteRunEvidence: (taskId: string, runId: string) =>

@@ -4,6 +4,8 @@ export {
   AgentRunKind,
   AgentRunState,
   CourseStatus,
+  CourseQuestionDepth,
+  CourseQuestionStatus,
   OutboxEventType,
   PlanGenerationRunState,
   PlanStatus,

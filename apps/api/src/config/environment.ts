@@ -67,6 +67,19 @@ const apiEnvironmentSchema = z
     DEVELOPMENT_USER_TIMEZONE: z.string().trim().min(1).default('Asia/Shanghai'),
     PLAN_GENERATION_MODELS_JSON: configuredModelsSchema,
     PLAN_GENERATION_PROVIDER: z.literal('openai').default('openai'),
+    PLAN_GENERATION_OUTPUT_METHOD: z.enum(['jsonSchema', 'jsonMode']).default('jsonSchema'),
+    OPENAI_API_KEY: optionalSetting,
+    OPENAI_BASE_URL: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().url().optional(),
+    ),
+    COURSE_GENERATION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .max(30 * 60 * 1_000)
+      .default(10 * 60 * 1_000),
+    COURSE_QUESTION_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000),
     PLAN_GENERATION_OUTPUT_SCHEMA_VERSION: z
       .string()
       .trim()

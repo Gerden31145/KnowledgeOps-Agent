@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { markdownTargetPathSchema } from '@knowledgeops/contracts'
+import {
+  markdownTargetPathSchema,
+  type AskCourseQuestionInput,
+  type CourseSection,
+} from '@knowledgeops/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, nextTick, ref, watch } from 'vue'
 import { definePageMeta, useHead, useRoute, useRouter } from '#imports'
@@ -22,6 +26,30 @@ const taskId = computed(() => {
   return typeof value === 'string' ? value : null
 })
 const task = useTaskQuery(taskId)
+const courseGenerationNow = ref(Date.now())
+const courseGenerationElapsed = computed(() => {
+  const queuedAt = task.data.value?.course?.generationQueuedAt
+  if (!queuedAt) return '0:00'
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((courseGenerationNow.value - Date.parse(queuedAt)) / 1_000),
+  )
+  const minutes = Math.floor(elapsedSeconds / 60)
+  const seconds = String(elapsedSeconds % 60).padStart(2, '0')
+  return `${minutes}:${seconds}`
+})
+watch(
+  () => task.data.value?.course?.status === 'GENERATING',
+  (generating, _previous, onCleanup) => {
+    courseGenerationNow.value = Date.now()
+    if (!generating || !import.meta.client) return
+    const timer = window.setInterval(() => {
+      courseGenerationNow.value = Date.now()
+    }, 1_000)
+    onCleanup(() => window.clearInterval(timer))
+  },
+  { immediate: true },
+)
 const binding = useQuery({
   queryKey: computed(() => ['knowledgeops', 'repository-binding', user.value?.id]),
   queryFn: ({ signal }) => api.getRepositoryBinding(signal),
@@ -95,6 +123,10 @@ watch(
 watch(taskId, () => {
   pinnedRunId.value = null
   copied.value = ''
+  questionSection.value = null
+  questionSelection.value = ''
+  questionPanelOpen.value = false
+  selectionError.value = ''
 })
 const newRunAvailable = computed(() =>
   Boolean(noteRuns.value[0] && selectedRunId.value !== noteRuns.value[0]?.id),
@@ -171,6 +203,47 @@ async function prepareCourse() {
   } catch (error: unknown) {
     startError.value = error instanceof Error ? error.message : '课程生成请求失败。'
   }
+}
+
+const questionSection = ref<CourseSection | null>(null)
+const questionSelection = ref('')
+const questionPanelOpen = ref(false)
+const selectionError = ref('')
+
+function askAboutSection(section: CourseSection) {
+  questionSection.value = section
+  questionSelection.value = section.title
+  selectionError.value = ''
+  questionPanelOpen.value = true
+}
+
+function restoreCourseQuestion(input: AskCourseQuestionInput) {
+  const section = task.data.value?.course?.sections?.find((item) => item.id === input.sectionId)
+  if (!section) return
+  questionSection.value = section
+  questionSelection.value = input.selectedText
+  questionPanelOpen.value = true
+}
+
+function captureCourseSelection(
+  section: CourseSection,
+  event: MouseEvent | KeyboardEvent | TouchEvent,
+) {
+  const selection = window.getSelection()
+  const container = event.currentTarget as HTMLElement
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+  const range = selection.getRangeAt(0)
+  if (!container.contains(range.commonAncestorContainer)) return
+  const selectedText = selection.toString().trim()
+  if (selectedText.length < 2) return
+  if (selectedText.length > 2_000) {
+    selectionError.value = '一次最多选择 2000 个字符，请缩小选文范围。'
+    return
+  }
+  questionSection.value = section
+  questionSelection.value = selectedText
+  selectionError.value = ''
+  questionPanelOpen.value = true
 }
 
 async function startTask() {
@@ -258,12 +331,29 @@ async function startTask() {
         >
           <p class="text-body">{{ task.data.value.description }}</p>
           <p class="mt-3 text-base text-muted">预计 {{ task.data.value.estimatedMinutes }} 分钟</p>
-          <AsyncStatePanel
+          <section
             v-if="task.data.value.course?.status === 'GENERATING'"
-            class="mt-5"
-            title="正在准备课程"
-            description="课程讲解和练习会一起保存，完成后即可开始学习。"
-          />
+            class="mt-5 border border-hairline bg-surface-soft p-6 md:p-8"
+            aria-labelledby="course-generation-title"
+          >
+            <h2 id="course-generation-title" class="text-section-title font-medium">
+              生成中<span class="course-generation-ellipsis" aria-hidden="true">...</span>
+            </h2>
+            <p class="mt-3 max-w-2xl text-reading text-body">
+              课程讲解和练习会一起保存，完成后即可开始学习。
+            </p>
+            <div
+              class="mt-6 h-1 overflow-hidden bg-hairline"
+              role="progressbar"
+              aria-label="课程正在生成，具体进度暂不可知"
+            >
+              <div class="course-generation-progress h-full w-1/3 bg-ink"></div>
+            </div>
+            <p class="mt-3 text-base text-muted" aria-hidden="true">
+              已等待 {{ courseGenerationElapsed }}
+            </p>
+            <p class="sr-only" role="status">课程正在生成，完成后即可开始学习。</p>
+          </section>
           <div v-else-if="task.data.value.course?.status !== 'READY'" class="mt-5">
             <p class="text-body">
               {{
@@ -298,23 +388,53 @@ async function startTask() {
               {{ start.isPending.value ? '启动中…' : '开始学习' }}
             </button>
           </div>
-          <div v-if="task.data.value.course.sections" class="space-y-8">
-            <section
-              v-for="section in task.data.value.course.sections"
-              :key="section.id"
-              class="border-b border-hairline pb-8"
-            >
-              <h2 class="text-section-title font-medium">{{ section.title }}</h2>
-              <p class="mt-4 whitespace-pre-line text-body">{{ section.explanation }}</p>
-              <h3 class="mt-5 text-base font-medium text-ink">开发情景</h3>
-              <p class="mt-2 whitespace-pre-line text-body">{{ section.scenario }}</p>
-              <h3 class="mt-5 text-base font-medium text-ink">示例</h3>
-              <p class="mt-2 whitespace-pre-line text-body">{{ section.example }}</p>
-              <p class="mt-4 border-l-2 border-warning pl-4 text-base text-body">
-                易错点：{{ section.misconception }}
-              </p>
-            </section>
-            <p class="text-base text-muted">练习已随课程准备完成；作答与验收将在下一阶段开放。</p>
+          <div v-if="task.data.value.course.sections">
+            <p class="mb-5 text-base text-muted">选中一段原文即可提问；也可以就整节内容交流。</p>
+            <p v-if="selectionError" class="mb-5 text-base text-warning" role="alert">
+              {{ selectionError }}
+            </p>
+            <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-8">
+              <div class="space-y-8">
+                <section
+                  v-for="section in task.data.value.course.sections"
+                  :key="section.id"
+                  class="border-b border-hairline pb-8"
+                  @mouseup="captureCourseSelection(section, $event)"
+                  @keyup="captureCourseSelection(section, $event)"
+                  @touchend="captureCourseSelection(section, $event)"
+                >
+                  <h2 class="text-section-title font-medium">{{ section.title }}</h2>
+                  <p class="mt-4 whitespace-pre-line text-body">{{ section.explanation }}</p>
+                  <h3 class="mt-5 text-base font-medium text-ink">开发情景</h3>
+                  <p class="mt-2 whitespace-pre-line text-body">{{ section.scenario }}</p>
+                  <h3 class="mt-5 text-base font-medium text-ink">示例</h3>
+                  <p class="mt-2 whitespace-pre-line text-body">{{ section.example }}</p>
+                  <p class="mt-4 border-l-2 border-warning pl-4 text-base text-body">
+                    易错点：{{ section.misconception }}
+                  </p>
+                  <button
+                    class="action-button mt-4"
+                    type="button"
+                    @click="askAboutSection(section)"
+                  >
+                    就本节提问
+                  </button>
+                </section>
+                <p class="text-base text-muted">
+                  练习已随课程准备完成；作答与验收将在下一阶段开放。
+                </p>
+              </div>
+              <CourseQuestionPanel
+                :key="task.data.value.id"
+                :task-id="task.data.value.id"
+                :section="questionSection"
+                :selected-text="questionSelection"
+                :open="questionPanelOpen"
+                @open="questionPanelOpen = true"
+                @close="questionPanelOpen = false"
+                @restore="restoreCourseQuestion"
+              />
+            </div>
           </div>
           <AsyncStatePanel
             v-else
@@ -586,3 +706,50 @@ async function startTask() {
     </article>
   </div>
 </template>
+
+<style scoped>
+.course-generation-ellipsis {
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  vertical-align: bottom;
+  white-space: nowrap;
+  animation: course-generation-ellipsis 1.2s steps(3, end) infinite;
+}
+
+.course-generation-progress {
+  animation: course-generation-progress 1.8s ease-in-out infinite;
+}
+
+@keyframes course-generation-ellipsis {
+  from {
+    width: 0;
+  }
+  to {
+    width: 3ch;
+  }
+}
+
+@keyframes course-generation-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-generation-ellipsis {
+    width: 3ch;
+    animation: none;
+  }
+
+  .course-generation-progress {
+    width: 100%;
+    opacity: 0.35;
+    animation: none;
+    transform: none;
+  }
+}
+</style>

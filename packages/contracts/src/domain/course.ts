@@ -124,6 +124,7 @@ export const courseGenerationSummarySchema = z
   .object({
     status: courseStatusSchema,
     generationRunId: entityIdSchema.nullable(),
+    generationQueuedAt: z.iso.datetime().nullable(),
     error: z
       .object({
         code: z.string().trim().min(1).max(64),

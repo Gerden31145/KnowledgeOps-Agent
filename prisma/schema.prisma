@@ -44,6 +44,18 @@ enum CourseKnowledgeRole {
   REVIEW
 }
 
+enum CourseQuestionDepth {
+  QUICK
+  CONTEXTUAL
+  DEEP
+}
+
+enum CourseQuestionStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum AcceptanceCriterionType {
   FILE_CHANGED
   SECTION_PRESENT
@@ -87,17 +99,18 @@ enum AgentRunState {
 }
 
 model User {
-  id                String         @id @default(uuid()) @db.Uuid
-  githubUserId      String?        @unique @map("github_user_id")
-  githubLogin       String?        @map("github_login")
-  timezone          String         @default("Asia/Shanghai")
-  preferredModelId  String?        @map("preferred_model_id") @db.VarChar(100)
+  id                String           @id @default(uuid()) @db.Uuid
+  githubUserId      String?          @unique @map("github_user_id")
+  githubLogin       String?          @map("github_login")
+  timezone          String           @default("Asia/Shanghai")
+  preferredModelId  String?          @map("preferred_model_id") @db.VarChar(100)
   goals             LearningGoal[]
   sessions          Session[]
+  courseQuestions   CourseQuestion[]
   repositories      Repository[]
-  repositoryVersion Int            @default(0) @map("repository_version")
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  repositoryVersion Int              @default(0) @map("repository_version")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("users")
 }
@@ -441,10 +454,38 @@ model CourseVersion {
   course          Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   generationRun   CourseGenerationRun @relation(fields: [generationRunId], references: [id], onDelete: Restrict)
   exerciseSet     ExerciseSet?
+  questions       CourseQuestion[]
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([courseId, version])
   @@map("course_versions")
+}
+
+model CourseQuestion {
+  id              String               @id @default(uuid()) @db.Uuid
+  courseVersionId String               @map("course_version_id") @db.Uuid
+  userId          String               @map("user_id") @db.Uuid
+  requestId       String               @map("request_id") @db.Uuid
+  fingerprint     String               @db.Char(64)
+  sectionId       String               @map("section_id") @db.VarChar(64)
+  selectedText    String               @map("selected_text") @db.Text
+  question        String               @db.Text
+  depth           CourseQuestionDepth
+  status          CourseQuestionStatus @default(RUNNING)
+  answer          String?              @db.Text
+  errorCode       String?              @map("error_code") @db.VarChar(64)
+  modelCatalogId  String               @map("model_catalog_id") @db.VarChar(100)
+  modelProvider   String               @map("model_provider") @db.VarChar(64)
+  modelName       String               @map("model_name") @db.VarChar(160)
+  completedAt     DateTime?            @map("completed_at") @db.Timestamptz(3)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  courseVersion   CourseVersion        @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@index([courseVersionId, userId, createdAt])
+  @@map("course_questions")
 }
 
 model ExerciseSet {

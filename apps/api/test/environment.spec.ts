@@ -10,6 +10,15 @@ describe('API environment', () => {
     expect(environment.PLAN_GENERATION_OUTPUT_SCHEMA_VERSION).toBe('plan-generation-output-v3')
   })
 
+  it('uses independent deadlines for plan and course generation', () => {
+    const environment = readApiEnvironment({})
+    expect(environment.PLAN_GENERATION_TIMEOUT_MS).toBe(180_000)
+    expect(environment.COURSE_GENERATION_TIMEOUT_MS).toBe(600_000)
+    expect(
+      readApiEnvironment({ COURSE_GENERATION_TIMEOUT_MS: '420000' }).COURSE_GENERATION_TIMEOUT_MS,
+    ).toBe(420_000)
+  })
+
   it('accepts an optional absolute private key path without loading or exposing the key', () => {
     expect(readApiEnvironment({}).GITHUB_APP_PRIVATE_KEY_PATH).toBeUndefined()
     expect(
