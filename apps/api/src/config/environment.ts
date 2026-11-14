@@ -79,7 +79,6 @@ const apiEnvironmentSchema = z
       .min(10_000)
       .max(30 * 60 * 1_000)
       .default(10 * 60 * 1_000),
-    COURSE_QUESTION_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000),
     PLAN_GENERATION_OUTPUT_SCHEMA_VERSION: z
       .string()
       .trim()

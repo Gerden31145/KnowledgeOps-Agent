@@ -83,10 +83,11 @@ describe('Worker environment', () => {
     )
   })
 
-  it('coerces bounded BullMQ and outbox settings', () => {
+  it('coerces bounded BullMQ, question timeout, and outbox settings', () => {
     const environment = readWorkerEnvironment({
       BULLMQ_JOB_ATTEMPTS: '4',
       BULLMQ_JOB_BACKOFF_MS: '500',
+      COURSE_QUESTION_TIMEOUT_MS: '45000',
       OUTBOX_BATCH_SIZE: '10',
       OUTBOX_POLL_INTERVAL_MS: '250',
       OUTBOX_RETRY_BASE_DELAY_MS: '200',
@@ -96,11 +97,13 @@ describe('Worker environment', () => {
     expect(environment).toMatchObject({
       BULLMQ_JOB_ATTEMPTS: 4,
       BULLMQ_JOB_BACKOFF_MS: 500,
+      COURSE_QUESTION_TIMEOUT_MS: 45_000,
       OUTBOX_BATCH_SIZE: 10,
       OUTBOX_POLL_INTERVAL_MS: 250,
       OUTBOX_RETRY_BASE_DELAY_MS: 200,
       OUTBOX_RETRY_MAX_DELAY_MS: 5000,
     })
+    expect(readWorkerEnvironment({}).COURSE_QUESTION_TIMEOUT_MS).toBe(60_000)
   })
 
   it('rejects a retry cap below the initial retry delay', () => {

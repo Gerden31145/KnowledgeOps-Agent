@@ -9,12 +9,13 @@ import {
   ConflictException,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
-  ServiceUnavailableException,
 } from '@nestjs/common'
 
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js'
@@ -23,7 +24,6 @@ import {
   CourseQuestionConflictError,
   CourseQuestionNotFoundError,
   CourseQuestionService,
-  CourseQuestionUnavailableError,
 } from './course-question.service.js'
 
 @Controller()
@@ -34,6 +34,7 @@ export class CourseQuestionController {
   ) {}
 
   @Post('tasks/:taskId/course-questions')
+  @HttpCode(HttpStatus.ACCEPTED)
   async ask(
     @Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string,
     @Body(new ZodValidationPipe(askCourseQuestionInputSchema)) input: AskCourseQuestionInput,
@@ -67,10 +68,5 @@ function httpError(error: unknown) {
     })
   if (error instanceof CourseQuestionConflictError)
     return new ConflictException({ code: 'CONFLICT', message: error.message })
-  if (error instanceof CourseQuestionUnavailableError)
-    return new ServiceUnavailableException({
-      code: 'DEPENDENCY_UNAVAILABLE',
-      message: 'AI 暂时无法回答，请保留问题并稍后重试。',
-    })
   return error
 }

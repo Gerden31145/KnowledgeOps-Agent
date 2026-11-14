@@ -11,8 +11,8 @@
 | 确定任务预算 | R14 收尾后原未完成单元合计约 47 小时，其中原冻结前任务约 43 小时，超过 9/22 至 9/27 容量约 21 至 25 小时；是待完成工作量，不是月底完成承诺。包含入门、阅读、手写、Review、验证、复述、周问答与文档 |
 | 预算性质 | 用户项目投入估算，不是 AI 编码耗时或完成保证；按真实耗时复盘，剩余容量留作缓冲 |
 | 当前活动阶段 | M7 `AI_IMPLEMENTING`：站内课程学习、选文答疑、练习验收与计划内画像；M6 保持 DONE，不重开历史单元 |
-| 当前活动单元 | L02 `DONE`（以本次本地提交成功为准）：阅读、三级深度选文答疑、历史与刷新后命令恢复完成；L01 已完成并提交 `e276a08` |
-| 下一步 | 完成 L02 本地提交；后续在既有 M7 授权下进入 L03 练习与混合验收导读，不在本次收尾提前实现。邮箱注册/登录在 M7 后另行讨论 |
+| 当前活动单元 | L02R `DONE`（以本次本地提交成功为准）：异步受理、Worker 执行、超时恢复、观察与短复述完成；L02 已提交 `e3a531c` |
+| 下一步 | 完成 L02R 本地提交；后续在既有 M7 授权下进入 L03 练习与混合验收导读，不在本次收尾提前实现 |
 | 真相源 | [求职版 PRD](KnowledgeOps-Agent-9月求职版PRD.md)、[协作规则](../AGENTS.md)、[阶段技能](../.agents/skills/run-interview-project-stage/SKILL.md)、[学习档案](../问答.md) |
 
 旧计划剩余 22 个开发日，按此前每个至少 4 小时估算已超过 88 小时，尚未包含阶段收尾。因此本次同时减少实现范围和重复学习关卡，不将旧日期整体顺延。
@@ -24,7 +24,8 @@
 | 单元 | 一个主要目标与可观察结果 | 学习预算 | 状态 |
 | --- | --- | --- | --- |
 | L01 课程路线与学习包 | 目标生成 3 至 8 门课程；确认后异步生成首课，正文与 4 道单选 + 1 道追问同时原子落库；失败重试、重复恢复、READY 后开始 | 4 至 5 小时 | `DONE`，本地提交 `e276a08`，导读、复述与工程验证完成 |
-| L02 阅读与选文答疑 | 课程阅读器、单区块选文、桌面侧栏/移动抽屉；快速解惑/情境理解/深入原理三级控制与历史恢复 | 4 至 5 小时 | `DONE`（以本次本地提交成功为准），导读、复述与工程验证完成 |
+| L02 阅读与选文答疑 | 课程阅读器、单区块选文、桌面侧栏/移动抽屉；快速解惑/情境理解/深入原理三级控制与历史恢复 | 4 至 5 小时 | `DONE`，本地提交 `e3a531c`，导读、复述与工程验证完成 |
+| L02R 答疑队列化 | API 原子保存 CourseQuestion + Outbox 并返回 202；Worker 幂等执行与超时清扫；前端按活动状态轮询 | 2 至 3 小时 | `DONE`（以本次本地提交成功为准），观察、导读、复述与工程验证完成 |
 | L03 练习与混合验收 | 提交前隐藏答案；程序判单选、Agent 验追问；报告、重答、Task 通过与依赖解锁 | 4 至 5 小时 | `NOT_STARTED` |
 | L04 计划内知识画像 | 逐题证据、确定性掌握等级、易错点来源；后续课程最多结合两个相关薄弱点复习 | 3 至 4 小时 | `NOT_STARTED` |
 | L05 闭环与真实模型验收 | 双用户隔离、故障恢复、移动端/键盘、固定真实模型样例和材料更新 | 3 至 4 小时 | `NOT_STARTED` |
@@ -46,6 +47,16 @@ L02 收尾同时补足真实生成观察后的工程反馈：课程生成使用�
 L02 工程证据（2026-11-11 初验，2026-11-14 最终回归）：新增迁移已应用到本地开发库和独立 E2E 库；最终 `pnpm check` 通过格式、lint、类型、Prisma 校验及 83 个测试文件 874 项单元测试，M7 真实 PostgreSQL 集成 6 项、最终工作树 Chromium 23 项和完整生产构建通过。覆盖深度策略与 Token 上限、成功重放、并发去重、跨用户隔离、伪造选文拒绝、模型失败不改业务状态；浏览器实际执行文本选择、深入原理提问、模型失败保留问题并以新请求重试、刷新恢复且不重复请求、390px 无横向溢出和移动抽屉关闭。新增“服务端已保存成功但前端收到不可读响应”场景，验证刷新恢复完整命令、以同 requestId 重放、模型不重复调用及成功后清理 sessionStorage。
 
 最终回归首次发现旧契约夹具缺少 generationQueuedAt，补为 null 后标准检查通过，没有放宽必填契约。浏览器用例调试中还修正了错误的 `/api` 拦截前缀、打开状态假设和多条相同答案的严格定位；最终产品行为与全部套件通过，未删除失败场景。早期 E2E 曾误把系统提示中的“禁止评分标准泄露”当作练习泄露，已改为只检查模型用户上下文。自动化模型响应均为合成内容，无真实模型质量、Token 费用或生产验收结论。
+
+### L02R 选文答疑队列化（2026-11-14）
+
+用户在 L02 完成后指出长任务不应由 API 同步等待，并明确授权直接队列化。本次是新增的可靠性增补，不改写 L02 已完成历史，也不启动 L03。IN：复用 CourseQuestion 作为业务与执行记录，新增 QUEUED、executionVersion、deadlineAt 和 COURSE_QUESTION_REQUESTED Outbox/BullMQ 消费；API 在同一事务保存问题与待办后返回 202，Worker 调用模型并写回，前端轮询活动历史。OUT：SSE、模型逐字流、练习提交、画像、生产发布和邮箱登录。
+
+同 userId + requestId 且内容一致时，QUEUED/RUNNING/SUCCEEDED/FAILED 都返回原记录，不重复创建 Outbox 或调用模型；内容变化仍冲突。Worker 以行锁认领 QUEUED，递增执行版本并保存截止时间；成功和失败只更新匹配的 RUNNING 版本，周期清扫把过期执行置为 FAILED，迟到结果不得覆盖。API 不再持有 60 秒模型请求，模型失败由历史状态呈现；202 只代表受理。旧同步 RUNNING 记录在迁移中保留问题并标记 EXECUTION_INTERRUPTED，不伪造成功或自动重放付费调用。
+
+主体已完成并应用本地迁移。最终证据：`pnpm check` 通过格式、lint、类型、Prisma 校验及 84 个文件 878 项单测；M7 PostgreSQL 集成 8 项、最终工作树 Chromium 23 项和完整生产构建通过。覆盖原子受理、并发/任意状态幂等重放、Worker 成功与失败、执行版本围栏、超时清扫、迟到结果拒绝及运行时队列关闭。浏览器实际走过异步模型失败、新请求重答、受理响应不可读后的同 ID 重放、不重复调用和移动抽屉。首次完整浏览器回归只在第三次模型调用发生前过早断言次数，改为等待真实异步调用后通过，未放宽产品校验。自动化均为合成模型，没有真实模型质量、生产或付费验收结论。
+
+用户已明确“已观察”。短复述原述要点：CourseQuestion 记录上下文和回答，Outbox 记录投递请求并交给 Worker，Worker 调用模型并写回；202 表示任务已持久化到 Outbox；FAILED 是终态，版本号阻止迟到结果落库。主要职责与版本围栏理解正确，复述通过。AI 校准 Dispatcher 负责读取 Outbox 并发布 BullMQ、Worker 从队列领取，以及 202 仅证明 CourseQuestion + Outbox 原子受理而不证明 Redis 已投递或答案完成；校准内容不冒记为用户独立答出。实际学习耗时未报，单元 DONE 以本次本地提交成功为准。
 
 ### R19 启动与远端同步（2026-11-09）
 
@@ -599,11 +610,14 @@ flowchart LR
     CourseFinalizer -->|CourseVersion + ExerciseSet + Run SUCCEEDED + Course READY 原子落库；重复/迟到结果跳过| DB
     CourseFinalizer -->|失败/超时只记 Course FAILED 与 Run 终态；Task 保持 READY，可关联重试| DB
     DB -->|M7/L01：课程 READY 后无需 targetPath 即可开始；正文只读预览，不含练习答案| API
-    Web -->|M7/L02：完整命令先存 sessionStorage；单区块选文 + 问题 + 深度 + requestId| CourseQuestionApi[同步答疑 API]
-    CourseQuestionApi -->|本人 ACTIVE Plan 的 READY 课程；核对最新 CourseVersion 与真实选文| DB
-    CourseQuestionApi -->|先保存 RUNNING；只传课程/当前区块/选文和最多 6 条历史，不读 ExerciseSet| CourseAnswerModel[按深度限制结构、历史与输出上限]
-    CourseAnswerModel -->|成功保存答案；同 requestId 重放不重复调用；失败只记本次 FAILED，不改 Course/Task| DB
-    DB -->|M7/L02：最近 50 条本人问答；刷新恢复历史与本地未决命令，不自动重发| Web
+    Web -->|M7/L02R：完整命令先存 sessionStorage；选文 + 问题 + 深度 + requestId| CourseQuestionApi[答疑受理 API：202]
+    CourseQuestionApi -->|校验本人 READY 最新版本与真实选文；QUEUED + Outbox 同事务；同 ID 重放原状态| DB
+    DB -->|COURSE_QUESTION_REQUESTED| Dispatcher
+    Dispatcher -->|questionId 作为去重 Job ID| CourseQuestionWorker[认领 QUEUED；版本与 deadline 围栏]
+    CourseQuestionWorker -->|课程/区块/选文和按深度受限历史，不读 ExerciseSet| CourseAnswerModel[Worker 内模型调用]
+    CourseAnswerModel -->|候选答案或失败| CourseQuestionWorker
+    CourseQuestionWorker -->|只更新匹配 RUNNING 版本；超时清扫 FAILED；迟到结果不覆盖| DB
+    DB -->|M7/L02R：最近 50 条本人问答；QUEUED/RUNNING 轮询，刷新恢复且不自动重发| Web
 ```
 
 Dispatcher 和消费者目前同在 `apps/worker` 进程中，图按职责拆开。C1 成功写回箭头已通过正常图、回滚、终态/版本/deadline 跳过及同 Run 并发验收、Review 与短复述，并随 C1 独立提交。2026-09-08 R03 已观察浏览器真实 GLM 生成与刷新恢复、失败保留目标且没有 Plan、关联新 Run 重试成功、确认计划与开始任务；两个入口导读获用户确认，短复述通过，校准 Run/Outbox 提交先于 202、Dispatcher 后续投递及刷新可能读到运行中快照。GitHub/验收/SSE 后续只补本次变化，不把目标架构说成已实现。

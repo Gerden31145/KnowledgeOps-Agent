@@ -1,15 +1,13 @@
-import type { CourseQuestionPort, CourseQuestionRequest } from '@knowledgeops/agent-core'
 import type { AskCourseQuestionInput } from '@knowledgeops/contracts'
 import { createDatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { validCourseLearningPackage } from '../../../packages/agent-core/test/fixtures/course-generation.js'
 import {
   CourseQuestionConflictError,
   CourseQuestionNotFoundError,
   CourseQuestionService,
-  CourseQuestionUnavailableError,
 } from '../src/courses/course-question.service.js'
 
 const databaseUrl = process.env.DATABASE_URL
@@ -113,50 +111,80 @@ function input(requestId = randomUUID()): AskCourseQuestionInput {
   }
 }
 
-describe('M7 selected-text course questions', () => {
+async function cleanup(userId: string) {
+  const questions = await database.courseQuestion.findMany({
+    where: { userId },
+    select: { id: true },
+  })
+  await database.outboxEvent.deleteMany({
+    where: { aggregateId: { in: questions.map((question) => question.id) } },
+  })
+  await database.user.delete({ where: { id: userId } })
+}
+
+describe('M7 selected-text course question acceptance', () => {
   beforeAll(async () => database.$connect())
   afterAll(async () => database.$disconnect())
 
-  it('persists and replays a synchronized answer without reading exercise answers', async () => {
+  it('atomically saves a queued question and outbox, then replays the persisted state', async () => {
     const { userId, taskId } = await createReadyCourse()
     try {
-      const contexts: CourseQuestionRequest[] = []
-      const answer = vi.fn(async (request: CourseQuestionRequest) => {
-        contexts.push(request)
-        return { answer: '当前调用栈清空后，先处理微任务，再进入后续渲染调度。' }
-      })
-      const service = new CourseQuestionService(database, { answer }, 60_000)
+      const service = new CourseQuestionService(database)
       const command = input()
       const saved = await service.ask(userId, taskId, command)
-      expect(saved).toMatchObject({ status: 'SUCCEEDED', depth: 'CONTEXTUAL' })
-      expect(saved.answer).toContain('微任务')
-      await expect(service.ask(userId, taskId, command)).resolves.toEqual(saved)
-      expect(answer).toHaveBeenCalledOnce()
-      const context = contexts[0]!
-      expect(context.history).toEqual([])
-      expect(JSON.stringify(context)).not.toContain('correctOptionId')
-      expect(JSON.stringify(context)).not.toContain('rubric')
-      expect(JSON.stringify(context)).not.toContain('exercises')
+      expect(saved).toMatchObject({ status: 'QUEUED', answer: null, depth: 'CONTEXTUAL' })
+      const event = await database.outboxEvent.findUniqueOrThrow({
+        where: { deduplicationKey: `course-question-requested-${saved.id}` },
+      })
+      expect(event).toMatchObject({
+        type: 'COURSE_QUESTION_REQUESTED',
+        aggregateId: saved.id,
+        payload: { questionId: saved.id },
+        dispatchedAt: null,
+      })
+
+      await database.courseQuestion.update({
+        where: { id: saved.id },
+        data: {
+          status: 'RUNNING',
+          executionVersion: 1,
+          deadlineAt: new Date(Date.now() + 60_000),
+        },
+      })
+      await expect(service.ask(userId, taskId, command)).resolves.toMatchObject({
+        id: saved.id,
+        status: 'RUNNING',
+      })
+      await database.courseQuestion.update({
+        where: { id: saved.id },
+        data: { status: 'FAILED', errorCode: 'MODEL_UNAVAILABLE', completedAt: new Date() },
+      })
+      await expect(service.ask(userId, taskId, command)).resolves.toMatchObject({
+        id: saved.id,
+        status: 'FAILED',
+      })
+      expect(await database.outboxEvent.count({ where: { aggregateId: saved.id } })).toBe(1)
 
       await expect(
         service.ask(userId, taskId, { ...command, question: '换一个内容重放原请求' }),
       ).rejects.toBeInstanceOf(CourseQuestionConflictError)
-      expect(answer).toHaveBeenCalledOnce()
       await expect(service.history(userId, taskId)).resolves.toMatchObject({
-        questions: [{ id: saved.id, answer: saved.answer }],
+        questions: [{ id: saved.id, status: 'FAILED', answer: null }],
       })
     } finally {
-      await database.user.delete({ where: { id: userId } })
+      await cleanup(userId)
     }
   })
 
-  it('isolates history and rejects text outside the selected section', async () => {
+  it('isolates history and rejects text outside the selected section without creating intents', async () => {
     const { userId, taskId } = await createReadyCourse()
     const otherUserId = randomUUID()
+    const eventCountBefore = await database.outboxEvent.count({
+      where: { type: 'COURSE_QUESTION_REQUESTED' },
+    })
     try {
       await database.user.create({ data: { id: otherUserId } })
-      const answer = vi.fn(async () => ({ answer: '结合当前区块回答。' }))
-      const service = new CourseQuestionService(database, { answer }, 60_000)
+      const service = new CourseQuestionService(database)
       await expect(service.ask(otherUserId, taskId, input())).rejects.toBeInstanceOf(
         CourseQuestionNotFoundError,
       )
@@ -166,64 +194,30 @@ describe('M7 selected-text course questions', () => {
       await expect(
         service.ask(userId, taskId, { ...input(), selectedText: '不属于课程的伪造文本' }),
       ).rejects.toBeInstanceOf(CourseQuestionConflictError)
-      expect(answer).not.toHaveBeenCalled()
+      expect(await database.courseQuestion.count({ where: { userId } })).toBe(0)
+      expect(
+        await database.outboxEvent.count({ where: { type: 'COURSE_QUESTION_REQUESTED' } }),
+      ).toBe(eventCountBefore)
     } finally {
       await database.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
     }
   })
 
-  it('records model failure without changing course or task state', async () => {
+  it('creates only one question and outbox for concurrent replay of the same request', async () => {
     const { userId, taskId } = await createReadyCourse()
     try {
-      const before = await database.task.findUniqueOrThrow({
-        where: { id: taskId },
-        select: { state: true, version: true, course: { select: { status: true } } },
-      })
-      const service = new CourseQuestionService(
-        database,
-        { answer: async () => Promise.reject(new Error('upstream secret must not leak')) },
-        60_000,
-      )
-      await expect(service.ask(userId, taskId, input())).rejects.toBeInstanceOf(
-        CourseQuestionUnavailableError,
+      const service = new CourseQuestionService(database)
+      const command = input()
+      const accepted = await Promise.all(
+        Array.from({ length: 6 }, () => service.ask(userId, taskId, command)),
       )
       expect(
-        await database.task.findUniqueOrThrow({
-          where: { id: taskId },
-          select: { state: true, version: true, course: { select: { status: true } } },
-        }),
-      ).toEqual(before)
-      const history = await service.history(userId, taskId)
-      expect(history.questions).toHaveLength(1)
-      expect(history.questions[0]).toMatchObject({ status: 'FAILED', answer: null })
+        accepted.every((item) => item.id === accepted[0]!.id && item.status === 'QUEUED'),
+      ).toBe(true)
+      expect(await database.courseQuestion.count({ where: { userId } })).toBe(1)
+      expect(await database.outboxEvent.count({ where: { aggregateId: accepted[0]!.id } })).toBe(1)
     } finally {
-      await database.user.delete({ where: { id: userId } })
-    }
-  })
-
-  it('does not call the model twice for concurrent replay of the same request', async () => {
-    const { userId, taskId } = await createReadyCourse()
-    try {
-      let resolveAnswer!: (value: { answer: string }) => void
-      const answer = vi.fn(
-        () =>
-          new Promise<{ answer: string }>((resolve) => {
-            resolveAnswer = resolve
-          }),
-      )
-      const port: CourseQuestionPort = { answer }
-      const service = new CourseQuestionService(database, port, 60_000)
-      const command = input()
-      const first = service.ask(userId, taskId, command)
-      await vi.waitFor(() => expect(answer).toHaveBeenCalledOnce())
-      await expect(service.ask(userId, taskId, command)).rejects.toBeInstanceOf(
-        CourseQuestionConflictError,
-      )
-      resolveAnswer({ answer: '同一请求只生成一次回答。' })
-      await expect(first).resolves.toMatchObject({ status: 'SUCCEEDED' })
-      expect(answer).toHaveBeenCalledOnce()
-    } finally {
-      await database.user.delete({ where: { id: userId } })
+      await cleanup(userId)
     }
   })
 })

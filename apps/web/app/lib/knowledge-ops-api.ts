@@ -293,7 +293,7 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         baseUrl,
         `/tasks/${encodeURIComponent(taskId)}/course-questions`,
         courseQuestionSchema,
-        { ...jsonRequest('POST', input), signal: AbortSignal.timeout(70_000) },
+        jsonRequest('POST', input),
       ),
     getCourseQuestions: (taskId, signal) =>
       request(

@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'apps/worker/test/course-generation.integration.ts',
+      'apps/worker/test/course-question.integration.ts',
       'apps/api/test/course-question.integration.ts',
     ],
     hookTimeout: 20_000,

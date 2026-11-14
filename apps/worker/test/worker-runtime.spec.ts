@@ -5,6 +5,8 @@ import { readWorkerEnvironment } from '../src/config/environment.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { CourseGenerationJobProcessor } from '../src/course-generation/course-generation-job-processor.js'
 import { CourseGenerationRunRepository } from '../src/course-generation/course-generation-run.repository.js'
+import { CourseQuestionExecutionRepository } from '../src/course-question/course-question-execution.repository.js'
+import { CourseQuestionJobProcessor } from '../src/course-question/course-question-job-processor.js'
 import { GitHubEvidenceJobProcessor } from '../src/github/github-evidence-job-processor.js'
 import { GitHubEvidenceReconciler } from '../src/github/github-evidence-reconciler.js'
 import { OutboxDispatcher } from '../src/outbox/outbox-dispatcher.js'
@@ -53,6 +55,21 @@ vi.mock('../src/queue/bullmq-course-generation-queue.js', () => ({
     }
     start = courseQueue.start
     close = courseQueue.close
+  },
+}))
+
+const questionQueue = vi.hoisted(() => ({
+  constructed: vi.fn(),
+  start: vi.fn(),
+  close: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../src/queue/bullmq-course-question-queue.js', () => ({
+  BullMqCourseQuestionQueue: class {
+    constructor(options: unknown) {
+      questionQueue.constructed(options)
+    }
+    start = questionQueue.start
+    close = questionQueue.close
   },
 }))
 
@@ -112,6 +129,7 @@ describe('Worker runtime dependency injection', () => {
       .spyOn(PlanGenerationRunRepository.prototype, 'timeoutExpired')
       .mockResolvedValue([])
     vi.spyOn(CourseGenerationRunRepository.prototype, 'timeoutExpired').mockResolvedValue([])
+    vi.spyOn(CourseQuestionExecutionRepository.prototype, 'timeoutExpired').mockResolvedValue([])
     const dispatch = vi.spyOn(OutboxDispatcher.prototype, 'dispatchAvailable').mockResolvedValue({
       deadLettered: 0,
       dispatched: 0,
@@ -134,6 +152,10 @@ describe('Worker runtime dependency injection', () => {
         expect.objectContaining({ processor: expect.any(PlanGenerationJobProcessor) }),
       )
       expect(queue.start).toHaveBeenCalledOnce()
+      expect(questionQueue.constructed).toHaveBeenCalledWith(
+        expect.objectContaining({ processor: expect.any(CourseQuestionJobProcessor) }),
+      )
+      expect(questionQueue.start).toHaveBeenCalledOnce()
       expect(evidenceQueue.constructed).toHaveBeenCalledWith(
         expect.objectContaining({ processor: expect.any(GitHubEvidenceJobProcessor) }),
       )
@@ -152,6 +174,7 @@ describe('Worker runtime dependency injection', () => {
     }
 
     expect(queue.close).toHaveBeenCalledOnce()
+    expect(questionQueue.close).toHaveBeenCalledOnce()
     expect(evidenceQueue.close).toHaveBeenCalledOnce()
     expect(closeDatabase).toHaveBeenCalledOnce()
   })
@@ -168,6 +191,10 @@ describe('Worker runtime dependency injection', () => {
       {} as PlanGenerationRunRepository,
       {} as CourseGenerationJobProcessor,
       { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as CourseGenerationRunRepository,
+      {} as CourseQuestionJobProcessor,
+      {
+        timeoutExpired: vi.fn().mockResolvedValue([]),
+      } as unknown as CourseQuestionExecutionRepository,
       {} as GitHubEvidenceJobProcessor,
       {} as NoteVerificationJobProcessor,
       {} as NoteVerificationRunRepository,
@@ -211,6 +238,10 @@ describe('Worker runtime dependency injection', () => {
       { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as PlanGenerationRunRepository,
       {} as CourseGenerationJobProcessor,
       { timeoutExpired: vi.fn().mockResolvedValue([]) } as unknown as CourseGenerationRunRepository,
+      {} as CourseQuestionJobProcessor,
+      {
+        timeoutExpired: vi.fn().mockResolvedValue([]),
+      } as unknown as CourseQuestionExecutionRepository,
       {} as GitHubEvidenceJobProcessor,
       noteProcessor,
       { reconcile } as unknown as NoteVerificationRunRepository,

@@ -64,11 +64,13 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   await page.getByLabel('你的问题', { exact: true }).fill('为什么这里不会阻塞下一次渲染？')
   f.questionUpstream.state.failNext = true
   await page.getByRole('button', { name: '发送问题', exact: true }).click()
-  await expect(page.getByRole('alert').filter({ hasText: 'AI 暂时无法回答' })).toBeVisible()
-  await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue(
-    '为什么这里不会阻塞下一次渲染？',
-  )
-  await page.getByRole('button', { name: '重试回答', exact: true }).click()
+  await expect(page.getByText('本次回答未完成，可以重新提问。', { exact: true })).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue('')
+  await page.getByRole('button', { name: '就本节提问', exact: true }).first().click()
+  await page.getByLabel('你的问题', { exact: true }).fill('为什么这里不会阻塞下一次渲染？')
+  await page.getByRole('button', { name: '发送问题', exact: true }).click()
   await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false })).toBeVisible({
     timeout: 15_000,
   })
@@ -107,7 +109,7 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   await page.getByLabel('你的问题', { exact: true }).fill('刷新后还能确认这次提问吗？')
   await page.getByRole('button', { name: '发送问题', exact: true }).click()
   await expect(page.getByRole('button', { name: '重试回答', exact: true })).toBeVisible()
-  expect(f.questionUpstream.calls).toHaveLength(3)
+  await expect.poll(() => f.questionUpstream.calls.length).toBe(3)
 
   await page.reload()
   await expect(page.getByLabel('你的问题', { exact: true })).toHaveValue(

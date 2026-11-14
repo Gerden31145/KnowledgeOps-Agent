@@ -5,6 +5,7 @@ import { NonRetryableOutboxDispatchError } from '../src/outbox/outbox-dispatch-e
 import {
   parsePlanGenerationOutboxEvent,
   parseCourseGenerationOutboxEvent,
+  parseCourseQuestionOutboxEvent,
   parseGitHubPushOutboxEvent,
   parseGitHubEvidenceRetryOutboxEvent,
   type LockedOutboxEvent,
@@ -112,6 +113,28 @@ describe('Course generation outbox event parsing', () => {
       parseCourseGenerationOutboxEvent({
         ...event,
         deduplicationKey: `course-generation-requested-${randomUUID()}`,
+      }),
+    ).toThrow(NonRetryableOutboxDispatchError)
+  })
+})
+
+describe('Course question outbox event parsing', () => {
+  it('keeps the question identity aligned and rejects a mismatched intent', () => {
+    const questionId = randomUUID()
+    const event = createEvent({
+      type: 'COURSE_QUESTION_REQUESTED',
+      aggregateId: questionId,
+      deduplicationKey: `course-question-requested-${questionId}`,
+      payload: { questionId },
+    })
+    expect(parseCourseQuestionOutboxEvent(event)).toEqual({
+      eventId: event.id,
+      payload: { questionId },
+    })
+    expect(() =>
+      parseCourseQuestionOutboxEvent({
+        ...event,
+        payload: { questionId: randomUUID() },
       }),
     ).toThrow(NonRetryableOutboxDispatchError)
   })

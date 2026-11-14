@@ -10,7 +10,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
 import { useSessionUser } from '../composables/use-session-user'
-import { KnowledgeOpsApiError } from '../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
 
 const props = defineProps<{
@@ -44,6 +43,13 @@ const history = useQuery({
   queryKey: computed(() => knowledgeOpsQueryKeys.courseQuestions(props.taskId)),
   queryFn: ({ signal }) => api.getCourseQuestions(props.taskId, signal),
   staleTime: 0,
+  refetchInterval: (query) =>
+    query.state.data?.questions.some(
+      (item) => item.status === 'QUEUED' || item.status === 'RUNNING',
+    )
+      ? 1_000
+      : false,
+  refetchIntervalInBackground: false,
 })
 
 function clearStoredAttempt() {
@@ -71,8 +77,7 @@ const ask = useMutation({
       queryKey: knowledgeOpsQueryKeys.courseQuestions(props.taskId),
     })
   },
-  onError: async (error) => {
-    if (error instanceof KnowledgeOpsApiError && error.status === 503) clearStoredAttempt()
+  onError: async () => {
     await queryClient.invalidateQueries({
       queryKey: knowledgeOpsQueryKeys.courseQuestions(props.taskId),
     })
@@ -115,12 +120,9 @@ async function submit() {
     previous.selectedText === inputWithoutId.selectedText &&
     previous.question === inputWithoutId.question &&
     previous.depth === inputWithoutId.depth
-  const confirmedModelFailure =
-    ask.error.value instanceof KnowledgeOpsApiError && ask.error.value.status === 503
   const input = {
     ...inputWithoutId,
-    requestId:
-      sameAttempt && previous && !confirmedModelFailure ? previous.requestId : crypto.randomUUID(),
+    requestId: sameAttempt && previous ? previous.requestId : crypto.randomUUID(),
   }
   const key = storageKey.value
   if (!key) {

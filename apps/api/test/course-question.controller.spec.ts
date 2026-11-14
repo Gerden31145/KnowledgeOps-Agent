@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { ConflictException, NotFoundException } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -7,7 +7,6 @@ import {
   CourseQuestionConflictError,
   CourseQuestionNotFoundError,
   CourseQuestionService,
-  CourseQuestionUnavailableError,
 } from '../src/courses/course-question.service.js'
 
 const actor = { userId: randomUUID(), timezone: 'Asia/Shanghai' }
@@ -21,17 +20,17 @@ const input = {
 }
 
 describe('CourseQuestionController', () => {
-  it('passes actor and task identity and parses the answer', async () => {
+  it('passes actor and task identity and parses the accepted question', async () => {
     const answer = {
       id: randomUUID(),
       sectionId: input.sectionId,
       selectedText: input.selectedText,
       question: input.question,
       depth: input.depth,
-      status: 'SUCCEEDED',
-      answer: '因为调度有先后顺序。',
+      status: 'QUEUED',
+      answer: null,
       createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
+      completedAt: null,
     }
     const ask = vi.fn(async () => answer)
     const controller = new CourseQuestionController(
@@ -42,18 +41,16 @@ describe('CourseQuestionController', () => {
     expect(ask).toHaveBeenCalledWith(actor.userId, taskId, input)
   })
 
-  it('keeps missing, conflict, and model failures distinct', async () => {
+  it('keeps missing and conflicting courses distinct', async () => {
     const ask = vi
       .fn()
       .mockRejectedValueOnce(new CourseQuestionNotFoundError())
       .mockRejectedValueOnce(new CourseQuestionConflictError('选文无效'))
-      .mockRejectedValueOnce(new CourseQuestionUnavailableError())
     const controller = new CourseQuestionController(
       { ask } as unknown as CourseQuestionService,
       actor,
     )
     await expect(controller.ask(taskId, input)).rejects.toBeInstanceOf(NotFoundException)
     await expect(controller.ask(taskId, input)).rejects.toBeInstanceOf(ConflictException)
-    await expect(controller.ask(taskId, input)).rejects.toBeInstanceOf(ServiceUnavailableException)
   })
 })

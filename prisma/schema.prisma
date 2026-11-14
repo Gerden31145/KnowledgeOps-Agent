@@ -51,6 +51,7 @@ enum CourseQuestionDepth {
 }
 
 enum CourseQuestionStatus {
+  QUEUED
   RUNNING
   SUCCEEDED
   FAILED
@@ -77,6 +78,7 @@ enum PlanGenerationRunState {
 enum OutboxEventType {
   PLAN_GENERATION_REQUESTED
   COURSE_GENERATION_REQUESTED
+  COURSE_QUESTION_REQUESTED
   GITHUB_PUSH_RECEIVED
   GITHUB_EVIDENCE_RETRY_REQUESTED
   NOTE_VERIFICATION_REQUESTED
@@ -462,29 +464,32 @@ model CourseVersion {
 }
 
 model CourseQuestion {
-  id              String               @id @default(uuid()) @db.Uuid
-  courseVersionId String               @map("course_version_id") @db.Uuid
-  userId          String               @map("user_id") @db.Uuid
-  requestId       String               @map("request_id") @db.Uuid
-  fingerprint     String               @db.Char(64)
-  sectionId       String               @map("section_id") @db.VarChar(64)
-  selectedText    String               @map("selected_text") @db.Text
-  question        String               @db.Text
-  depth           CourseQuestionDepth
-  status          CourseQuestionStatus @default(RUNNING)
-  answer          String?              @db.Text
-  errorCode       String?              @map("error_code") @db.VarChar(64)
-  modelCatalogId  String               @map("model_catalog_id") @db.VarChar(100)
-  modelProvider   String               @map("model_provider") @db.VarChar(64)
-  modelName       String               @map("model_name") @db.VarChar(160)
-  completedAt     DateTime?            @map("completed_at") @db.Timestamptz(3)
-  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  courseVersion   CourseVersion        @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String               @id @default(uuid()) @db.Uuid
+  courseVersionId  String               @map("course_version_id") @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  requestId        String               @map("request_id") @db.Uuid
+  fingerprint      String               @db.Char(64)
+  sectionId        String               @map("section_id") @db.VarChar(64)
+  selectedText     String               @map("selected_text") @db.Text
+  question         String               @db.Text
+  depth            CourseQuestionDepth
+  status           CourseQuestionStatus @default(QUEUED)
+  answer           String?              @db.Text
+  errorCode        String?              @map("error_code") @db.VarChar(64)
+  modelCatalogId   String               @map("model_catalog_id") @db.VarChar(100)
+  modelProvider    String               @map("model_provider") @db.VarChar(64)
+  modelName        String               @map("model_name") @db.VarChar(160)
+  executionVersion Int                  @default(0) @map("execution_version")
+  deadlineAt       DateTime?            @map("deadline_at") @db.Timestamptz(3)
+  completedAt      DateTime?            @map("completed_at") @db.Timestamptz(3)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  courseVersion    CourseVersion        @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, requestId])
   @@index([courseVersionId, userId, createdAt])
+  @@index([status, deadlineAt])
   @@map("course_questions")
 }
 

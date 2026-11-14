@@ -1,10 +1,5 @@
 import {
-  COURSE_QUESTION_POLICIES,
-  generateCourseQuestionAnswer,
-  InvalidCourseQuestionAnswerError,
-  type CourseQuestionPort,
-} from '@knowledgeops/agent-core'
-import {
+  courseQuestionRequestedEventPayloadSchema,
   courseSectionSchema,
   type AskCourseQuestionInput,
   type CourseQuestion,
@@ -13,8 +8,6 @@ import {
 import { Prisma, type DatabaseClient } from '@knowledgeops/database'
 import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
-
-export const COURSE_QUESTION_PORT = Symbol('COURSE_QUESTION_PORT')
 
 const courseContentSchema = z.object({ sections: z.array(courseSectionSchema) }).strict()
 
@@ -26,15 +19,9 @@ export class CourseQuestionConflictError extends Error {
   override readonly name = 'CourseQuestionConflictError'
 }
 
-export class CourseQuestionUnavailableError extends Error {
-  override readonly name = 'CourseQuestionUnavailableError'
-}
-
 export class CourseQuestionService {
   constructor(
     private readonly database: DatabaseClient,
-    private readonly model: CourseQuestionPort,
-    private readonly timeoutMs: number,
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
@@ -44,132 +31,81 @@ export class CourseQuestionService {
     input: AskCourseQuestionInput,
   ): Promise<CourseQuestion> {
     const fingerprint = questionFingerprint(taskId, input)
-    const existing = await this.findByRequestId(userId, input.requestId)
-    if (existing) return replayExisting(existing, taskId, fingerprint)
+    try {
+      return await this.database.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`
+        const existing = await findByRequestId(tx, userId, input.requestId)
+        if (existing) return replayExisting(existing, taskId, fingerprint)
 
-    const course = await this.database.course.findFirst({
-      where: {
-        taskId,
-        status: 'READY',
-        task: { type: 'COURSE', stage: { plan: { status: 'ACTIVE', goal: { userId } } } },
-      },
-      select: {
-        task: {
-          select: {
-            title: true,
-            description: true,
-            stage: { select: { plan: { select: { goal: { select: { title: true } } } } } },
+        const course = await tx.course.findFirst({
+          where: {
+            taskId,
+            status: 'READY',
+            task: { type: 'COURSE', stage: { plan: { status: 'ACTIVE', goal: { userId } } } },
           },
-        },
-        versions: {
-          orderBy: { version: 'desc' },
-          take: 1,
           select: {
-            id: true,
-            content: true,
-            generationRun: {
+            versions: {
+              orderBy: { version: 'desc' },
+              take: 1,
               select: {
-                modelCatalogId: true,
-                modelProvider: true,
-                modelName: true,
-                modelReasoningEffort: true,
+                id: true,
+                content: true,
+                generationRun: {
+                  select: { modelCatalogId: true, modelProvider: true, modelName: true },
+                },
               },
             },
           },
-        },
-      },
-    })
-    const version = course?.versions[0]
-    if (!course || !version) throw new CourseQuestionNotFoundError()
-    const content = courseContentSchema.safeParse(version.content)
-    if (!content.success) throw new CourseQuestionConflictError('课程内容结构已变化')
-    const section = content.data.sections.find((item) => item.id === input.sectionId)
-    if (
-      !section ||
-      !normalizeSelection(sectionText(section)).includes(normalizeSelection(input.selectedText))
-    )
-      throw new CourseQuestionConflictError('选中文字不属于当前课程区块')
+        })
+        const version = course?.versions[0]
+        if (!course || !version) throw new CourseQuestionNotFoundError()
+        const content = courseContentSchema.safeParse(version.content)
+        if (!content.success) throw new CourseQuestionConflictError('课程内容结构已变化')
+        const section = content.data.sections.find((item) => item.id === input.sectionId)
+        if (
+          !section ||
+          !normalizeSelection(sectionText(section)).includes(normalizeSelection(input.selectedText))
+        )
+          throw new CourseQuestionConflictError('选中文字不属于当前课程区块')
 
-    const history = await this.database.courseQuestion.findMany({
-      where: { courseVersionId: version.id, userId, status: 'SUCCEEDED' },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: COURSE_QUESTION_POLICIES[input.depth].historyLimit,
-      select: { question: true, answer: true },
-    })
-    const model = version.generationRun
-    let question
-    try {
-      question = await this.database.courseQuestion.create({
-        data: {
-          id: randomUUID(),
-          courseVersionId: version.id,
-          userId,
-          requestId: input.requestId,
-          fingerprint,
-          sectionId: input.sectionId,
-          selectedText: input.selectedText,
-          question: input.question,
-          depth: input.depth,
-          modelCatalogId: model.modelCatalogId,
-          modelProvider: model.modelProvider,
-          modelName: model.modelName,
-        },
+        const now = this.clock()
+        const question = await tx.courseQuestion.create({
+          data: {
+            id: randomUUID(),
+            courseVersionId: version.id,
+            userId,
+            requestId: input.requestId,
+            fingerprint,
+            sectionId: input.sectionId,
+            selectedText: input.selectedText,
+            question: input.question,
+            depth: input.depth,
+            status: 'QUEUED',
+            modelCatalogId: version.generationRun.modelCatalogId,
+            modelProvider: version.generationRun.modelProvider,
+            modelName: version.generationRun.modelName,
+          },
+        })
+        const payload = courseQuestionRequestedEventPayloadSchema.parse({ questionId: question.id })
+        await tx.outboxEvent.create({
+          data: {
+            type: 'COURSE_QUESTION_REQUESTED',
+            aggregateId: question.id,
+            deduplicationKey: `course-question-requested-${question.id}`,
+            payload,
+            occurredAt: now,
+            availableAt: now,
+          },
+        })
+        return toResponse(question)
       })
     } catch (error: unknown) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const duplicate = await this.findByRequestId(userId, input.requestId)
+        const duplicate = await findByRequestId(this.database, userId, input.requestId)
         if (duplicate) return replayExisting(duplicate, taskId, fingerprint)
       }
       throw error
     }
-
-    let candidate
-    try {
-      candidate = await generateCourseQuestionAnswer(
-        this.model,
-        {
-          model: {
-            catalogId: model.modelCatalogId,
-            provider: model.modelProvider,
-            modelName: model.modelName,
-            reasoningEffort: model.modelReasoningEffort,
-          },
-          goal: course.task.stage.plan.goal.title,
-          course: { title: course.task.title, description: course.task.description },
-          section,
-          selectedText: input.selectedText,
-          question: input.question,
-          depth: input.depth,
-          history: history
-            .reverse()
-            .map((item) => ({ question: item.question, answer: item.answer! })),
-        },
-        { signal: AbortSignal.timeout(this.timeoutMs) },
-      )
-    } catch (error: unknown) {
-      await this.database.courseQuestion.updateMany({
-        where: { id: question.id, status: 'RUNNING' },
-        data: {
-          status: 'FAILED',
-          errorCode:
-            error instanceof InvalidCourseQuestionAnswerError
-              ? 'MODEL_OUTPUT_INVALID'
-              : 'MODEL_UNAVAILABLE',
-          completedAt: this.clock(),
-        },
-      })
-      throw new CourseQuestionUnavailableError()
-    }
-    const saved = await this.database.courseQuestion.update({
-      where: { id: question.id },
-      data: {
-        status: 'SUCCEEDED',
-        answer: candidate.answer,
-        completedAt: this.clock(),
-        errorCode: null,
-      },
-    })
-    return toResponse(saved)
   }
 
   async history(userId: string, taskId: string): Promise<CourseQuestionHistoryResponse> {
@@ -186,27 +122,26 @@ export class CourseQuestionService {
     })
     return { questions: questions.reverse().map(toResponse) }
   }
+}
 
-  private findByRequestId(userId: string, requestId: string) {
-    return this.database.courseQuestion.findUnique({
-      where: { userId_requestId: { userId, requestId } },
-      include: { courseVersion: { select: { course: { select: { taskId: true } } } } },
-    })
-  }
+function findByRequestId(
+  database: DatabaseClient | Prisma.TransactionClient,
+  userId: string,
+  requestId: string,
+) {
+  return database.courseQuestion.findUnique({
+    where: { userId_requestId: { userId, requestId } },
+    include: { courseVersion: { select: { course: { select: { taskId: true } } } } },
+  })
 }
 
 function replayExisting(
-  existing: NonNullable<Awaited<ReturnType<CourseQuestionService['findByRequestId']>>>,
+  existing: NonNullable<Awaited<ReturnType<typeof findByRequestId>>>,
   taskId: string,
   fingerprint: string,
 ): CourseQuestion {
-  if (
-    existing.fingerprint !== fingerprint ||
-    existing.courseVersion.course.taskId !== taskId ||
-    existing.status !== 'SUCCEEDED' ||
-    !existing.answer
-  )
-    throw new CourseQuestionConflictError('请求已处理或仍在处理，请刷新历史后重试')
+  if (existing.fingerprint !== fingerprint || existing.courseVersion.course.taskId !== taskId)
+    throw new CourseQuestionConflictError('请求内容已变化，请使用新的提问请求')
   return toResponse(existing)
 }
 
@@ -216,7 +151,7 @@ function toResponse(question: {
   selectedText: string
   question: string
   depth: 'QUICK' | 'CONTEXTUAL' | 'DEEP'
-  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   answer: string | null
   createdAt: Date
   completedAt: Date | null

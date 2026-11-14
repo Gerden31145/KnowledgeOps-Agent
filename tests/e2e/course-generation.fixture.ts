@@ -58,9 +58,15 @@ export const test = base.extend<{
           where: { course: { task: { stage: { plan: { goal: { userId } } } } } },
           select: { id: true },
         })
+        const questions = await database.courseQuestion.findMany({
+          where: { userId },
+          select: { id: true },
+        })
         await database.outboxEvent.deleteMany({
           where: {
-            aggregateId: { in: [...planRuns, ...courseRuns].map((run) => run.id) },
+            aggregateId: {
+              in: [...planRuns, ...courseRuns, ...questions].map((record) => record.id),
+            },
           },
         })
         await database.user.delete({ where: { id: userId } })

@@ -105,6 +105,15 @@ export {
   type CourseGenerationRequestedEventPayload,
 } from './events/course-generation.js'
 export {
+  COURSE_QUESTION_JOB_ID_PREFIX,
+  COURSE_QUESTION_JOB_NAME,
+  COURSE_QUESTION_OUTBOX_SCHEMA_VERSION,
+  COURSE_QUESTION_QUEUE_NAME,
+  buildCourseQuestionJobId,
+  courseQuestionRequestedEventPayloadSchema,
+  type CourseQuestionRequestedEventPayload,
+} from './events/course-question.js'
+export {
   planGenerationModelSnapshotSchema,
   type PlanGenerationModelSnapshot,
 } from './domain/plan-generation-model.js'

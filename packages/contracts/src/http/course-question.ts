@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { entityIdSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const COURSE_QUESTION_DEPTHS = ['QUICK', 'CONTEXTUAL', 'DEEP'] as const
-export const COURSE_QUESTION_STATUSES = ['RUNNING', 'SUCCEEDED', 'FAILED'] as const
+export const COURSE_QUESTION_STATUSES = ['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED'] as const
 
 export const courseQuestionDepthSchema = z.enum(COURSE_QUESTION_DEPTHS)
 export const courseQuestionStatusSchema = z.enum(COURSE_QUESTION_STATUSES)

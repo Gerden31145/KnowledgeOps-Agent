@@ -1,9 +1,12 @@
 import {
   ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION,
   COURSE_GENERATION_OUTBOX_SCHEMA_VERSION,
+  COURSE_QUESTION_OUTBOX_SCHEMA_VERSION,
   answerVerificationRequestedEventPayloadSchema,
   courseGenerationRequestedEventPayloadSchema,
+  courseQuestionRequestedEventPayloadSchema,
   type CourseGenerationRequestedEventPayload,
+  type CourseQuestionRequestedEventPayload,
   type AnswerVerificationRequestedPayload,
   NOTE_VERIFICATION_OUTBOX_SCHEMA_VERSION,
   noteVerificationRequestedEventPayloadSchema,
@@ -76,6 +79,29 @@ export function parseCourseGenerationOutboxEvent(
     )
   return { eventId: event.id, payload: parsed.data }
 }
+
+export interface CourseQuestionOutboxMessage {
+  eventId: string
+  payload: CourseQuestionRequestedEventPayload
+}
+export function parseCourseQuestionOutboxEvent(
+  event: LockedOutboxEvent,
+): CourseQuestionOutboxMessage {
+  const parsed = courseQuestionRequestedEventPayloadSchema.safeParse(event.payload)
+  if (
+    event.type !== 'COURSE_QUESTION_REQUESTED' ||
+    event.schemaVersion !== COURSE_QUESTION_OUTBOX_SCHEMA_VERSION ||
+    !parsed.success ||
+    event.aggregateId !== parsed.data.questionId ||
+    event.deduplicationKey !== `course-question-requested-${parsed.data.questionId}`
+  )
+    throw new NonRetryableOutboxDispatchError(
+      'OUTBOX_PAYLOAD_INVALID',
+      'Invalid course question intent',
+    )
+  return { eventId: event.id, payload: parsed.data }
+}
+
 export function parseAnswerVerificationOutboxEvent(
   event: LockedOutboxEvent,
 ): AnswerVerificationOutboxMessage {
