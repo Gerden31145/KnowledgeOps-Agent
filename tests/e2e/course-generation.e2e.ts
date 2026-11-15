@@ -1,4 +1,5 @@
 import { validPlanGenerationOutput } from '../../packages/agent-core/test/fixtures/plan-generation.js'
+import { validCourseLearningPackage } from '../../packages/agent-core/test/fixtures/course-generation.js'
 import { test, expect } from './course-generation.fixture.js'
 
 test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需要仓库', async ({ page, courseFlow: f }) => {
@@ -45,6 +46,29 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   await expect(page.getByText('笔记提交位置', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '开始学习', exact: true }).click()
   await expect(page.getByLabel('任务状态：进行中', { exact: true })).toBeVisible()
+
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const tocToggle = page.getByRole('button', { name: '展开章节目录', exact: true })
+  await expect(tocToggle).toHaveAttribute('aria-expanded', 'false')
+  await tocToggle.click()
+  const expandedToc = page.getByRole('button', { name: '收起章节目录', exact: true })
+  const tocLink = page.getByRole('link', { name: '渲染与下一次任务', exact: true })
+  await expect(tocLink).toBeVisible()
+  const contentBounds = await page.locator('#course-panel-content').boundingBox()
+  const tocBounds = await page.locator('#course-toc-sections').boundingBox()
+  expect(contentBounds).not.toBeNull()
+  expect(tocBounds).not.toBeNull()
+  expect(tocBounds!.x + tocBounds!.width).toBeLessThanOrEqual(contentBounds!.x)
+  await tocLink.click()
+  await expect(expandedToc).toHaveAttribute('aria-expanded', 'true')
+  await expect(expandedToc).toBeInViewport()
+  await expect(
+    page.getByRole('heading', { name: '渲染与下一次任务', exact: true }),
+  ).toBeInViewport()
+  await page.getByRole('button', { name: '返回页面顶部', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+  await expandedToc.click()
+  await page.setViewportSize({ width: 1280, height: 720 })
 
   const explanation = page
     .getByRole('heading', { name: '任务与调用栈', exact: true })
@@ -128,6 +152,64 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
     ),
   ).toBeNull()
 
+  async function answerExercises() {
+    for (const [index, question] of validCourseLearningPackage.exercises.multipleChoice.entries()) {
+      const correct = question.options.find((option) => option.id === question.correctOptionId)!
+      await page
+        .getByRole('group', { name: `${index + 1}. ${question.prompt}`, exact: true })
+        .getByRole('radio', { name: correct.text, exact: true })
+        .check()
+    }
+    await page
+      .getByLabel(validCourseLearningPackage.exercises.followUp.prompt, { exact: true })
+      .fill('Vue 更新在当前任务中排队，微任务清空后才进入后续 setTimeout 与渲染调度。')
+  }
+
+  await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
+  await expect(page).toHaveURL((url) => url.searchParams.get('tab') === 'exercise')
+  await answerExercises()
+  await page.getByRole('tab', { name: '课程内容', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '任务与调用栈', exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
+  await expect(
+    page.getByLabel(validCourseLearningPackage.exercises.followUp.prompt, { exact: true }),
+  ).toHaveValue('Vue 更新在当前任务中排队，微任务清空后才进入后续 setTimeout 与渲染调度。')
+  f.questionUpstream.state.exerciseOutcome = 'FAILED'
+  await page.getByRole('button', { name: '提交练习', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const submission = await f.database.courseExerciseSubmission.findFirst({
+        where: { userId: f.userId },
+        orderBy: { createdAt: 'desc' },
+      })
+      return { status: submission?.status ?? 'NOT_FOUND', errorCode: submission?.errorCode }
+    })
+    .toEqual({ status: 'SUCCEEDED', errorCode: null })
+  await expect(page.getByText('选择题 4/4 · 尚需修订', { exact: true })).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText('开放追问：需要修正', { exact: true })).toBeVisible()
+  expect(await f.database.task.findUniqueOrThrow({ where: { id: next.id } })).toMatchObject({
+    state: 'BLOCKED',
+  })
+
+  await page.getByRole('button', { name: '重新作答', exact: true }).click()
+  await answerExercises()
+  f.questionUpstream.state.exerciseOutcome = 'PASSED'
+  await page.getByRole('button', { name: '提交练习', exact: true }).click()
+  await expect(page.getByText('选择题 4/4 · 课程通过', { exact: true })).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect
+    .poll(async () => (await f.database.task.findUniqueOrThrow({ where: { id: next.id } })).state)
+    .toBe('READY')
+  await expect(page.getByRole('status').filter({ hasText: '当前课程已完成' })).toBeVisible()
+  const completed = page.getByLabel('课程完成', { exact: true })
+  await expect(completed.getByText('当前课程已完成', { exact: true })).toBeVisible()
+  await expect(completed.getByRole('link', { name: '返回学习计划', exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('选择题 4/4 · 课程通过', { exact: true })).toBeVisible()
+
   const saved = await f.database.course.findUniqueOrThrow({
     where: { taskId: course.id },
     include: { versions: { include: { exerciseSet: true } }, generationRuns: true },
@@ -137,16 +219,16 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   expect(saved.versions[0]!.exerciseSet).not.toBeNull()
   expect(f.worker.courseModelCalls).toBe(1)
   expect(await f.database.task.findUniqueOrThrow({ where: { id: next.id } })).toMatchObject({
-    state: 'BLOCKED',
+    state: 'READY',
     type: 'COURSE',
   })
 
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('tab', { name: '课程内容', exact: true }).click()
   await expect(page.getByRole('heading', { name: '渲染与下一次任务', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
-  await page.getByRole('button', { name: '关闭答疑', exact: true }).click()
   await page.getByRole('button', { name: '课程答疑', exact: true }).click()
   await expect(page.getByRole('button', { name: '关闭答疑', exact: true })).toBeVisible()
   await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false }).last()).toBeVisible()

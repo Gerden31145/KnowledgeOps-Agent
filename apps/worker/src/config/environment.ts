@@ -64,6 +64,7 @@ const workerEnvironmentSchema = z
       .default(1_000_000),
     PLAN_GENERATION_OUTPUT_METHOD: z.enum(['jsonSchema', 'jsonMode']).default('jsonSchema'),
     COURSE_QUESTION_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000),
+    COURSE_EXERCISE_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(20),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     OUTBOX_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),

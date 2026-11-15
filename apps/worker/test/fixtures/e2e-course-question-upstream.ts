@@ -2,7 +2,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 
 export function createCourseQuestionUpstream(port = 4500) {
   const calls: { body: string; maxTokens: unknown }[] = []
-  const state = { failNext: false }
+  const state = {
+    failNext: false,
+    exerciseOutcome: 'PASSED' as 'PASSED' | 'FAILED' | 'INSUFFICIENT_EVIDENCE',
+  }
   const server = createServer((request, response) => {
     void handle(request, response)
   })
@@ -21,6 +24,19 @@ export function createCourseQuestionUpstream(port = 4500) {
       response.end(JSON.stringify({ error: { message: 'synthetic upstream failure' } }))
       return
     }
+    const content = body.includes('course-exercise-v1')
+      ? {
+          outcome: state.exerciseOutcome,
+          rationale:
+            state.exerciseOutcome === 'PASSED'
+              ? '回答体现了正确的调度顺序。'
+              : '回答缺少关键调度顺序。',
+          suggestions:
+            state.exerciseOutcome === 'PASSED' ? [] : ['补充当前任务、微任务与渲染的顺序。'],
+        }
+      : {
+          answer: '微任务会在当前调用栈清空后、下一次渲染前执行；可以结合本节情景理解这个顺序。',
+        }
     response.writeHead(200, { 'content-type': 'application/json' })
     response.end(
       JSON.stringify({
@@ -34,10 +50,7 @@ export function createCourseQuestionUpstream(port = 4500) {
             finish_reason: 'stop',
             message: {
               role: 'assistant',
-              content: JSON.stringify({
-                answer:
-                  '微任务会在当前调用栈清空后、下一次渲染前执行；可以结合本节情景理解这个顺序。',
-              }),
+              content: JSON.stringify(content),
             },
           },
         ],

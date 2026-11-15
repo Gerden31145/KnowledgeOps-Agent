@@ -3,6 +3,7 @@ import {
   learningGoalResponseSchema,
   planDetailResponseSchema,
   taskDetailResponseSchema,
+  toPublicExerciseSet,
   todayTasksResponseSchema,
 } from '../src/index.js'
 import { describe, expect, it } from 'vitest'
@@ -140,6 +141,22 @@ describe('workspace HTTP contracts', () => {
         status: 'READY',
         generationRunId: ids.run,
         generationQueuedAt: null,
+        exercises: toPublicExerciseSet({
+          multipleChoice: Array.from({ length: 4 }, (_, index) => ({
+            id: `choice-${index}`,
+            knowledgePointId: 'event-loop',
+            prompt: `事件循环判断 ${index + 1}`,
+            options: ['a', 'b', 'c', 'd'].map((id) => ({ id, text: `选项 ${id}` })),
+            correctOptionId: 'a',
+            explanation: '当前调用栈先执行完成。',
+          })),
+          followUp: {
+            id: 'follow-up',
+            knowledgePointIds: ['event-loop'],
+            prompt: '解释当前任务与微任务的先后顺序。',
+            rubric: ['说明当前任务先完成'],
+          },
+        }),
         sections: [
           {
             id: 'event-loop',
@@ -161,7 +178,8 @@ describe('workspace HTTP contracts', () => {
       runs: [],
     })
     expect(response.course?.sections).toHaveLength(1)
-    expect(response.course).not.toHaveProperty('exercises')
-    expect(response.course).not.toHaveProperty('correctOptionId')
+    expect(response.course?.exercises?.multipleChoice).toHaveLength(4)
+    expect(JSON.stringify(response.course?.exercises)).not.toContain('correctOptionId')
+    expect(JSON.stringify(response.course?.exercises)).not.toContain('rubric')
   })
 })

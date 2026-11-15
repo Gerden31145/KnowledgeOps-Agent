@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { LangChainCourseQuestionAnswering } from '@knowledgeops/agent-core'
+import {
+  LangChainCourseExerciseVerifier,
+  LangChainCourseQuestionAnswering,
+} from '@knowledgeops/agent-core'
 import type { DatabaseClient } from '@knowledgeops/database'
 import { validPlanGenerationOutput } from '../../../../packages/agent-core/test/fixtures/plan-generation.js'
 import { validCourseLearningPackage } from '../../../../packages/agent-core/test/fixtures/course-generation.js'
@@ -9,8 +12,11 @@ import { FinalizePlanGenerationRun } from '../../src/plan-generation/finalize-pl
 import { CourseGenerationJobProcessor } from '../../src/course-generation/course-generation-job-processor.js'
 import { CourseGenerationRunRepository } from '../../src/course-generation/course-generation-run.repository.js'
 import { FinalizeCourseGenerationRun } from '../../src/course-generation/finalize-course-generation-run.js'
+import { CourseExerciseExecutionRepository } from '../../src/course-exercise/course-exercise-execution.repository.js'
+import { CourseExerciseJobProcessor } from '../../src/course-exercise/course-exercise-job-processor.js'
 import { CourseQuestionExecutionRepository } from '../../src/course-question/course-question-execution.repository.js'
 import { CourseQuestionJobProcessor } from '../../src/course-question/course-question-job-processor.js'
+import { BullMqCourseExerciseQueue } from '../../src/queue/bullmq-course-exercise-queue.js'
 import { BullMqPlanGenerationQueue } from '../../src/queue/bullmq-plan-generation-queue.js'
 import { BullMqCourseGenerationQueue } from '../../src/queue/bullmq-course-generation-queue.js'
 import { BullMqCourseQuestionQueue } from '../../src/queue/bullmq-course-question-queue.js'
@@ -58,8 +64,20 @@ export function createCoursePipelineWorker(database: DatabaseClient, redisUrl: s
       60_000,
     ),
   })
-  const queues = [plan, course, question]
-  const inspectors = ['plan', 'course', 'question'].map(
+  const exercise = new BullMqCourseExerciseQueue({
+    ...common,
+    queueName: `${prefix}-exercise`,
+    processor: new CourseExerciseJobProcessor(
+      new CourseExerciseExecutionRepository(database),
+      new LangChainCourseExerciseVerifier({
+        apiKey: 'r16-synthetic-model-key',
+        baseUrl: 'http://127.0.0.1:4500/v1',
+      }),
+      60_000,
+    ),
+  })
+  const queues = [plan, course, question, exercise]
+  const inspectors = ['plan', 'course', 'question', 'exercise'].map(
     (kind) => new Queue(`${prefix}-${kind}`, { connection: bullMqWorkerConnection(redisUrl) }),
   )
   const loop = new OutboxDispatchLoop(
@@ -69,6 +87,7 @@ export function createCoursePipelineWorker(database: DatabaseClient, redisUrl: s
         publish: (message) => plan.publish(message),
         publishCourseGeneration: (message) => course.publish(message),
         publishCourseQuestion: (message) => question.publish(message),
+        publishCourseExercise: (message) => exercise.publish(message),
       },
       { baseDelayMs: 100, maxDelayMs: 1_000 },
     ),

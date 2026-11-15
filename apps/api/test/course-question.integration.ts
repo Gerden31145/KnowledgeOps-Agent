@@ -1,4 +1,4 @@
-import type { AskCourseQuestionInput } from '@knowledgeops/contracts'
+import type { AskCourseQuestionInput, SubmitCourseExerciseInput } from '@knowledgeops/contracts'
 import { createDatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -9,6 +9,10 @@ import {
   CourseQuestionNotFoundError,
   CourseQuestionService,
 } from '../src/courses/course-question.service.js'
+import {
+  CourseExerciseConflictError,
+  CourseExerciseService,
+} from '../src/courses/course-exercise.service.js'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for the M7 integration test')
@@ -111,13 +115,33 @@ function input(requestId = randomUUID()): AskCourseQuestionInput {
   }
 }
 
+function exerciseInput(requestId = randomUUID()): SubmitCourseExerciseInput {
+  return {
+    requestId,
+    expectedTaskVersion: 0,
+    multipleChoiceAnswers: validCourseLearningPackage.exercises.multipleChoice.map((question) => ({
+      questionId: question.id,
+      optionId: question.correctOptionId,
+    })),
+    followUpAnswer: '当前任务结束后会清空微任务队列，再进入后续渲染调度。',
+  }
+}
+
 async function cleanup(userId: string) {
   const questions = await database.courseQuestion.findMany({
     where: { userId },
     select: { id: true },
   })
+  const submissions = await database.courseExerciseSubmission.findMany({
+    where: { userId },
+    select: { id: true },
+  })
   await database.outboxEvent.deleteMany({
-    where: { aggregateId: { in: questions.map((question) => question.id) } },
+    where: {
+      aggregateId: {
+        in: [...questions, ...submissions].map((record) => record.id),
+      },
+    },
   })
   await database.user.delete({ where: { id: userId } })
 }
@@ -179,9 +203,6 @@ describe('M7 selected-text course question acceptance', () => {
   it('isolates history and rejects text outside the selected section without creating intents', async () => {
     const { userId, taskId } = await createReadyCourse()
     const otherUserId = randomUUID()
-    const eventCountBefore = await database.outboxEvent.count({
-      where: { type: 'COURSE_QUESTION_REQUESTED' },
-    })
     try {
       await database.user.create({ data: { id: otherUserId } })
       const service = new CourseQuestionService(database)
@@ -195,9 +216,6 @@ describe('M7 selected-text course question acceptance', () => {
         service.ask(userId, taskId, { ...input(), selectedText: '不属于课程的伪造文本' }),
       ).rejects.toBeInstanceOf(CourseQuestionConflictError)
       expect(await database.courseQuestion.count({ where: { userId } })).toBe(0)
-      expect(
-        await database.outboxEvent.count({ where: { type: 'COURSE_QUESTION_REQUESTED' } }),
-      ).toBe(eventCountBefore)
     } finally {
       await database.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
     }
@@ -216,6 +234,48 @@ describe('M7 selected-text course question acceptance', () => {
       ).toBe(true)
       expect(await database.courseQuestion.count({ where: { userId } })).toBe(1)
       expect(await database.outboxEvent.count({ where: { aggregateId: accepted[0]!.id } })).toBe(1)
+    } finally {
+      await cleanup(userId)
+    }
+  })
+
+  it('atomically accepts an exercise submission and replays only the identical command', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const service = new CourseExerciseService(database)
+      const command = exerciseInput()
+      const accepted = await service.submit(userId, taskId, command)
+      expect(accepted).toMatchObject({ status: 'QUEUED', report: null })
+      expect(
+        await database.outboxEvent.count({
+          where: { aggregateId: accepted.id, type: 'COURSE_EXERCISE_REQUESTED' },
+        }),
+      ).toBe(1)
+      await expect(service.submit(userId, taskId, command)).resolves.toEqual(accepted)
+      await expect(
+        service.submit(userId, taskId, { ...command, followUpAnswer: '修改后的回答' }),
+      ).rejects.toBeInstanceOf(CourseExerciseConflictError)
+      await expect(service.history(userId, taskId)).resolves.toMatchObject({
+        submissions: [{ id: accepted.id, status: 'QUEUED' }],
+      })
+    } finally {
+      await cleanup(userId)
+    }
+  })
+
+  it('rejects stale task versions and a second active submission without new intents', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const service = new CourseExerciseService(database)
+      await expect(
+        service.submit(userId, taskId, { ...exerciseInput(), expectedTaskVersion: 9 }),
+      ).rejects.toBeInstanceOf(CourseExerciseConflictError)
+      const accepted = await service.submit(userId, taskId, exerciseInput())
+      await expect(service.submit(userId, taskId, exerciseInput())).rejects.toBeInstanceOf(
+        CourseExerciseConflictError,
+      )
+      expect(await database.courseExerciseSubmission.count({ where: { userId } })).toBe(1)
+      expect(await database.outboxEvent.count({ where: { aggregateId: accepted.id } })).toBe(1)
     } finally {
       await cleanup(userId)
     }

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { NonRetryableOutboxDispatchError } from '../src/outbox/outbox-dispatch-error.js'
 import {
   parsePlanGenerationOutboxEvent,
+  parseCourseExerciseOutboxEvent,
   parseCourseGenerationOutboxEvent,
   parseCourseQuestionOutboxEvent,
   parseGitHubPushOutboxEvent,
@@ -137,6 +138,25 @@ describe('Course question outbox event parsing', () => {
         payload: { questionId: randomUUID() },
       }),
     ).toThrow(NonRetryableOutboxDispatchError)
+  })
+})
+
+describe('Course exercise outbox event parsing', () => {
+  it('keeps the submission identity aligned across the intent', () => {
+    const submissionId = randomUUID()
+    const event = createEvent({
+      type: 'COURSE_EXERCISE_REQUESTED',
+      aggregateId: submissionId,
+      deduplicationKey: `course-exercise-requested-${submissionId}`,
+      payload: { submissionId },
+    })
+    expect(parseCourseExerciseOutboxEvent(event)).toEqual({
+      eventId: event.id,
+      payload: { submissionId },
+    })
+    expect(() => parseCourseExerciseOutboxEvent({ ...event, aggregateId: randomUUID() })).toThrow(
+      NonRetryableOutboxDispatchError,
+    )
   })
 })
 

@@ -57,6 +57,13 @@ enum CourseQuestionStatus {
   FAILED
 }
 
+enum CourseExerciseSubmissionStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum AcceptanceCriterionType {
   FILE_CHANGED
   SECTION_PRESENT
@@ -79,6 +86,7 @@ enum OutboxEventType {
   PLAN_GENERATION_REQUESTED
   COURSE_GENERATION_REQUESTED
   COURSE_QUESTION_REQUESTED
+  COURSE_EXERCISE_REQUESTED
   GITHUB_PUSH_RECEIVED
   GITHUB_EVIDENCE_RETRY_REQUESTED
   NOTE_VERIFICATION_REQUESTED
@@ -101,18 +109,19 @@ enum AgentRunState {
 }
 
 model User {
-  id                String           @id @default(uuid()) @db.Uuid
-  githubUserId      String?          @unique @map("github_user_id")
-  githubLogin       String?          @map("github_login")
-  timezone          String           @default("Asia/Shanghai")
-  preferredModelId  String?          @map("preferred_model_id") @db.VarChar(100)
-  goals             LearningGoal[]
-  sessions          Session[]
-  courseQuestions   CourseQuestion[]
-  repositories      Repository[]
-  repositoryVersion Int              @default(0) @map("repository_version")
-  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                        String                     @id @default(uuid()) @db.Uuid
+  githubUserId              String?                    @unique @map("github_user_id")
+  githubLogin               String?                    @map("github_login")
+  timezone                  String                     @default("Asia/Shanghai")
+  preferredModelId          String?                    @map("preferred_model_id") @db.VarChar(100)
+  goals                     LearningGoal[]
+  sessions                  Session[]
+  courseQuestions           CourseQuestion[]
+  courseExerciseSubmissions CourseExerciseSubmission[]
+  repositories              Repository[]
+  repositoryVersion         Int                        @default(0) @map("repository_version")
+  createdAt                 DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("users")
 }
@@ -494,13 +503,43 @@ model CourseQuestion {
 }
 
 model ExerciseSet {
-  id              String        @id @default(uuid()) @db.Uuid
-  courseVersionId String        @unique @map("course_version_id") @db.Uuid
-  body            Json          @db.JsonB
-  courseVersion   CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  id              String                     @id @default(uuid()) @db.Uuid
+  courseVersionId String                     @unique @map("course_version_id") @db.Uuid
+  body            Json                       @db.JsonB
+  courseVersion   CourseVersion              @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  submissions     CourseExerciseSubmission[]
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@map("exercise_sets")
+}
+
+model CourseExerciseSubmission {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  exerciseSetId         String                         @map("exercise_set_id") @db.Uuid
+  userId                String                         @map("user_id") @db.Uuid
+  requestId             String                         @map("request_id") @db.Uuid
+  fingerprint           String                         @db.Char(64)
+  expectedTaskVersion   Int                            @map("expected_task_version")
+  multipleChoiceAnswers Json                           @map("multiple_choice_answers") @db.JsonB
+  followUpAnswer        String                         @map("follow_up_answer") @db.Text
+  status                CourseExerciseSubmissionStatus @default(QUEUED)
+  report                Json?                          @db.JsonB
+  errorCode             String?                        @map("error_code") @db.VarChar(64)
+  modelCatalogId        String                         @map("model_catalog_id") @db.VarChar(100)
+  modelProvider         String                         @map("model_provider") @db.VarChar(64)
+  modelName             String                         @map("model_name") @db.VarChar(160)
+  executionVersion      Int                            @default(0) @map("execution_version")
+  deadlineAt            DateTime?                      @map("deadline_at") @db.Timestamptz(3)
+  completedAt           DateTime?                      @map("completed_at") @db.Timestamptz(3)
+  createdAt             DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  exerciseSet           ExerciseSet                    @relation(fields: [exerciseSetId], references: [id], onDelete: Cascade)
+  user                  User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@index([exerciseSetId, userId, createdAt])
+  @@index([status, deadlineAt])
+  @@map("course_exercise_submissions")
 }
 
 model KnowledgePoint {

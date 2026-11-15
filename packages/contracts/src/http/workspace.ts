@@ -9,7 +9,11 @@ import {
   taskTypeSchema,
 } from '../domain/plan.js'
 import { CURRENT_TASK_STATES, taskStateSchema } from '../domain/task-state.js'
-import { courseGenerationSummarySchema, courseSectionSchema } from '../domain/course.js'
+import {
+  courseGenerationSummarySchema,
+  courseSectionSchema,
+  publicExerciseSetSchema,
+} from '../domain/course.js'
 import { entityIdSchema, isoDateSchema, isoDateTimeSchema } from '../shared/primitives.js'
 
 export const acceptanceCriterionSummarySchema = z
@@ -106,7 +110,10 @@ export const todayTasksResponseSchema = z
 export const taskDetailResponseSchema = planTaskSummarySchema
   .extend({
     course: courseGenerationSummarySchema
-      .extend({ sections: z.array(courseSectionSchema).nullable() })
+      .extend({
+        sections: z.array(courseSectionSchema).nullable(),
+        exercises: publicExerciseSetSchema.nullable(),
+      })
       .nullable(),
     stage: z
       .object({

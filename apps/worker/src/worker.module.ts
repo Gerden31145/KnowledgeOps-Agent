@@ -1,4 +1,5 @@
 import {
+  LangChainCourseExerciseVerifier,
   LangChainCourseGenerator,
   LangChainCourseQuestionAnswering,
   LangChainPlanGenerator,
@@ -13,6 +14,8 @@ import { ConfigModule, WORKER_ENVIRONMENT } from './config/config.module.js'
 import type { WorkerEnvironment } from './config/environment.js'
 import { DatabaseModule } from './database/database.module.js'
 import { DatabaseService } from './database/database.service.js'
+import { CourseExerciseExecutionRepository } from './course-exercise/course-exercise-execution.repository.js'
+import { CourseExerciseJobProcessor } from './course-exercise/course-exercise-job-processor.js'
 import { CourseGenerationJobProcessor } from './course-generation/course-generation-job-processor.js'
 import { CourseGenerationRunRepository } from './course-generation/course-generation-run.repository.js'
 import { FinalizeCourseGenerationRun } from './course-generation/finalize-course-generation-run.js'
@@ -180,6 +183,25 @@ const courseQuestionProcessorProvider: Provider<CourseQuestionJobProcessor> = {
       environment.COURSE_QUESTION_TIMEOUT_MS,
     ),
 }
+const courseExerciseRepositoryProvider: Provider<CourseExerciseExecutionRepository> = {
+  provide: CourseExerciseExecutionRepository,
+  inject: [DatabaseService],
+  useFactory: (database: DatabaseService) => new CourseExerciseExecutionRepository(database.client),
+}
+const courseExerciseProcessorProvider: Provider<CourseExerciseJobProcessor> = {
+  provide: CourseExerciseJobProcessor,
+  inject: [DatabaseService, WORKER_ENVIRONMENT],
+  useFactory: (database: DatabaseService, environment: WorkerEnvironment) =>
+    new CourseExerciseJobProcessor(
+      new CourseExerciseExecutionRepository(database.client),
+      new LangChainCourseExerciseVerifier({
+        structuredOutputMethod: environment.PLAN_GENERATION_OUTPUT_METHOD,
+        ...(environment.OPENAI_API_KEY ? { apiKey: environment.OPENAI_API_KEY } : {}),
+        ...(environment.OPENAI_BASE_URL ? { baseUrl: environment.OPENAI_BASE_URL } : {}),
+      }),
+      environment.COURSE_EXERCISE_TIMEOUT_MS,
+    ),
+}
 
 @Module({
   imports: [ConfigModule, DatabaseModule],
@@ -192,6 +214,8 @@ const courseQuestionProcessorProvider: Provider<CourseQuestionJobProcessor> = {
     courseGenerationJobProcessorProvider,
     courseQuestionRepositoryProvider,
     courseQuestionProcessorProvider,
+    courseExerciseRepositoryProvider,
+    courseExerciseProcessorProvider,
     gitHubEvidenceProcessorProvider,
     noteRunRepositoryProvider,
     noteProcessorProvider,

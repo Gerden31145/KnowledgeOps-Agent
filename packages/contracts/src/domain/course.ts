@@ -120,6 +120,46 @@ export const courseLearningPackageSchema = z
     }
   })
 
+export const publicMultipleChoiceQuestionSchema = z
+  .object({
+    id: courseReferenceIdSchema,
+    knowledgePointId: courseReferenceIdSchema,
+    prompt: z.string(),
+    options: z
+      .array(z.object({ id: courseReferenceIdSchema, text: z.string() }).strict())
+      .length(4),
+  })
+  .strict()
+export const publicExerciseSetSchema = z
+  .object({
+    multipleChoice: z.array(publicMultipleChoiceQuestionSchema).length(4),
+    followUp: z
+      .object({
+        id: courseReferenceIdSchema,
+        knowledgePointIds: z.array(courseReferenceIdSchema).min(1).max(3),
+        prompt: z.string(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export function toPublicExerciseSet(value: unknown): PublicExerciseSet {
+  const exerciseSet = exerciseSetBodySchema.parse(value)
+  return {
+    multipleChoice: exerciseSet.multipleChoice.map((question) => ({
+      id: question.id,
+      knowledgePointId: question.knowledgePointId,
+      prompt: question.prompt,
+      options: question.options.map((option) => ({ id: option.id, text: option.text })),
+    })),
+    followUp: {
+      id: exerciseSet.followUp.id,
+      knowledgePointIds: exerciseSet.followUp.knowledgePointIds,
+      prompt: exerciseSet.followUp.prompt,
+    },
+  }
+}
+
 export const courseGenerationSummarySchema = z
   .object({
     status: courseStatusSchema,
@@ -140,5 +180,6 @@ export type CourseKnowledgeRole = z.infer<typeof courseKnowledgeRoleSchema>
 export type CourseKnowledgePoint = z.infer<typeof courseKnowledgePointSchema>
 export type CourseSection = z.infer<typeof courseSectionSchema>
 export type ExerciseSetBody = z.infer<typeof exerciseSetBodySchema>
+export type PublicExerciseSet = z.infer<typeof publicExerciseSetSchema>
 export type CourseLearningPackage = z.infer<typeof courseLearningPackageSchema>
 export type CourseGenerationSummary = z.infer<typeof courseGenerationSummarySchema>

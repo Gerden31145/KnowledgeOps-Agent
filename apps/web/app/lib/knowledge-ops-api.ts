@@ -6,6 +6,8 @@ import {
   courseGenerationAcceptedResponseSchema,
   courseQuestionHistoryResponseSchema,
   courseQuestionSchema,
+  courseExerciseSubmissionHistoryResponseSchema,
+  courseExerciseSubmissionSchema,
   learningGoalResponseSchema,
   planDetailResponseSchema,
   planGenerationAcceptedResponseSchema,
@@ -20,6 +22,9 @@ import {
   type AskCourseQuestionInput,
   type CourseQuestion,
   type CourseQuestionHistoryResponse,
+  type CourseExerciseSubmission,
+  type CourseExerciseSubmissionHistoryResponse,
+  type SubmitCourseExerciseInput,
   type LearningGoalInput,
   type LearningGoalResponse,
   type PlanDetailResponse,
@@ -138,6 +143,14 @@ export interface KnowledgeOpsApi {
   ): Promise<CourseGenerationAcceptedResponse>
   askCourseQuestion(taskId: string, input: AskCourseQuestionInput): Promise<CourseQuestion>
   getCourseQuestions(taskId: string, signal?: AbortSignal): Promise<CourseQuestionHistoryResponse>
+  submitCourseExercise(
+    taskId: string,
+    input: SubmitCourseExerciseInput,
+  ): Promise<CourseExerciseSubmission>
+  getCourseExerciseSubmissions(
+    taskId: string,
+    signal?: AbortSignal,
+  ): Promise<CourseExerciseSubmissionHistoryResponse>
   getTodayTasks(signal?: AbortSignal): Promise<TodayTasksResponse>
   getTask(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse>
   getNoteVerificationRun(runId: string, signal?: AbortSignal): Promise<NoteVerificationRunResponse>
@@ -300,6 +313,20 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         baseUrl,
         `/tasks/${encodeURIComponent(taskId)}/course-questions`,
         courseQuestionHistoryResponseSchema,
+        { signal: repositorySignal(signal) },
+      ),
+    submitCourseExercise: (taskId, input) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/exercise-submissions`,
+        courseExerciseSubmissionSchema,
+        jsonRequest('POST', input),
+      ),
+    getCourseExerciseSubmissions: (taskId, signal) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/exercise-submissions`,
+        courseExerciseSubmissionHistoryResponseSchema,
         { signal: repositorySignal(signal) },
       ),
     getTodayTasks: (signal) =>

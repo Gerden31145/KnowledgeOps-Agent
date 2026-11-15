@@ -1,10 +1,13 @@
 import {
   ANSWER_VERIFICATION_OUTBOX_SCHEMA_VERSION,
+  COURSE_EXERCISE_OUTBOX_SCHEMA_VERSION,
   COURSE_GENERATION_OUTBOX_SCHEMA_VERSION,
   COURSE_QUESTION_OUTBOX_SCHEMA_VERSION,
   answerVerificationRequestedEventPayloadSchema,
+  courseExerciseRequestedEventPayloadSchema,
   courseGenerationRequestedEventPayloadSchema,
   courseQuestionRequestedEventPayloadSchema,
+  type CourseExerciseRequestedEventPayload,
   type CourseGenerationRequestedEventPayload,
   type CourseQuestionRequestedEventPayload,
   type AnswerVerificationRequestedPayload,
@@ -98,6 +101,28 @@ export function parseCourseQuestionOutboxEvent(
     throw new NonRetryableOutboxDispatchError(
       'OUTBOX_PAYLOAD_INVALID',
       'Invalid course question intent',
+    )
+  return { eventId: event.id, payload: parsed.data }
+}
+
+export interface CourseExerciseOutboxMessage {
+  eventId: string
+  payload: CourseExerciseRequestedEventPayload
+}
+export function parseCourseExerciseOutboxEvent(
+  event: LockedOutboxEvent,
+): CourseExerciseOutboxMessage {
+  const parsed = courseExerciseRequestedEventPayloadSchema.safeParse(event.payload)
+  if (
+    event.type !== 'COURSE_EXERCISE_REQUESTED' ||
+    event.schemaVersion !== COURSE_EXERCISE_OUTBOX_SCHEMA_VERSION ||
+    !parsed.success ||
+    event.aggregateId !== parsed.data.submissionId ||
+    event.deduplicationKey !== `course-exercise-requested-${parsed.data.submissionId}`
+  )
+    throw new NonRetryableOutboxDispatchError(
+      'OUTBOX_PAYLOAD_INVALID',
+      'Invalid course exercise intent',
     )
   return { eventId: event.id, payload: parsed.data }
 }

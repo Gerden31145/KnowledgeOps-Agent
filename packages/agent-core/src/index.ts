@@ -61,6 +61,23 @@ export {
   LangChainCourseQuestionAnswering,
 } from './course-question/langchain-course-question-answering.js'
 export {
+  COURSE_EXERCISE_OUTPUT_SCHEMA_VERSION,
+  COURSE_EXERCISE_PROMPT_VERSION,
+  InvalidCourseExerciseAnswersError,
+  InvalidCourseExerciseEvaluationError,
+  buildCourseExerciseReport,
+  courseFollowUpVerificationRequestSchema,
+  evaluateCourseFollowUpAnswer,
+  gradeCourseMultipleChoice,
+  type CourseExerciseVerificationOptions,
+  type CourseExerciseVerificationPort,
+  type CourseFollowUpVerificationRequest,
+} from './course-exercise/course-exercise.js'
+export {
+  CourseExerciseModelError,
+  LangChainCourseExerciseVerifier,
+} from './course-exercise/langchain-course-exercise-verifier.js'
+export {
   noteSemanticCriterionTypeSchema,
   noteVerificationCandidateSchema,
   noteVerificationRequestSchema,

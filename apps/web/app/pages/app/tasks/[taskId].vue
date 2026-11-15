@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, nextTick, ref, watch } from 'vue'
 import { definePageMeta, useHead, useRoute, useRouter } from '#imports'
 
+import { useGlobalMessage } from '../../../composables/use-global-message'
 import { useKnowledgeOpsApi } from '../../../composables/use-knowledge-ops-api'
 import { useTaskQuery } from '../../../composables/use-workspace-queries'
 import { knowledgeOpsQueryKeys } from '../../../lib/query-keys'
@@ -99,6 +100,57 @@ async function tabKey(event: KeyboardEvent) {
   await nextTick()
   document.getElementById('tab-' + next)?.focus()
 }
+
+const courseTabs = [
+  { id: 'content', label: '课程内容' },
+  { id: 'exercise', label: '练习与验收' },
+] as const
+type CourseTab = (typeof courseTabs)[number]['id']
+const courseTab = computed<CourseTab>(() =>
+  route.query.tab === 'exercise' ? 'exercise' : 'content',
+)
+async function selectCourseTab(value: CourseTab) {
+  await router.replace({ query: { ...route.query, tab: value }, hash: '' })
+}
+async function courseTabKey(event: KeyboardEvent) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const index = courseTabs.findIndex(
+    (item) => `course-tab-${item.id}` === (event.currentTarget as HTMLElement).id,
+  )
+  const nextIndex =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? courseTabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + courseTabs.length) % courseTabs.length
+  const next = courseTabs[nextIndex]!.id
+  await selectCourseTab(next)
+  await nextTick()
+  document.getElementById(`course-tab-${next}`)?.focus()
+}
+
+const courseHeader = ref<HTMLElement | null>(null)
+const courseHeaderHeight = ref(0)
+watch(
+  courseHeader,
+  (element, _previous, onCleanup) => {
+    if (!element || !import.meta.client) return
+    const updateHeight = () => {
+      courseHeaderHeight.value = element.offsetHeight
+    }
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(element)
+    onCleanup(() => observer.disconnect())
+  },
+  { immediate: true, flush: 'post' },
+)
+function scrollToTop() {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  window.scrollTo({ top: 0, behavior: reducedMotion ? 'instant' : 'smooth' })
+}
+
 const pinnedRunId = ref<string | null>(null)
 const queryClient = useQueryClient()
 const noteRuns = computed(
@@ -225,6 +277,19 @@ function restoreCourseQuestion(input: AskCourseQuestionInput) {
   questionPanelOpen.value = true
 }
 
+const { showMessage } = useGlobalMessage()
+async function exerciseSettled() {
+  const planId = task.data.value?.stage.plan.id
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: knowledgeOpsQueryKeys.task(taskId.value ?? '') }),
+    queryClient.invalidateQueries({ queryKey: knowledgeOpsQueryKeys.todayTasks() }),
+    ...(planId
+      ? [queryClient.invalidateQueries({ queryKey: knowledgeOpsQueryKeys.plan(planId) })]
+      : []),
+  ])
+  if (task.data.value?.state === 'PASSED') showMessage('当前课程已完成')
+}
+
 function captureCourseSelection(
   section: CourseSection,
   event: MouseEvent | KeyboardEvent | TouchEvent,
@@ -315,15 +380,67 @@ async function startTask() {
       >
         暂时无法更新任务，当前显示上次读取的内容。联网后会继续同步。
       </p>
-      <header class="flex flex-wrap items-start justify-between gap-4">
-        <div class="min-w-0">
-          <p class="text-base text-muted">{{ task.data.value.stage.title }}</p>
-          <h1 class="mt-2 break-words text-2xl font-medium md:text-workspace-title">
-            {{ task.data.value.title }}
-          </h1>
+      <div
+        ref="courseHeader"
+        :class="
+          task.data.value.type === 'COURSE' && task.data.value.course?.status === 'READY'
+            ? 'sticky top-0 z-20 bg-canvas'
+            : ''
+        "
+      >
+        <header class="flex flex-wrap items-start justify-between gap-4 py-4">
+          <div class="min-w-0">
+            <p class="text-base text-muted">{{ task.data.value.stage.title }}</p>
+            <h1 class="mt-2 break-words text-2xl font-medium md:text-workspace-title">
+              {{ task.data.value.title }}
+            </h1>
+          </div>
+          <div class="flex items-center gap-3">
+            <TaskStateLabel :state="task.data.value.state" />
+            <button
+              v-if="task.data.value.type === 'COURSE' && task.data.value.course?.status === 'READY'"
+              class="action-button min-w-11 px-3"
+              type="button"
+              aria-label="返回页面顶部"
+              title="返回页面顶部"
+              @click="scrollToTop"
+            >
+              <svg
+                class="size-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                aria-hidden="true"
+              >
+                <path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </header>
+        <div
+          v-if="task.data.value.type === 'COURSE' && task.data.value.course?.status === 'READY'"
+          class="flex gap-2 border-b border-hairline pb-3"
+          role="tablist"
+          aria-label="课程内容与练习"
+        >
+          <button
+            v-for="item in courseTabs"
+            :id="`course-tab-${item.id}`"
+            :key="item.id"
+            class="action-button aria-selected:border-ink aria-selected:bg-surface-elevated"
+            type="button"
+            role="tab"
+            :aria-selected="courseTab === item.id"
+            :aria-controls="`course-panel-${item.id}`"
+            :tabindex="courseTab === item.id ? 0 : -1"
+            @click="selectCourseTab(item.id)"
+            @keydown="courseTabKey"
+          >
+            {{ item.label }}
+          </button>
         </div>
-        <TaskStateLabel :state="task.data.value.state" />
-      </header>
+      </div>
       <template v-if="task.data.value.type === 'COURSE'">
         <section
           class="my-6 border border-hairline-strong bg-surface-soft p-5"
@@ -337,7 +454,7 @@ async function startTask() {
             aria-labelledby="course-generation-title"
           >
             <h2 id="course-generation-title" class="text-section-title font-medium">
-              生成中<span class="course-generation-ellipsis" aria-hidden="true">...</span>
+              生成中<AnimatedEllipsis />
             </h2>
             <p class="mt-3 max-w-2xl text-reading text-body">
               课程讲解和练习会一起保存，完成后即可开始学习。
@@ -379,7 +496,7 @@ async function startTask() {
           <p v-if="startError" class="mt-3 text-warning" role="alert">{{ startError }}</p>
         </section>
         <template v-if="task.data.value.course?.status === 'READY'">
-          <div v-if="task.data.value.state === 'READY'" class="mb-6">
+          <div v-if="task.data.value.state === 'READY'" class="my-6">
             <button
               class="action-button border-ink"
               :disabled="start.isPending.value"
@@ -389,51 +506,95 @@ async function startTask() {
             </button>
           </div>
           <div v-if="task.data.value.course.sections">
-            <p class="mb-5 text-base text-muted">选中一段原文即可提问；也可以就整节内容交流。</p>
-            <p v-if="selectionError" class="mb-5 text-base text-warning" role="alert">
-              {{ selectionError }}
-            </p>
-            <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-8">
-              <div class="space-y-8">
-                <section
-                  v-for="section in task.data.value.course.sections"
-                  :key="section.id"
-                  class="border-b border-hairline pb-8"
-                  @mouseup="captureCourseSelection(section, $event)"
-                  @keyup="captureCourseSelection(section, $event)"
-                  @touchend="captureCourseSelection(section, $event)"
-                >
-                  <h2 class="text-section-title font-medium">{{ section.title }}</h2>
-                  <p class="mt-4 whitespace-pre-line text-body">{{ section.explanation }}</p>
-                  <h3 class="mt-5 text-base font-medium text-ink">开发情景</h3>
-                  <p class="mt-2 whitespace-pre-line text-body">{{ section.scenario }}</p>
-                  <h3 class="mt-5 text-base font-medium text-ink">示例</h3>
-                  <p class="mt-2 whitespace-pre-line text-body">{{ section.example }}</p>
-                  <p class="mt-4 border-l-2 border-warning pl-4 text-base text-body">
-                    易错点：{{ section.misconception }}
-                  </p>
-                  <button
-                    class="action-button mt-4"
-                    type="button"
-                    @click="askAboutSection(section)"
+            <div
+              v-show="courseTab === 'content'"
+              id="course-panel-content"
+              role="tabpanel"
+              aria-labelledby="course-tab-content"
+              tabindex="0"
+              class="mt-6 focus-visible:outline-2 focus-visible:outline-link"
+            >
+              <p class="mb-5 text-base text-muted">选中一段原文即可提问；也可以就整节内容交流。</p>
+              <p v-if="selectionError" class="mb-5 text-base text-warning" role="alert">
+                {{ selectionError }}
+              </p>
+              <div
+                class="relative mt-6 lg:mt-0 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-8"
+              >
+                <CourseToc
+                  :key="`toc-${task.data.value.id}`"
+                  :sections="task.data.value.course.sections"
+                  :desktop-offset="courseHeaderHeight + 16"
+                />
+                <div class="mt-6 space-y-8 lg:mt-0">
+                  <section
+                    v-for="section in task.data.value.course.sections"
+                    :id="`course-section-${section.id}`"
+                    :key="section.id"
+                    class="border-b border-hairline pb-8"
+                    :style="{ scrollMarginTop: `${courseHeaderHeight + 16}px` }"
+                    @mouseup="captureCourseSelection(section, $event)"
+                    @keyup="captureCourseSelection(section, $event)"
+                    @touchend="captureCourseSelection(section, $event)"
                   >
-                    就本节提问
-                  </button>
-                </section>
-                <p class="text-base text-muted">
-                  练习已随课程准备完成；作答与验收将在下一阶段开放。
-                </p>
+                    <h2 class="text-section-title font-medium">{{ section.title }}</h2>
+                    <p class="mt-4 whitespace-pre-line text-body">{{ section.explanation }}</p>
+                    <h3 class="mt-5 text-base font-medium text-ink">开发情景</h3>
+                    <p class="mt-2 whitespace-pre-line text-body">{{ section.scenario }}</p>
+                    <h3 class="mt-5 text-base font-medium text-ink">示例</h3>
+                    <p class="mt-2 whitespace-pre-line text-body">{{ section.example }}</p>
+                    <p class="mt-4 border-l-2 border-warning pl-4 text-base text-body">
+                      易错点：{{ section.misconception }}
+                    </p>
+                    <button
+                      class="action-button mt-4"
+                      type="button"
+                      @click="askAboutSection(section)"
+                    >
+                      就本节提问
+                    </button>
+                  </section>
+                </div>
+                <CourseQuestionPanel
+                  :key="task.data.value.id"
+                  :task-id="task.data.value.id"
+                  :section="questionSection"
+                  :selected-text="questionSelection"
+                  :open="questionPanelOpen"
+                  :desktop-offset="courseHeaderHeight + 16"
+                  @open="questionPanelOpen = true"
+                  @close="questionPanelOpen = false"
+                  @restore="restoreCourseQuestion"
+                />
               </div>
-              <CourseQuestionPanel
-                :key="task.data.value.id"
+            </div>
+            <div
+              v-show="courseTab === 'exercise'"
+              id="course-panel-exercise"
+              role="tabpanel"
+              aria-labelledby="course-tab-exercise"
+              tabindex="0"
+              class="mt-6 focus-visible:outline-2 focus-visible:outline-link"
+            >
+              <CourseExercisePanel
+                v-if="task.data.value.course.exercises && task.data.value.state !== 'READY'"
                 :task-id="task.data.value.id"
-                :section="questionSection"
-                :selected-text="questionSelection"
-                :open="questionPanelOpen"
-                @open="questionPanelOpen = true"
-                @close="questionPanelOpen = false"
-                @restore="restoreCourseQuestion"
+                :task-version="task.data.value.version"
+                :exercises="task.data.value.course.exercises"
+                @settled="exerciseSettled"
               />
+              <p v-else class="text-base text-muted">开始课程后即可完成练习并查看验收报告。</p>
+              <section
+                v-if="task.data.value.state === 'PASSED'"
+                class="mt-6 border-t border-hairline-strong pt-5"
+                aria-label="课程完成"
+              >
+                <p class="text-section-title font-medium text-ink">当前课程已完成</p>
+                <p class="mt-2 text-base text-muted">可以返回学习计划，继续下一门已解锁的课程。</p>
+                <NuxtLink class="action-button mt-4 border-ink" to="/app/plan">
+                  返回学习计划
+                </NuxtLink>
+              </section>
             </div>
           </div>
           <AsyncStatePanel
@@ -708,26 +869,8 @@ async function startTask() {
 </template>
 
 <style scoped>
-.course-generation-ellipsis {
-  display: inline-block;
-  width: 0;
-  overflow: hidden;
-  vertical-align: bottom;
-  white-space: nowrap;
-  animation: course-generation-ellipsis 1.2s steps(3, end) infinite;
-}
-
 .course-generation-progress {
   animation: course-generation-progress 1.8s ease-in-out infinite;
-}
-
-@keyframes course-generation-ellipsis {
-  from {
-    width: 0;
-  }
-  to {
-    width: 3ch;
-  }
 }
 
 @keyframes course-generation-progress {
@@ -740,11 +883,6 @@ async function startTask() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .course-generation-ellipsis {
-    width: 3ch;
-    animation: none;
-  }
-
   .course-generation-progress {
     width: 100%;
     opacity: 0.35;

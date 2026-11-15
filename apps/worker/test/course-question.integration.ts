@@ -1,10 +1,13 @@
-import type { CourseQuestionRequest } from '@knowledgeops/agent-core'
+import { buildCourseExerciseReport, type CourseQuestionRequest } from '@knowledgeops/agent-core'
 import { createDatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { validCourseLearningPackage } from '../../../packages/agent-core/test/fixtures/course-generation.js'
 import { CourseQuestionService } from '../../api/src/courses/course-question.service.js'
+import { CourseExerciseService } from '../../api/src/courses/course-exercise.service.js'
+import { CourseExerciseExecutionRepository } from '../src/course-exercise/course-exercise-execution.repository.js'
+import { CourseExerciseJobProcessor } from '../src/course-exercise/course-exercise-job-processor.js'
 import { CourseQuestionExecutionRepository } from '../src/course-question/course-question-execution.repository.js'
 import { CourseQuestionJobProcessor } from '../src/course-question/course-question-job-processor.js'
 
@@ -117,16 +120,62 @@ function processor(answer: (request: CourseQuestionRequest) => Promise<unknown>)
   )
 }
 
+function exerciseInput(expectedTaskVersion = 0, correct = 4) {
+  return {
+    requestId: randomUUID(),
+    expectedTaskVersion,
+    multipleChoiceAnswers: validCourseLearningPackage.exercises.multipleChoice.map(
+      (question, index) => ({
+        questionId: question.id,
+        optionId:
+          index < correct
+            ? question.correctOptionId
+            : question.options.find((option) => option.id !== question.correctOptionId)!.id,
+      }),
+    ),
+    followUpAnswer: '当前任务结束后会清空微任务队列，再进入后续渲染调度。',
+  }
+}
+
+function exerciseProcessor(outcome: 'PASSED' | 'FAILED' | 'INSUFFICIENT_EVIDENCE' = 'PASSED') {
+  return new CourseExerciseJobProcessor(
+    new CourseExerciseExecutionRepository(database),
+    {
+      verify: async () => ({
+        outcome,
+        rationale: outcome === 'PASSED' ? '理解准确。' : '解释不完整。',
+        suggestions: outcome === 'PASSED' ? [] : ['补充微任务与渲染的顺序。'],
+      }),
+    },
+    60_000,
+  )
+}
+
+async function cleanup(userId: string) {
+  const questions = await database.courseQuestion.findMany({
+    where: { userId },
+    select: { id: true },
+  })
+  const submissions = await database.courseExerciseSubmission.findMany({
+    where: { userId },
+    select: { id: true },
+  })
+  await database.outboxEvent.deleteMany({
+    where: {
+      aggregateId: { in: [...questions, ...submissions].map((record) => record.id) },
+    },
+  })
+  await database.user.delete({ where: { id: userId } })
+}
+
 describe('M7 queued course question execution', () => {
   beforeAll(async () => database.$connect())
   afterAll(async () => database.$disconnect())
 
   it('claims the persisted question, saves the answer, and skips terminal replay', async () => {
     const { userId, taskId } = await createReadyCourse()
-    let questionId: string | undefined
     try {
       const accepted = await new CourseQuestionService(database).ask(userId, taskId, input())
-      questionId = accepted.id
       const contexts: CourseQuestionRequest[] = []
       const answer = vi.fn(async (request: CourseQuestionRequest) => {
         contexts.push(request)
@@ -150,21 +199,18 @@ describe('M7 queued course question execution', () => {
       expect(JSON.stringify(contexts[0])).not.toContain('rubric')
       expect(JSON.stringify(contexts[0])).not.toContain('exercises')
     } finally {
-      if (questionId) await database.outboxEvent.deleteMany({ where: { aggregateId: questionId } })
-      await database.user.delete({ where: { id: userId } })
+      await cleanup(userId)
     }
   })
 
   it('records model failure without changing course or task state', async () => {
     const { userId, taskId } = await createReadyCourse()
-    let questionId: string | undefined
     try {
       const before = await database.task.findUniqueOrThrow({
         where: { id: taskId },
         select: { state: true, version: true, course: { select: { status: true } } },
       })
       const accepted = await new CourseQuestionService(database).ask(userId, taskId, input())
-      questionId = accepted.id
       const answer = vi.fn(async () => Promise.reject(new Error('upstream secret must not leak')))
       await expect(processor(answer).process({ questionId: accepted.id })).resolves.toMatchObject({
         status: 'FAILED',
@@ -179,17 +225,14 @@ describe('M7 queued course question execution', () => {
         await database.courseQuestion.findUniqueOrThrow({ where: { id: accepted.id } }),
       ).toMatchObject({ status: 'FAILED', errorCode: 'MODEL_UNAVAILABLE', answer: null })
     } finally {
-      if (questionId) await database.outboxEvent.deleteMany({ where: { aggregateId: questionId } })
-      await database.user.delete({ where: { id: userId } })
+      await cleanup(userId)
     }
   })
 
   it('expires an interrupted execution and rejects its late answer by version and deadline', async () => {
     const { userId, taskId } = await createReadyCourse()
-    let questionId: string | undefined
     try {
       const accepted = await new CourseQuestionService(database).ask(userId, taskId, input())
-      questionId = accepted.id
       const repository = new CourseQuestionExecutionRepository(database)
       const now = new Date()
       const claimed = await repository.claimForExecution(accepted.id, now, 1_000)
@@ -209,8 +252,118 @@ describe('M7 queued course question execution', () => {
         await database.courseQuestion.findUniqueOrThrow({ where: { id: accepted.id } }),
       ).toMatchObject({ status: 'FAILED', errorCode: 'RUN_DEADLINE_EXCEEDED', answer: null })
     } finally {
-      if (questionId) await database.outboxEvent.deleteMany({ where: { aggregateId: questionId } })
-      await database.user.delete({ where: { id: userId } })
+      await cleanup(userId)
+    }
+  })
+
+  it('passes a course and unlocks only dependent tasks after mixed acceptance', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const current = await database.task.findUniqueOrThrow({
+        where: { id: taskId },
+        select: { stageId: true },
+      })
+      const nextTaskId = randomUUID()
+      await database.task.create({
+        data: {
+          id: nextTaskId,
+          stage: { connect: { id: current.stageId } },
+          title: '下一门课程',
+          description: '依赖当前课程。',
+          position: 1,
+          type: 'COURSE',
+          state: 'BLOCKED',
+          estimatedMinutes: 30,
+          course: { create: { status: 'PENDING' } },
+          prerequisites: { create: { prerequisiteTaskId: taskId } },
+        },
+      })
+      const accepted = await new CourseExerciseService(database).submit(
+        userId,
+        taskId,
+        exerciseInput(),
+      )
+      await expect(
+        exerciseProcessor().process({ submissionId: accepted.id }),
+      ).resolves.toMatchObject({ status: 'SUCCEEDED' })
+      expect(
+        await database.courseExerciseSubmission.findUniqueOrThrow({ where: { id: accepted.id } }),
+      ).toMatchObject({
+        status: 'SUCCEEDED',
+        report: { passed: true, correctCount: 4 },
+      })
+      expect(await database.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+        state: 'PASSED',
+        version: 1,
+      })
+      expect(await database.task.findUniqueOrThrow({ where: { id: nextTaskId } })).toMatchObject({
+        state: 'READY',
+        version: 1,
+      })
+    } finally {
+      await cleanup(userId)
+    }
+  })
+
+  it('keeps a failed business report in progress and accepts a corrected resubmission', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const exercises = new CourseExerciseService(database)
+      const first = await exercises.submit(userId, taskId, exerciseInput(0, 2))
+      await exerciseProcessor().process({ submissionId: first.id })
+      expect(
+        await database.courseExerciseSubmission.findUniqueOrThrow({ where: { id: first.id } }),
+      ).toMatchObject({ status: 'SUCCEEDED', report: { passed: false, correctCount: 2 } })
+      expect(await database.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+        state: 'IN_PROGRESS',
+        version: 1,
+      })
+
+      const retry = await exercises.submit(userId, taskId, exerciseInput(1, 4))
+      await exerciseProcessor().process({ submissionId: retry.id })
+      expect(await database.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+        state: 'PASSED',
+        version: 2,
+      })
+    } finally {
+      await cleanup(userId)
+    }
+  })
+
+  it('rejects finalization when the task version changed during model execution', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const accepted = await new CourseExerciseService(database).submit(
+        userId,
+        taskId,
+        exerciseInput(),
+      )
+      const repository = new CourseExerciseExecutionRepository(database)
+      const claimed = await repository.claimForExecution(accepted.id, new Date(), 60_000)
+      if (claimed.status !== 'CLAIMED') throw new Error('Expected a claimed submission')
+      await database.task.update({ where: { id: taskId }, data: { version: { increment: 1 } } })
+      const report = buildCourseExerciseReport(
+        claimed.submission.exerciseSet,
+        claimed.submission.answers,
+        { outcome: 'PASSED', rationale: '理解准确。', suggestions: [] },
+      )
+      await expect(
+        repository.recordSuccess(
+          accepted.id,
+          claimed.submission.expectedVersion,
+          report,
+          new Date(),
+        ),
+      ).resolves.toEqual({ status: 'RECORDED', submissionStatus: 'FAILED' })
+      expect(
+        await database.courseExerciseSubmission.findUniqueOrThrow({ where: { id: accepted.id } }),
+      ).toMatchObject({ status: 'FAILED', errorCode: 'EXECUTION_CONTEXT_CHANGED' })
+      expect(await database.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+        state: 'IN_PROGRESS',
+        version: 1,
+      })
+    } finally {
+      await cleanup(userId)
     }
   })
 })

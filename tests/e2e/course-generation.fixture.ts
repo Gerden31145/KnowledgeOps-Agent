@@ -62,10 +62,16 @@ export const test = base.extend<{
           where: { userId },
           select: { id: true },
         })
+        const exerciseSubmissions = await database.courseExerciseSubmission.findMany({
+          where: { userId },
+          select: { id: true },
+        })
         await database.outboxEvent.deleteMany({
           where: {
             aggregateId: {
-              in: [...planRuns, ...courseRuns, ...questions].map((record) => record.id),
+              in: [...planRuns, ...courseRuns, ...questions, ...exerciseSubmissions].map(
+                (record) => record.id,
+              ),
             },
           },
         })

@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common'
 
 import { toError } from '../outbox/outbox-dispatch-error.js'
+import type { CourseExerciseExecutionRepository } from '../course-exercise/course-exercise-execution.repository.js'
 import type { CourseGenerationRunRepository } from '../course-generation/course-generation-run.repository.js'
 import type { CourseQuestionExecutionRepository } from '../course-question/course-question-execution.repository.js'
 import {
@@ -19,6 +20,7 @@ export class PlanGenerationTimeoutSweepLoop {
     private readonly intervalMs: number,
     private readonly courseRuns?: CourseGenerationRunRepository,
     private readonly courseQuestions?: CourseQuestionExecutionRepository,
+    private readonly courseExercises?: CourseExerciseExecutionRepository,
   ) {}
 
   async start(): Promise<void> {
@@ -59,21 +61,28 @@ export class PlanGenerationTimeoutSweepLoop {
         this.batchSize,
         new Date(),
       )
+      const timedOutExerciseIds = await this.courseExercises?.timeoutExpired(
+        this.batchSize,
+        new Date(),
+      )
 
       if (
         timedOutRunIds.length > 0 ||
         (timedOutCourseRunIds?.length ?? 0) > 0 ||
-        (timedOutQuestionIds?.length ?? 0) > 0
+        (timedOutQuestionIds?.length ?? 0) > 0 ||
+        (timedOutExerciseIds?.length ?? 0) > 0
       ) {
         this.logger.warn({
           event: 'generation_timeout_sweep_completed',
           generationRunIds: timedOutRunIds,
           courseGenerationRunIds: timedOutCourseRunIds ?? [],
           courseQuestionIds: timedOutQuestionIds ?? [],
+          courseExerciseSubmissionIds: timedOutExerciseIds ?? [],
           timedOutCount:
             timedOutRunIds.length +
             (timedOutCourseRunIds?.length ?? 0) +
-            (timedOutQuestionIds?.length ?? 0),
+            (timedOutQuestionIds?.length ?? 0) +
+            (timedOutExerciseIds?.length ?? 0),
         })
       }
     } catch (error: unknown) {

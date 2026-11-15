@@ -4,6 +4,8 @@ import { readWorkerEnvironment } from '../src/config/environment.js'
 
 import { DatabaseService } from '../src/database/database.service.js'
 import { CourseGenerationJobProcessor } from '../src/course-generation/course-generation-job-processor.js'
+import { CourseExerciseExecutionRepository } from '../src/course-exercise/course-exercise-execution.repository.js'
+import { CourseExerciseJobProcessor } from '../src/course-exercise/course-exercise-job-processor.js'
 import { CourseGenerationRunRepository } from '../src/course-generation/course-generation-run.repository.js'
 import { CourseQuestionExecutionRepository } from '../src/course-question/course-question-execution.repository.js'
 import { CourseQuestionJobProcessor } from '../src/course-question/course-question-job-processor.js'
@@ -73,6 +75,21 @@ vi.mock('../src/queue/bullmq-course-question-queue.js', () => ({
   },
 }))
 
+const exerciseQueue = vi.hoisted(() => ({
+  constructed: vi.fn(),
+  start: vi.fn(),
+  close: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../src/queue/bullmq-course-exercise-queue.js', () => ({
+  BullMqCourseExerciseQueue: class {
+    constructor(options: unknown) {
+      exerciseQueue.constructed(options)
+    }
+    start = exerciseQueue.start
+    close = exerciseQueue.close
+  },
+}))
+
 const evidenceQueue = vi.hoisted(() => ({
   constructed: vi.fn(),
   start: vi.fn(),
@@ -130,6 +147,7 @@ describe('Worker runtime dependency injection', () => {
       .mockResolvedValue([])
     vi.spyOn(CourseGenerationRunRepository.prototype, 'timeoutExpired').mockResolvedValue([])
     vi.spyOn(CourseQuestionExecutionRepository.prototype, 'timeoutExpired').mockResolvedValue([])
+    vi.spyOn(CourseExerciseExecutionRepository.prototype, 'timeoutExpired').mockResolvedValue([])
     const dispatch = vi.spyOn(OutboxDispatcher.prototype, 'dispatchAvailable').mockResolvedValue({
       deadLettered: 0,
       dispatched: 0,
@@ -156,6 +174,10 @@ describe('Worker runtime dependency injection', () => {
         expect.objectContaining({ processor: expect.any(CourseQuestionJobProcessor) }),
       )
       expect(questionQueue.start).toHaveBeenCalledOnce()
+      expect(exerciseQueue.constructed).toHaveBeenCalledWith(
+        expect.objectContaining({ processor: expect.any(CourseExerciseJobProcessor) }),
+      )
+      expect(exerciseQueue.start).toHaveBeenCalledOnce()
       expect(evidenceQueue.constructed).toHaveBeenCalledWith(
         expect.objectContaining({ processor: expect.any(GitHubEvidenceJobProcessor) }),
       )
@@ -175,6 +197,7 @@ describe('Worker runtime dependency injection', () => {
 
     expect(queue.close).toHaveBeenCalledOnce()
     expect(questionQueue.close).toHaveBeenCalledOnce()
+    expect(exerciseQueue.close).toHaveBeenCalledOnce()
     expect(evidenceQueue.close).toHaveBeenCalledOnce()
     expect(closeDatabase).toHaveBeenCalledOnce()
   })
@@ -195,6 +218,10 @@ describe('Worker runtime dependency injection', () => {
       {
         timeoutExpired: vi.fn().mockResolvedValue([]),
       } as unknown as CourseQuestionExecutionRepository,
+      {} as CourseExerciseJobProcessor,
+      {
+        timeoutExpired: vi.fn().mockResolvedValue([]),
+      } as unknown as CourseExerciseExecutionRepository,
       {} as GitHubEvidenceJobProcessor,
       {} as NoteVerificationJobProcessor,
       {} as NoteVerificationRunRepository,
@@ -242,6 +269,10 @@ describe('Worker runtime dependency injection', () => {
       {
         timeoutExpired: vi.fn().mockResolvedValue([]),
       } as unknown as CourseQuestionExecutionRepository,
+      {} as CourseExerciseJobProcessor,
+      {
+        timeoutExpired: vi.fn().mockResolvedValue([]),
+      } as unknown as CourseExerciseExecutionRepository,
       {} as GitHubEvidenceJobProcessor,
       noteProcessor,
       { reconcile } as unknown as NoteVerificationRunRepository,

@@ -2,6 +2,7 @@ import {
   CURRENT_TASK_STATES,
   contentMinimumConfigSchema,
   courseSectionSchema,
+  toPublicExerciseSet,
   planDetailResponseSchema,
   sectionPresentConfigSchema,
   taskDetailResponseSchema,
@@ -296,7 +297,11 @@ export class PlanRepository {
               take: 1,
               select: { id: true, queuedAt: true, errorCode: true, errorMessage: true },
             },
-            versions: { orderBy: { version: 'desc' }, take: 1, select: { content: true } },
+            versions: {
+              orderBy: { version: 'desc' },
+              take: 1,
+              select: { content: true, exerciseSet: { select: { body: true } } },
+            },
           },
         },
         criteria: {
@@ -388,7 +393,7 @@ function summarizeCourse(
       errorCode: string | null
       errorMessage: string | null
     }[]
-    versions?: { content: unknown }[]
+    versions?: { content: unknown; exerciseSet?: { body: unknown } | null }[]
   } | null,
   includeContent = false,
 ) {
@@ -397,11 +402,23 @@ function summarizeCourse(
   const content = z
     .object({ sections: z.array(courseSectionSchema) })
     .safeParse(course.versions?.[0]?.content)
+  const exercises = (() => {
+    try {
+      return toPublicExerciseSet(course.versions?.[0]?.exerciseSet?.body)
+    } catch {
+      return null
+    }
+  })()
   return {
     status: course.status,
     generationRunId: latest?.id ?? null,
     generationQueuedAt: latest?.queuedAt.toISOString() ?? null,
-    ...(includeContent ? { sections: content.success ? content.data.sections : null } : {}),
+    ...(includeContent
+      ? {
+          sections: content.success ? content.data.sections : null,
+          exercises,
+        }
+      : {}),
     error: latest?.errorCode
       ? {
           code: latest.errorCode,

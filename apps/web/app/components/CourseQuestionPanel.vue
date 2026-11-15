@@ -17,6 +17,7 @@ const props = defineProps<{
   section: CourseSection | null
   selectedText: string
   open: boolean
+  desktopOffset: number
 }>()
 const emit = defineEmits<{ close: []; open: []; restore: [AskCourseQuestionInput] }>()
 
@@ -242,15 +243,14 @@ onBeforeUnmount(() => {
   />
   <aside
     ref="panel"
-    class="z-50 flex max-h-[85dvh] flex-col border border-hairline-strong bg-surface-elevated lg:z-auto lg:max-h-[calc(100dvh-3rem)] lg:self-start"
-    :class="
-      open ? 'fixed inset-x-0 bottom-0 lg:sticky lg:top-6' : 'hidden lg:sticky lg:top-6 lg:block'
-    "
+    class="z-50 flex max-h-[85dvh] flex-col overflow-y-auto border border-hairline-strong bg-surface-elevated lg:sticky lg:top-[var(--course-question-offset)] lg:z-auto lg:max-h-[calc(100dvh-var(--course-question-offset))] lg:self-start"
+    :class="open ? 'fixed inset-x-0 bottom-0' : 'hidden lg:block'"
+    :style="{ '--course-question-offset': `${desktopOffset}px` }"
     role="dialog"
     aria-label="课程选文答疑"
     @keydown="panelKeydown"
   >
-    <header class="flex items-start justify-between gap-4 border-b border-hairline p-5">
+    <header class="flex shrink-0 items-start justify-between gap-4 border-b border-hairline p-5">
       <div>
         <p class="font-mono text-caption tracking-label text-muted uppercase">COURSE Q&amp;A</p>
         <h2 class="mt-1 text-section-title font-medium">结合原文提问</h2>
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
       </button>
     </header>
 
-    <div ref="historyElement" class="min-h-32 flex-1 overflow-y-auto p-5">
+    <div ref="historyElement" class="min-h-0 flex-1 overflow-y-auto p-5">
       <div v-if="section" class="border-l-2 border-link pl-3">
         <p class="text-sm text-muted">{{ section.title }} · 选中原文</p>
         <blockquote class="mt-2 max-h-32 overflow-y-auto whitespace-pre-line text-base text-body">
@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <form class="border-t border-hairline p-5" @submit.prevent="submit">
+    <form class="shrink-0 border-t border-hairline p-5" @submit.prevent="submit">
       <fieldset :disabled="ask.isPending.value">
         <legend class="text-sm font-medium text-ink">回答深度</legend>
         <label
