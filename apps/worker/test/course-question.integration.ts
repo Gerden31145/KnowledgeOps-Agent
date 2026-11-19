@@ -76,6 +76,15 @@ async function createReadyCourse() {
       },
     },
   })
+  await database.knowledgePoint.create({
+    data: {
+      planId,
+      key: 'event-loop',
+      title: '事件循环',
+      description: '理解任务、微任务与渲染之间的调度顺序。',
+      courses: { create: { course: { connect: { taskId } }, role: 'TEACH' } },
+    },
+  })
   await database.courseGenerationRun.create({
     data: {
       id: courseRunId,
@@ -318,6 +327,17 @@ describe('M7 queued course question execution', () => {
         state: 'IN_PROGRESS',
         version: 1,
       })
+      expect(
+        await database.courseKnowledgeEvidence.count({ where: { submissionId: first.id } }),
+      ).toBe(5)
+      expect(await database.knowledgeMastery.findFirstOrThrow({ where: { userId } })).toMatchObject(
+        {
+          level: 'DEVELOPING',
+          score: 60,
+          evidenceCount: 5,
+          misconceptionTags: ['选择题概念辨析'],
+        },
+      )
 
       const retry = await exercises.submit(userId, taskId, exerciseInput(1, 4))
       await exerciseProcessor().process({ submissionId: retry.id })
@@ -325,6 +345,17 @@ describe('M7 queued course question execution', () => {
         state: 'PASSED',
         version: 2,
       })
+      expect(
+        await database.courseKnowledgeEvidence.count({ where: { submissionId: retry.id } }),
+      ).toBe(0)
+      expect(await database.knowledgeMastery.findFirstOrThrow({ where: { userId } })).toMatchObject(
+        {
+          level: 'DEVELOPING',
+          score: 60,
+          evidenceCount: 5,
+          misconceptionTags: ['选择题概念辨析'],
+        },
+      )
     } finally {
       await cleanup(userId)
     }

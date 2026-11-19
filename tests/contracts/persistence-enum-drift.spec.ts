@@ -2,6 +2,8 @@ import {
   ACCEPTANCE_CRITERION_TYPES,
   AGENT_RUN_KINDS,
   AGENT_RUN_STATES,
+  COURSE_KNOWLEDGE_EVIDENCE_KINDS,
+  KNOWLEDGE_MASTERY_LEVELS,
   OUTBOX_EVENT_TYPES,
   PLAN_GENERATION_RUN_STATES,
   PLAN_STATUSES,
@@ -12,6 +14,8 @@ import {
   AcceptanceCriterionType as PrismaAcceptanceCriterionType,
   AgentRunKind as PrismaAgentRunKind,
   AgentRunState as PrismaAgentRunState,
+  CourseKnowledgeEvidenceKind as PrismaCourseKnowledgeEvidenceKind,
+  KnowledgeMasteryLevel as PrismaKnowledgeMasteryLevel,
   OutboxEventType as PrismaOutboxEventType,
   PlanGenerationRunState as PrismaPlanGenerationRunState,
   PlanStatus as PrismaPlanStatus,
@@ -42,5 +46,12 @@ describe('persistence enum drift', () => {
   it('keeps plan task and criterion enums aligned with persistence', () => {
     expect(Object.values(PrismaTaskType)).toEqual(TASK_TYPES)
     expect(Object.values(PrismaAcceptanceCriterionType)).toEqual(ACCEPTANCE_CRITERION_TYPES)
+  })
+
+  it('keeps course knowledge evidence and mastery enums aligned with persistence', () => {
+    expect(Object.values(PrismaCourseKnowledgeEvidenceKind)).toEqual(
+      COURSE_KNOWLEDGE_EVIDENCE_KINDS,
+    )
+    expect(Object.values(PrismaKnowledgeMasteryLevel)).toEqual(KNOWLEDGE_MASTERY_LEVELS)
   })
 })

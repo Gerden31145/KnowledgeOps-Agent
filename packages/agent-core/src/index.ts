@@ -78,6 +78,12 @@ export {
   LangChainCourseExerciseVerifier,
 } from './course-exercise/langchain-course-exercise-verifier.js'
 export {
+  buildCourseKnowledgeEvidence,
+  summarizeKnowledgeMastery,
+  type CourseKnowledgeEvidenceDraft,
+  type KnowledgeMasterySummary,
+} from './knowledge-mastery/course-knowledge-mastery.js'
+export {
   noteSemanticCriterionTypeSchema,
   noteVerificationCandidateSchema,
   noteVerificationRequestSchema,

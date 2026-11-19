@@ -1,3 +1,4 @@
+import type { CourseGenerationRequest } from '@knowledgeops/agent-core'
 import { createDatabaseClient } from '@knowledgeops/database'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -60,7 +61,7 @@ async function createCoursePlan() {
   return { plan, planRunId, userId }
 }
 
-function courseProcessor(generate: () => Promise<unknown>) {
+function courseProcessor(generate: (request: CourseGenerationRequest) => Promise<unknown>) {
   return new CourseGenerationJobProcessor(
     new CourseGenerationRunRepository(database),
     { generate },
@@ -120,6 +121,112 @@ describe('M7 course learning package persistence', () => {
       ).resolves.toMatchObject({ state: 'IN_PROGRESS', targetPath: null })
     } finally {
       await database.user.delete({ where: { id: userId } })
+    }
+  })
+
+  it('freezes at most two related weak points and excludes mastered, unrelated, and other users', async () => {
+    const { plan, userId } = await createCoursePlan()
+    const otherUserId = randomUUID()
+    try {
+      await database.user.create({ data: { id: otherUserId } })
+      await new PlanLifecycleRepository(database).confirmPlan(plan.id, userId)
+      const tasks = plan.stages.flatMap((stage) => stage.tasks)
+      const nextTask = tasks[1]!
+      await database.task.update({ where: { id: nextTask.id }, data: { state: 'READY' } })
+      const points = await database.knowledgePoint.findMany({
+        where: { planId: plan.id },
+        orderBy: { key: 'asc' },
+      })
+      const byKey = new Map(points.map((point) => [point.key, point]))
+      const mastered = await database.knowledgePoint.create({
+        data: {
+          planId: plan.id,
+          key: 'mastered-related',
+          title: '已掌握关联知识',
+          description: '用于验证已掌握内容不会重复进入复习。',
+        },
+      })
+      const unrelated = await database.knowledgePoint.create({
+        data: {
+          planId: plan.id,
+          key: 'unrelated-weak',
+          title: '无关薄弱知识',
+          description: '用于验证当前课程只读取直接关联的薄弱点。',
+        },
+      })
+      byKey.set(mastered.key, mastered)
+      byKey.set(unrelated.key, unrelated)
+      await database.courseKnowledgePoint.createMany({
+        data: [
+          {
+            courseId: nextTask.course!.id,
+            knowledgePointId: byKey.get('vue-next-tick')!.id,
+            role: 'TEACH',
+          },
+          {
+            courseId: nextTask.course!.id,
+            knowledgePointId: mastered.id,
+            role: 'TEACH',
+          },
+        ],
+      })
+      const masteryRows = [
+        { key: 'event-loop', level: 'WEAK', score: 40 },
+        { key: 'rendering-pipeline', level: 'DEVELOPING', score: 60 },
+        { key: 'vue-next-tick', level: 'WEAK', score: 20 },
+        { key: mastered.key, level: 'MASTERED', score: 100 },
+        { key: unrelated.key, level: 'WEAK', score: 0 },
+      ] as const
+      for (const row of masteryRows) {
+        const knowledgePointId = byKey.get(row.key)!.id
+        await database.knowledgeMastery.create({
+          data: {
+            userId,
+            knowledgePointId,
+            level: row.level,
+            score: row.score,
+            evidenceCount: 5,
+            misconceptionTags: ['选择题概念辨析'],
+          },
+        })
+      }
+      await database.knowledgeMastery.create({
+        data: {
+          userId: otherUserId,
+          knowledgePointId: byKey.get('event-loop')!.id,
+          level: 'WEAK',
+          score: 0,
+          evidenceCount: 5,
+        },
+      })
+
+      const accepted = await new CourseGenerationRepository(database, 300_000).request(
+        nextTask.id,
+        userId,
+      )
+      const run = await database.courseGenerationRun.findUniqueOrThrow({
+        where: { id: accepted.generationRunId },
+      })
+      expect(run.profileSnapshot).toEqual([
+        expect.objectContaining({ key: 'vue-next-tick', mastery: 'WEAK' }),
+        expect.objectContaining({ key: 'event-loop', mastery: 'WEAK' }),
+      ])
+      expect(JSON.stringify(run.profileSnapshot)).not.toContain('mastered-related')
+      expect(JSON.stringify(run.profileSnapshot)).not.toContain('unrelated-weak')
+      expect(JSON.stringify(run.profileSnapshot)).not.toContain(otherUserId)
+
+      await database.knowledgeMastery.updateMany({
+        where: { userId },
+        data: { level: 'MASTERED', score: 100 },
+      })
+      const generate = vi.fn(async (request: CourseGenerationRequest) => {
+        expect(request.review).toEqual(run.profileSnapshot)
+        return validCourseLearningPackage
+      })
+      await courseProcessor(generate).process({ generationRunId: accepted.generationRunId })
+      expect(generate).toHaveBeenCalledOnce()
+    } finally {
+      await database.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
     }
   })
 

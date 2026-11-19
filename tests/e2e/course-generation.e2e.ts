@@ -152,12 +152,16 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
     ),
   ).toBeNull()
 
-  async function answerExercises() {
+  async function answerExercises(correctCount = 4) {
     for (const [index, question] of validCourseLearningPackage.exercises.multipleChoice.entries()) {
       const correct = question.options.find((option) => option.id === question.correctOptionId)!
+      const incorrect = question.options.find((option) => option.id !== question.correctOptionId)!
       await page
         .getByRole('group', { name: `${index + 1}. ${question.prompt}`, exact: true })
-        .getByRole('radio', { name: correct.text, exact: true })
+        .getByRole('radio', {
+          name: index < correctCount ? correct.text : incorrect.text,
+          exact: true,
+        })
         .check()
     }
     await page
@@ -167,7 +171,7 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
 
   await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
   await expect(page).toHaveURL((url) => url.searchParams.get('tab') === 'exercise')
-  await answerExercises()
+  await answerExercises(2)
   await page.getByRole('tab', { name: '课程内容', exact: true }).click()
   await expect(page.getByRole('heading', { name: '任务与调用栈', exact: true })).toBeVisible()
   await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
@@ -185,7 +189,7 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
       return { status: submission?.status ?? 'NOT_FOUND', errorCode: submission?.errorCode }
     })
     .toEqual({ status: 'SUCCEEDED', errorCode: null })
-  await expect(page.getByText('选择题 4/4 · 尚需修订', { exact: true })).toBeVisible({
+  await expect(page.getByText('选择题 2/4 · 尚需修订', { exact: true })).toBeVisible({
     timeout: 15_000,
   })
   await expect(page.getByText('开放追问：需要修正', { exact: true })).toBeVisible()
@@ -234,4 +238,29 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
   await expect(page.getByText('微任务会在当前调用栈清空后', { exact: false }).last()).toBeVisible()
   await page.getByRole('button', { name: '关闭答疑', exact: true }).click()
   await expect(page.getByRole('button', { name: '课程答疑', exact: true })).toBeVisible()
+
+  expect(
+    await f.database.knowledgeMastery.findFirstOrThrow({ where: { userId: f.userId } }),
+  ).toMatchObject({ level: 'WEAK', score: 40, evidenceCount: 5 })
+  await page.goto(`/app/tasks/${next.id}`)
+  await page.getByRole('button', { name: '生成课程', exact: true }).click()
+  await expect
+    .poll(
+      async () =>
+        (await f.database.course.findUniqueOrThrow({ where: { taskId: next.id } })).status,
+      { timeout: 20_000 },
+    )
+    .toBe('READY')
+  const nextRun = await f.database.courseGenerationRun.findFirstOrThrow({
+    where: { course: { taskId: next.id } },
+    orderBy: { queuedAt: 'desc' },
+  })
+  expect(nextRun.profileSnapshot).toEqual([
+    expect.objectContaining({
+      key: 'event-loop',
+      mastery: 'WEAK',
+      misconceptionTags: expect.arrayContaining(['选择题概念辨析', '开放追问概念错误']),
+    }),
+  ])
+  expect(f.worker.courseModelCalls).toBe(2)
 })

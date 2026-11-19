@@ -1,3 +1,4 @@
+import { courseGenerationRequestSchema } from '@knowledgeops/agent-core'
 import {
   COURSE_GENERATION_OUTPUT_SCHEMA_VERSION,
   COURSE_GENERATION_PROMPT_VERSION,
@@ -26,12 +27,22 @@ export async function requestCourseGenerationForTask(
       id: true,
       type: true,
       state: true,
-      course: { select: { id: true, status: true } },
+      course: {
+        select: {
+          id: true,
+          status: true,
+          knowledge: {
+            where: { role: 'TEACH' },
+            select: { knowledgePointId: true },
+          },
+        },
+      },
       stage: {
         select: {
           plan: {
             select: {
               status: true,
+              goal: { select: { userId: true } },
               generationRun: {
                 select: {
                   modelCatalogId: true,
@@ -77,6 +88,30 @@ export async function requestCourseGenerationForTask(
 
   const model = task.stage.plan.generationRun
   if (!model) throw new InvalidPlanLifecycleStateError('The plan has no frozen model configuration')
+  const masteries = await tx.knowledgeMastery.findMany({
+    where: {
+      userId: task.stage.plan.goal.userId,
+      knowledgePointId: { in: task.course.knowledge.map((item) => item.knowledgePointId) },
+      level: { in: ['WEAK', 'DEVELOPING'] },
+    },
+    orderBy: [{ score: 'asc' }, { updatedAt: 'desc' }, { knowledgePointId: 'asc' }],
+    take: 2,
+    select: {
+      knowledgePointId: true,
+      level: true,
+      misconceptionTags: true,
+      knowledgePoint: { select: { key: true, title: true } },
+    },
+  })
+  const profileSnapshot = courseGenerationRequestSchema.shape.review.parse(
+    masteries.map((mastery) => ({
+      knowledgePointId: mastery.knowledgePointId,
+      key: mastery.knowledgePoint.key,
+      title: mastery.knowledgePoint.title,
+      mastery: mastery.level,
+      misconceptionTags: mastery.misconceptionTags,
+    })),
+  )
   const generationRunId = randomUUID()
   await tx.courseGenerationRun.create({
     data: {
@@ -88,7 +123,7 @@ export async function requestCourseGenerationForTask(
       modelReasoningEffort: model.modelReasoningEffort,
       promptVersion: COURSE_GENERATION_PROMPT_VERSION,
       outputSchemaVersion: COURSE_GENERATION_OUTPUT_SCHEMA_VERSION,
-      profileSnapshot: [],
+      profileSnapshot,
       deadlineAt: new Date(now.getTime() + timeoutMs),
       queuedAt: now,
       retryOfRunId: retryOfRunId ?? null,

@@ -11,8 +11,8 @@
 | 确定任务预算 | R14 收尾后原未完成单元合计约 47 小时，其中原冻结前任务约 43 小时，超过 9/22 至 9/27 容量约 21 至 25 小时；是待完成工作量，不是月底完成承诺。包含入门、阅读、手写、Review、验证、复述、周问答与文档 |
 | 预算性质 | 用户项目投入估算，不是 AI 编码耗时或完成保证；按真实耗时复盘，剩余容量留作缓冲 |
 | 当前活动阶段 | M7 `AI_IMPLEMENTING`：站内课程学习、选文答疑、练习验收与计划内画像；M6 保持 DONE，不重开历史单元 |
-| 当前活动单元 | L03 `DONE`（随本次本地提交成功生效）：真实模型验收、依赖解锁、全局完成反馈、课程页签、吸顶侧栏与章节目录均已验证，短复述和集中回归完成 |
-| 下一步 | 复核明确路径并创建 L03 本地提交；成功后仅预告 L04 计划内知识画像，不自动启动实现 |
+| 当前活动单元 | L04 `DONE`：画像落库、后续课程复习快照、导读、短复述与工程验证均已完成；完成状态随本次本地提交生效 |
+| 下一步 | L05 尚未启动；下次先说明闭环与真实模型验收范围，再按既有授权边界推进 |
 | 真相源 | [求职版 PRD](KnowledgeOps-Agent-9月求职版PRD.md)、[协作规则](../AGENTS.md)、[阶段技能](../.agents/skills/run-interview-project-stage/SKILL.md)、[学习档案](../问答.md) |
 
 旧计划剩余 22 个开发日，按此前每个至少 4 小时估算已超过 88 小时，尚未包含阶段收尾。因此本次同时减少实现范围和重复学习关卡，不将旧日期整体顺延。
@@ -26,8 +26,8 @@
 | L01 课程路线与学习包 | 目标生成 3 至 8 门课程；确认后异步生成首课，正文与 4 道单选 + 1 道追问同时原子落库；失败重试、重复恢复、READY 后开始 | 4 至 5 小时 | `DONE`，本地提交 `e276a08`，导读、复述与工程验证完成 |
 | L02 阅读与选文答疑 | 课程阅读器、单区块选文、桌面侧栏/移动抽屉；快速解惑/情境理解/深入原理三级控制与历史恢复 | 4 至 5 小时 | `DONE`，本地提交 `e3a531c`，导读、复述与工程验证完成 |
 | L02R 答疑队列化 | API 原子保存 CourseQuestion + Outbox 并返回 202；Worker 幂等执行与超时清扫；前端按活动状态轮询 | 2 至 3 小时 | `DONE`，本地提交 `c2188b5`，观察、导读、复述与工程验证完成 |
-| L03 练习与混合验收 | 提交前隐藏答案；程序判单选、Agent 验追问；报告、重答、Task 通过与依赖解锁 | 4 至 5 小时 | `DONE`（随本次本地提交成功生效），真实模型验收、导读、短复述与最终工程回归完成 |
-| L04 计划内知识画像 | 逐题证据、确定性掌握等级、易错点来源；后续课程最多结合两个相关薄弱点复习 | 3 至 4 小时 | `NOT_STARTED` |
+| L03 练习与混合验收 | 提交前隐藏答案；程序判单选、Agent 验追问；报告、重答、Task 通过与依赖解锁 | 4 至 5 小时 | `DONE`，本地提交 `1f8e0b8`，真实模型验收、导读、短复述与最终工程回归完成 |
+| L04 计划内知识画像 | 逐题证据、确定性掌握等级、易错点来源；后续课程最多结合两个相关薄弱点复习 | 3 至 4 小时 | `DONE`，导读、短复述与工程验证完成；随本次本地提交生效 |
 | L05 闭环与真实模型验收 | 双用户隔离、故障恢复、移动端/键盘、固定真实模型样例和材料更新 | 3 至 4 小时 | `NOT_STARTED` |
 
 L01 IN：新增 Course/CourseVersion/CourseGenerationRun/ExerciseSet 与计划内知识点，复用 Plan、Task、Outbox/BullMQ 和结构化模型边界。OUT：答疑、练习提交、画像更新、跨计划合并、邮箱登录、生产发布。首读入口为 `packages/agent-core/src/course-generation/course-generation.ts`、`apps/worker/src/course-generation/finalize-course-generation-run.ts`、`apps/api/src/plans/plan-lifecycle.repository.ts`。
@@ -71,6 +71,20 @@ CourseExerciseSubmission 固定用户、requestId、内容指纹、答案、练�
 2026-11-15 用户短复述原述要点：选择题有固定答案，不必浪费 Token，开放题没有固定答案，需由 Agent 验收；HTTP 202 代表验收已提交到队列，不代表课程验收通过。最终落库前检查当前版本号与期望版本号，不一致则拒绝。混合验收分工、202 与业务通过的区别、版本围栏均理解正确，复述通过。AI 校准 202 的准确含义为 Submission + Outbox 原子持久化受理，不证明已进入 BullMQ；最终事务复查 Task 版本，防止旧结果覆盖新状态。校准内容不冒记为用户独立答出。实际学习耗时未报。
 
 2026-11-15 最终集中回归：`pnpm check` 通过格式、lint、类型、Prisma 校验及 85 个文件 887 项单元测试，M7 PostgreSQL 集成 13 项和完整生产构建通过。首轮 Chromium 22/23 通过，唯一失败证实 1280×720 视口中提问侧栏受吸顶偏移压缩后，发送按钮被裁出视口且无法滚动到；为侧栏增加整体滚动、允许历史区收缩并固定头部/表单布局后，课程主链路定向回归 1 项通过，最终完整 Chromium 23/23 通过。E2E 新增验证目录默认收起、向左展开不覆盖正文、sticky 定位、跳转保持展开、返回顶部、页签切换保留答案、完成全局消息与底部返回入口，以及刷新和移动端恢复。自动化使用独立 knowledgeops_r16_e2e 库和合成模型，未修改真实课程数据或调用付费模型；真实模型成功证据仍以上述用户试用人次为准。L03 DONE 随本次本地提交成功生效，失败则恢复 DOCUMENTING；L04 尚未启动。
+
+### L04 计划内知识画像（2026-11-15）
+
+沿既有 M7 授权启动，无新增手写。IN：保存首次有效练习报告的逐题证据与易错标签，按确定性规则形成计划内 KnowledgeMastery；后续课程创建生成 Run 时，只冻结与课程直接关联的最多两个 WEAK/DEVELOPING 知识点。OUT：画像展示页、跨计划合并、向量检索、间隔复习、自动重规划、生产发布和邮箱登录。首读入口为 `packages/agent-core/src/knowledge-mastery/course-knowledge-mastery.ts`、`apps/worker/src/course-exercise/course-knowledge-mastery.repository.ts`、`apps/api/src/courses/course-generation.repository.ts`。
+
+单选对/错为 100/0，开放题 PASSED/INSUFFICIENT_EVIDENCE/FAILED 为 100/50/0。知识点对所有有效首次提交证据取平均分，UNKNOWN 仅表示无证据；低于 50 为 WEAK，50 至 79 为 DEVELOPING，80 至 100 为 MASTERED。每份 ExerciseSet 只有首次成功生成验收报告的提交计分，技术失败无报告不计分，业务未通过如实计分，后续重答不新增证据或刷高等级。易错标签由程序和题目类型/验收结果确定，模型不能直接写分数、等级或画像。
+
+Worker 在原 recordSuccess 事务内检查是否已有成功报告、写 CourseKnowledgeEvidence 并重算 KnowledgeMastery；沿用用户行锁与执行版本/Task 版本围栏，任何写入失败整体回滚。缺失知识点映射的旧测试数据不生成画像，正常计划生成已持久化 KnowledgePoint。API 只选择当前课程 TEACH 知识点中的 WEAK/DEVELOPING，按分数、更新时间和 ID 稳定排序取两项，在 CourseGenerationRun.profileSnapshot 冻结；Worker 继续通过原 courseGenerationRequestSchema 校验并传给模型，不回写既有 CourseVersion。新增迁移 `20261115100607_course_knowledge_mastery` 已应用到本地开发库。不回填历史 Submission，也不改写已有生成 Run 的快照；迁移前完成的练习保持 UNKNOWN，新 ExerciseSet 才产生证据，旧数据的进一步读取/迁移边界留给 L05。
+
+定向证据：评分与枚举 9 项通过，M7 PostgreSQL 集成 14 项通过。覆盖满分 MASTERED、错误/证据不足标签和阈值、首次业务未通过形成 DEVELOPING、第二次满分重答不改分、最多两项直接相关薄弱点、MASTERED/无关知识点/其他用户排除，以及生成前修改画像不改变已冻结请求。首次集成失败源于测试夹具把无关知识点错误映射到已掌握知识点并触发唯一键，修正夹具后通过；完整检查首次 lint 发现测试回调未使用参数，改为直接参与快照断言后通过，未放宽产品约束。
+
+最终工程证据：`pnpm check` 通过格式、lint、类型、Prisma 校验及 86 个文件 891 项单元测试，M7 PostgreSQL 集成 14 项、完整生产构建和 Chromium 23/23 通过。浏览器实际完成首次 2/4 单选且开放题 FAILED，形成 WEAK 40；第二次满分并通过后掌握分仍为 40，再从页面生成下一课，持久化 profileSnapshot 只包含 event-loop 及首次证据形成的易错标签。测试使用独立 knowledgeops_r16_e2e 库和合成模型，不触碰真实课程数据或发起付费调用。没有真实模型生成质量、历史回填、画像页面或生产验收结论。
+
+用户完成数据模型关系导读后进入短复述，原述要点：Evidence 是用户每次答题情况的记录，Mastery 是每个知识点的当前状态；重答不是首次作答，无法真实反映掌握水平。profileSnapshot 保存某次课程生成所看到的画像，期间变化不影响本次请求，但最初误认为快照不保存在数据库。AI 校准：当前只保存每份 ExerciseSet 首次成功生成验收报告的逐题证据，并非所有重答；禁止重答刷分是本阶段的稳定基线规则，不代表重答完全不能反映学习变化。profileSnapshot 实际持久化为 CourseGenerationRun 的 JSONB 字段。用户随后明确复述“快照保存在 CourseGenerationRun 表的 JSONB 字段中，画像变化不会影响快照”，关键持久化与冻结语义已厘清，短复述通过。实际学习耗时未报；L04 进入 DOCUMENTING，随本次本地提交成功转为 DONE。
 
 ### R19 启动与远端同步（2026-11-09）
 

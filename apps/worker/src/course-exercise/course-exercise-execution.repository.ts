@@ -15,6 +15,7 @@ import type { DatabaseClient } from '@knowledgeops/database'
 import { z } from 'zod'
 
 import { unlockDependentTasks } from '../verification/unlock-dependent-tasks.js'
+import { recordFirstSubmissionKnowledge } from './course-knowledge-mastery.repository.js'
 
 export interface ClaimedCourseExercise {
   answers: z.infer<typeof courseExerciseAnswersSchema>
@@ -223,6 +224,15 @@ export class CourseExerciseExecutionRepository {
         return { status: 'RECORDED', submissionStatus: 'FAILED' }
       }
 
+      await recordFirstSubmissionKnowledge(tx, {
+        submissionId: submission.id,
+        exerciseSetId: submission.exerciseSetId,
+        userId,
+        planId: task.stage.plan.id,
+        exerciseSet: exerciseSetBodySchema.parse(submission.exerciseSet.body),
+        report: parsedReport,
+        completedAt,
+      })
       await tx.courseExerciseSubmission.update({
         where: { id: submission.id },
         data: {

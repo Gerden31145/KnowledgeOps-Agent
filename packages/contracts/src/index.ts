@@ -59,6 +59,14 @@ export {
   type TaskType,
 } from './domain/plan.js'
 export {
+  COURSE_KNOWLEDGE_EVIDENCE_KINDS,
+  KNOWLEDGE_MASTERY_LEVELS,
+  courseKnowledgeEvidenceKindSchema,
+  knowledgeMasteryLevelSchema,
+  type CourseKnowledgeEvidenceKind,
+  type KnowledgeMasteryLevel,
+} from './domain/knowledge-mastery.js'
+export {
   COURSE_GENERATION_OUTPUT_SCHEMA_VERSION,
   COURSE_GENERATION_PROMPT_VERSION,
   COURSE_KNOWLEDGE_ROLES,
