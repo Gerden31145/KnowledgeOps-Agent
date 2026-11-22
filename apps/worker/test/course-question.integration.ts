@@ -397,4 +397,27 @@ describe('M7 queued course question execution', () => {
       await cleanup(userId)
     }
   })
+
+  it('keeps legacy exercise reports readable without inventing knowledge mappings', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      await database.knowledgePoint.deleteMany({ where: { plan: { goal: { userId } } } })
+      const exercises = new CourseExerciseService(database)
+      const accepted = await exercises.submit(userId, taskId, exerciseInput())
+      await exerciseProcessor().process({ submissionId: accepted.id })
+
+      expect(
+        await database.courseExerciseSubmission.findUniqueOrThrow({ where: { id: accepted.id } }),
+      ).toMatchObject({ status: 'SUCCEEDED', report: { followUp: { outcome: 'PASSED' } } })
+      await expect(exercises.history(userId, taskId)).resolves.toMatchObject({
+        submissions: [{ id: accepted.id, status: 'SUCCEEDED' }],
+      })
+      expect(
+        await database.courseKnowledgeEvidence.count({ where: { submissionId: accepted.id } }),
+      ).toBe(0)
+      expect(await database.knowledgeMastery.count({ where: { userId } })).toBe(0)
+    } finally {
+      await cleanup(userId)
+    }
+  })
 })

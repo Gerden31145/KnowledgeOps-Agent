@@ -72,16 +72,90 @@ describe('course question answering', () => {
 
     expect(factory).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ maxOutputTokens: COURSE_QUESTION_POLICIES.QUICK.maxOutputTokens }),
+      expect.objectContaining({
+        maxOutputTokens: COURSE_QUESTION_POLICIES.QUICK.maxOutputTokens,
+        reasoningEffort: 'low',
+      }),
     )
     expect(factory).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ maxOutputTokens: COURSE_QUESTION_POLICIES.DEEP.maxOutputTokens }),
+      expect.objectContaining({
+        maxOutputTokens: COURSE_QUESTION_POLICIES.DEEP.maxOutputTokens,
+        reasoningEffort: 'low',
+      }),
     )
     const firstMessages = invocations[0]!
     const secondMessages = invocations[1]!
     expect(String(firstMessages[0]?.content)).toContain('Answer directly and briefly')
     expect(String(secondMessages[0]?.content)).toContain('core mechanism')
     expect(String(firstMessages[1]?.content)).not.toContain('exercises')
+  })
+
+  it.each([
+    { parsed: '{"answer":"来自 SDK 字符串的回答。"}', raw: {} },
+    { parsed: null, raw: { content: '{"answer":"来自原始 JSON 的回答。"}' } },
+  ])('parses serialized SDK output while keeping the answer contract', async (output) => {
+    const invoke = vi.fn(async () => output)
+    const factory = vi.fn(() => ({
+      withStructuredOutput: () => ({ invoke }),
+    })) as unknown as LangChainChatModelFactory
+    const answering = new LangChainCourseQuestionAnswering({ apiKey: 'fixture-key' }, factory)
+
+    await expect(answering.answer(request())).resolves.toEqual({
+      answer: output.parsed ? '来自 SDK 字符串的回答。' : '来自原始 JSON 的回答。',
+    })
+  })
+
+  it('reports JSON syntax failure using safe metadata without retaining the response text', async () => {
+    const invoke = vi.fn(async () => ({
+      parsed: null,
+      raw: {
+        content: '{"answer":"sensitive partial answer',
+        response_metadata: { finish_reason: 'length' },
+      },
+    }))
+    const factory = vi.fn(() => ({
+      withStructuredOutput: () => ({ invoke }),
+    })) as unknown as LangChainChatModelFactory
+    const answering = new LangChainCourseQuestionAnswering({ apiKey: 'fixture-key' }, factory)
+
+    await expect(answering.answer(request())).rejects.toMatchObject({
+      code: 'MODEL_OUTPUT_INVALID',
+      diagnostic: {
+        finishReason: 'length',
+        parsedType: 'null',
+        rawContentType: 'string',
+        failureType: 'JSON_PARSE',
+        schemaIssues: [],
+      },
+    })
+  })
+
+  it('reports schema issue paths and types without retaining field values', async () => {
+    const invoke = vi.fn(async () => ({
+      parsed: null,
+      raw: {
+        content: '{"result":"sensitive answer value"}',
+        response_metadata: { finish_reason: 'stop' },
+      },
+    }))
+    const factory = vi.fn(() => ({
+      withStructuredOutput: () => ({ invoke }),
+    })) as unknown as LangChainChatModelFactory
+    const answering = new LangChainCourseQuestionAnswering({ apiKey: 'fixture-key' }, factory)
+
+    await expect(answering.answer(request())).rejects.toMatchObject({
+      code: 'MODEL_OUTPUT_INVALID',
+      diagnostic: {
+        finishReason: 'stop',
+        parsedType: 'null',
+        rawContentType: 'string',
+        failureType: 'SCHEMA_VALIDATION',
+        schemaIssues: expect.arrayContaining([
+          expect.objectContaining({ code: 'invalid_type', path: 'answer', expected: 'string' }),
+          expect.objectContaining({ code: 'unrecognized_keys', path: '<root>' }),
+        ]),
+      },
+    })
   })
 })

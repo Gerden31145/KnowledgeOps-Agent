@@ -1,4 +1,5 @@
 import {
+  CourseQuestionModelError,
   InvalidCourseQuestionAnswerError,
   InvalidCourseQuestionRequestError,
   generateCourseQuestionAnswer,
@@ -8,6 +9,7 @@ import type {
   CourseQuestionRequestedEventPayload,
   CourseQuestionStatus,
 } from '@knowledgeops/contracts'
+import { Logger } from '@nestjs/common'
 
 import type { CourseQuestionExecutionRepository } from './course-question-execution.repository.js'
 
@@ -21,6 +23,8 @@ export type CourseQuestionJobResult =
     }
 
 export class CourseQuestionJobProcessor {
+  private readonly logger = new Logger(CourseQuestionJobProcessor.name)
+
   constructor(
     private readonly repository: CourseQuestionExecutionRepository,
     private readonly model: CourseQuestionPort,
@@ -74,7 +78,17 @@ export class CourseQuestionJobProcessor {
           ? 'MODEL_OUTPUT_INVALID'
           : error instanceof InvalidCourseQuestionRequestError
             ? 'COURSE_QUESTION_REQUEST_INVALID'
-            : 'MODEL_UNAVAILABLE'
+            : error instanceof CourseQuestionModelError
+              ? error.code
+              : 'MODEL_UNAVAILABLE'
+      this.logger.warn({
+        event: 'course_question_execution_failed',
+        questionId: question.questionId,
+        errorCode,
+        ...(error instanceof CourseQuestionModelError && error.diagnostic
+          ? { diagnostic: error.diagnostic }
+          : {}),
+      })
       const recorded = await this.repository.recordFailure(
         question.questionId,
         question.expectedVersion,

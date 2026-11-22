@@ -22,7 +22,22 @@ Use only the supplied course context and well-established technical knowledge. S
 Do not provide or infer exercise answers, grading rubrics, mastery scores, or task completion. Do not perform repository operations or claim to have inspected external resources.
 The requested answer depth controls both structure and scope. Follow its instruction even if the learner asks for a different length.`
 
+export interface CourseQuestionModelDiagnostic {
+  finishReason: string | null
+  parsedType: string
+  rawContentType: string
+  failureType: 'JSON_PARSE' | 'SCHEMA_VALIDATION'
+  schemaIssues: {
+    code: string
+    path: string
+    expected: string | null
+    received: string | null
+  }[]
+}
+
 export class CourseQuestionModelError extends Error {
+  readonly diagnostic: CourseQuestionModelDiagnostic | null
+
   constructor(
     readonly code:
       | 'MODEL_CONFIGURATION_ERROR'
@@ -30,10 +45,11 @@ export class CourseQuestionModelError extends Error {
       | 'MODEL_OUTPUT_INVALID'
       | 'MODEL_ABORTED',
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { diagnostic?: CourseQuestionModelDiagnostic },
   ) {
     super(message, options)
     this.name = 'CourseQuestionModelError'
+    this.diagnostic = options?.diagnostic ?? null
   }
 }
 
@@ -53,7 +69,7 @@ export class LangChainCourseQuestionAnswering implements CourseQuestionPort {
       apiKey,
       modelName: request.model.modelName,
       maxOutputTokens: policy.maxOutputTokens,
-      ...(request.model.reasoningEffort ? { reasoningEffort: request.model.reasoningEffort } : {}),
+      reasoningEffort: request.model.reasoningEffort ?? 'low',
       ...(this.configuration.baseUrl ? { baseUrl: this.configuration.baseUrl } : {}),
     })
     const method = this.configuration.structuredOutputMethod ?? 'jsonSchema'
@@ -87,14 +103,7 @@ export class LangChainCourseQuestionAnswering implements CourseQuestionPort {
         ],
         options?.signal ? { signal: options.signal } : undefined,
       )
-      const parsed = courseQuestionAnswerSchema.safeParse(response.parsed)
-      if (!parsed.success)
-        throw new CourseQuestionModelError(
-          'MODEL_OUTPUT_INVALID',
-          'The model returned an invalid course answer',
-          { cause: parsed.error },
-        )
-      return parsed.data
+      return parseCourseQuestionAnswer(response)
     } catch (error: unknown) {
       if (error instanceof CourseQuestionModelError) throw error
       if (options?.signal?.aborted)
@@ -134,4 +143,71 @@ export class LangChainCourseQuestionAnswering implements CourseQuestionPort {
       )
     return this.configuration.apiKey
   }
+}
+
+function parseCourseQuestionAnswer(response: { parsed: unknown; raw?: unknown }) {
+  const rawContent = z.object({ content: z.string() }).safeParse(response.raw)
+  const serialized =
+    typeof response.parsed === 'string'
+      ? response.parsed
+      : response.parsed == null && rawContent.success
+        ? rawContent.data.content
+        : null
+  let candidate = response.parsed
+  if (serialized !== null) {
+    try {
+      candidate = JSON.parse(serialized)
+    } catch (error: unknown) {
+      throw new CourseQuestionModelError(
+        'MODEL_OUTPUT_INVALID',
+        'The model returned an invalid course answer',
+        { cause: error, diagnostic: readDiagnostic(response, 'JSON_PARSE') },
+      )
+    }
+  }
+  const answer = courseQuestionAnswerSchema.safeParse(candidate)
+  if (!answer.success)
+    throw new CourseQuestionModelError(
+      'MODEL_OUTPUT_INVALID',
+      'The model returned an invalid course answer',
+      {
+        cause: answer.error,
+        diagnostic: readDiagnostic(response, 'SCHEMA_VALIDATION', answer.error),
+      },
+    )
+  return answer.data
+}
+
+function readDiagnostic(
+  response: { parsed: unknown; raw?: unknown },
+  failureType: CourseQuestionModelDiagnostic['failureType'],
+  error?: unknown,
+): CourseQuestionModelDiagnostic {
+  const raw = z
+    .object({
+      content: z.unknown().optional(),
+      response_metadata: z.object({ finish_reason: z.string() }).optional(),
+    })
+    .safeParse(response.raw)
+  return {
+    finishReason: raw.success ? (raw.data.response_metadata?.finish_reason ?? null) : null,
+    parsedType: response.parsed === null ? 'null' : typeof response.parsed,
+    rawContentType: raw.success ? typeof raw.data.content : 'unknown',
+    failureType,
+    schemaIssues:
+      error instanceof z.core.$ZodError
+        ? error.issues.slice(0, 5).map((issue) => ({
+            code: issue.code,
+            path: issue.path.map(String).join('.').slice(0, 160) || '<root>',
+            expected: diagnosticScalar(Reflect.get(issue, 'expected')),
+            received: diagnosticScalar(Reflect.get(issue, 'received')),
+          }))
+        : [],
+  }
+}
+
+function diagnosticScalar(value: unknown): string | null {
+  if (typeof value === 'string') return value.slice(0, 100)
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return null
 }

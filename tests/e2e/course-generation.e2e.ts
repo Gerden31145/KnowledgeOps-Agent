@@ -169,12 +169,18 @@ test('课程路线 → 首课学习包 → 站内阅读与开始，全程不需�
       .fill('Vue 更新在当前任务中排队，微任务清空后才进入后续 setTimeout 与渲染调度。')
   }
 
-  await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
+  const contentTab = page.getByRole('tab', { name: '课程内容', exact: true })
+  await contentTab.focus()
+  await contentTab.press('ArrowRight')
+  const exerciseTab = page.getByRole('tab', { name: '练习与验收', exact: true })
+  await expect(exerciseTab).toBeFocused()
+  await expect(exerciseTab).toHaveAttribute('aria-selected', 'true')
   await expect(page).toHaveURL((url) => url.searchParams.get('tab') === 'exercise')
   await answerExercises(2)
-  await page.getByRole('tab', { name: '课程内容', exact: true }).click()
+  await exerciseTab.press('ArrowLeft')
+  await expect(contentTab).toBeFocused()
   await expect(page.getByRole('heading', { name: '任务与调用栈', exact: true })).toBeVisible()
-  await page.getByRole('tab', { name: '练习与验收', exact: true }).click()
+  await contentTab.press('End')
   await expect(
     page.getByLabel(validCourseLearningPackage.exercises.followUp.prompt, { exact: true }),
   ).toHaveValue('Vue 更新在当前任务中排队，微任务清空后才进入后续 setTimeout 与渲染调度。')

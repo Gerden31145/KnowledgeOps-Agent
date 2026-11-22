@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { validCourseLearningPackage } from '../../../packages/agent-core/test/fixtures/course-generation.js'
+import { CourseGenerationRepository } from '../src/courses/course-generation.repository.js'
 import {
   CourseQuestionConflictError,
   CourseQuestionNotFoundError,
@@ -11,8 +12,10 @@ import {
 } from '../src/courses/course-question.service.js'
 import {
   CourseExerciseConflictError,
+  CourseExerciseNotFoundError,
   CourseExerciseService,
 } from '../src/courses/course-exercise.service.js'
+import { TaskNotFoundError } from '../src/plans/plan-lifecycle.errors.js'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for the M7 integration test')
@@ -278,6 +281,34 @@ describe('M7 selected-text course question acceptance', () => {
       expect(await database.outboxEvent.count({ where: { aggregateId: accepted.id } })).toBe(1)
     } finally {
       await cleanup(userId)
+    }
+  })
+
+  it('rejects cross-user generation and exercise commands without creating new intents', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    const otherUserId = randomUUID()
+    try {
+      await database.user.create({ data: { id: otherUserId } })
+      const generation = new CourseGenerationRepository(database, 60_000)
+      const exercises = new CourseExerciseService(database)
+
+      await expect(generation.request(taskId, otherUserId)).rejects.toBeInstanceOf(
+        TaskNotFoundError,
+      )
+      await expect(exercises.submit(otherUserId, taskId, exerciseInput())).rejects.toBeInstanceOf(
+        CourseExerciseNotFoundError,
+      )
+      await expect(exercises.history(otherUserId, taskId)).rejects.toBeInstanceOf(
+        CourseExerciseNotFoundError,
+      )
+
+      expect(await database.courseGenerationRun.count({ where: { course: { taskId } } })).toBe(1)
+      expect(
+        await database.courseExerciseSubmission.count({ where: { userId: otherUserId } }),
+      ).toBe(0)
+      expect(await database.courseQuestion.count({ where: { userId: otherUserId } })).toBe(0)
+    } finally {
+      await database.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
     }
   })
 })

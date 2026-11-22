@@ -1,3 +1,5 @@
+import { CourseQuestionModelError } from '@knowledgeops/agent-core'
+import { Logger } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -81,6 +83,53 @@ describe('CourseQuestionJobProcessor', () => {
       expect.any(Date),
     )
     expect(context.recordSuccess).not.toHaveBeenCalled()
+  })
+
+  it.each(['MODEL_UPSTREAM_ERROR', 'MODEL_OUTPUT_INVALID'] as const)(
+    'preserves the safe model error classification %s',
+    async (code) => {
+      const context = dependencies(async () => {
+        throw new CourseQuestionModelError(code, 'Sensitive upstream detail must not be persisted')
+      })
+      await expect(context.processor.process({ questionId })).resolves.toEqual({
+        questionId,
+        status: 'FAILED',
+      })
+      expect(context.recordFailure).toHaveBeenCalledWith(questionId, 1, code, expect.any(Date))
+      expect(context.recordSuccess).not.toHaveBeenCalled()
+    },
+  )
+
+  it('logs structured diagnostics without the error message or response values', async () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {})
+    const diagnostic = {
+      finishReason: 'stop',
+      parsedType: 'null',
+      rawContentType: 'string',
+      failureType: 'SCHEMA_VALIDATION' as const,
+      schemaIssues: [
+        { code: 'invalid_type', path: 'answer', expected: 'string', received: 'undefined' },
+      ],
+    }
+    const context = dependencies(async () => {
+      throw new CourseQuestionModelError(
+        'MODEL_OUTPUT_INVALID',
+        'Sensitive upstream detail must not be logged',
+        { diagnostic },
+      )
+    })
+    try {
+      await context.processor.process({ questionId })
+      expect(warn).toHaveBeenCalledWith({
+        event: 'course_question_execution_failed',
+        questionId,
+        errorCode: 'MODEL_OUTPUT_INVALID',
+        diagnostic,
+      })
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('Sensitive upstream detail')
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('does not overwrite a terminal result when success persistence loses the version race', async () => {
