@@ -9,17 +9,14 @@ export const plan = {
       tasks: ['image', 'network', 'storage'].map((topic, index) => ({
         id: `learn-${topic}`,
         title: `Explain Docker ${topic}`,
-        description: `Write a short note explaining Docker ${topic} in this project.`,
-        type: 'MARKDOWN_NOTE',
+        description: `Learn how Docker ${topic} works through a container deployment scenario.`,
+        type: 'COURSE',
         estimatedMinutes: 30,
-        suggestedSteps: ['Observe the running service', 'Explain the observed result'],
-        targetPath: `notes/docker/${topic}.md`,
-        acceptanceCriteria: [
+        knowledgePoints: [
           {
-            type: 'SECTION_PRESENT',
-            config: { heading: 'Observation' },
-            description: 'Include an Observation heading.',
-            required: true,
+            id: `docker-${topic}`,
+            title: `Docker ${topic}`,
+            description: `Understand the role and basic use of Docker ${topic}.`,
           },
         ],
         dependsOnTaskIds: index === 0 ? [] : ['learn-image'],

@@ -3,6 +3,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { setTimeout } from 'node:timers/promises'
+import {
+  PLAN_GENERATION_OUTPUT_SCHEMA_VERSION,
+  PLAN_GENERATION_PROMPT_VERSION,
+} from '@knowledgeops/agent-core'
 import { createDatabaseClient } from '@knowledgeops/database'
 
 const url = new URL(process.env.DATABASE_URL)
@@ -48,8 +52,8 @@ try {
           modelCatalogId: 'cd01-model',
           modelProvider: 'openai',
           modelName: 'cd01-fake',
-          promptVersion: 'plan-generation-v2',
-          outputSchemaVersion: 'plan-generation-output-v2',
+          promptVersion: PLAN_GENERATION_PROMPT_VERSION,
+          outputSchemaVersion: PLAN_GENERATION_OUTPUT_SCHEMA_VERSION,
           queuedAt: now,
           deadlineAt: new Date(now.getTime() + 10 * 60_000),
         },

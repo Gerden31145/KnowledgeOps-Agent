@@ -1,3 +1,4 @@
+import { planGenerationOutputSchema } from '../../packages/agent-core/src/index.js'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,6 +7,7 @@ import {
   imagePlan,
   services,
 } from '../../scripts/ci-images.mjs'
+import { plan as containerPlan } from './cd01-model.mjs'
 
 const context = {
   repository: 'Gerden31145/KnowledgeOps-Agent',
@@ -50,6 +52,13 @@ function fixture() {
 }
 
 describe('CD02 verified image delivery', () => {
+  it('keeps the container model response on the current course contract', () => {
+    expect(planGenerationOutputSchema.parse(containerPlan)).toEqual(containerPlan)
+    expect(
+      containerPlan.stages.flatMap((stage) => stage.tasks).every((task) => task.type === 'COURSE'),
+    ).toBe(true)
+  })
+
   it('uses lowercase registry names and separates workflow reruns of the same commit', () => {
     expect(imagePlan(context).images.api).toBe(
       `ghcr.io/gerden31145/knowledgeops-agent/api:sha-${context.commit}-run-123-1`,
