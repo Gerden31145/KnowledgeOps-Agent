@@ -55,6 +55,7 @@
     "test:integration:r15": "node --env-file=.env node_modules/vitest/vitest.mjs run --config vitest.integration.r15.config.ts",
     "test:integration:r16": "node --import tsx tests/e2e/run-regression.ts",
     "test:integration:m7": "node --env-file=.env node_modules/vitest/vitest.mjs run --config vitest.integration.m7.config.ts",
+    "test:performance": "pnpm build:packages && pnpm --filter @knowledgeops/web build && playwright test --config playwright.performance.config.ts",
     "test:handwrite:health-controller": "vitest run apps/api/test/health.controller.spec.ts",
     "test:handwrite:r04-auth-callback": "vitest run --config vitest.handwrite.r04.config.ts",
     "test:handwrite:r05-signature": "vitest run --config vitest.handwrite.r05.config.ts",
