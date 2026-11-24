@@ -5,7 +5,7 @@ import {
   type CourseSection,
 } from '@knowledgeops/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { definePageMeta, useHead, useRoute, useRouter } from '#imports'
 
 import { useGlobalMessage } from '../../../composables/use-global-message'
@@ -261,6 +261,22 @@ const questionSection = ref<CourseSection | null>(null)
 const questionSelection = ref('')
 const questionPanelOpen = ref(false)
 const selectionError = ref('')
+const desktopQuestionPanel = ref(false)
+let questionMedia: MediaQueryList | null = null
+function updateQuestionMedia() {
+  desktopQuestionPanel.value = questionMedia?.matches ?? false
+}
+onMounted(() => {
+  questionMedia = window.matchMedia('(min-width: 1024px)')
+  updateQuestionMedia()
+  questionMedia.addEventListener('change', updateQuestionMedia)
+})
+onBeforeUnmount(() => {
+  questionMedia?.removeEventListener('change', updateQuestionMedia)
+})
+const questionPanelVisible = computed(
+  () => courseTab.value === 'content' && (desktopQuestionPanel.value || questionPanelOpen.value),
+)
 
 function askAboutSection(section: CourseSection) {
   questionSection.value = section
@@ -561,6 +577,7 @@ async function startTask() {
                   :section="questionSection"
                   :selected-text="questionSelection"
                   :open="questionPanelOpen"
+                  :visible="questionPanelVisible"
                   :desktop-offset="courseHeaderHeight + 16"
                   @open="questionPanelOpen = true"
                   @close="questionPanelOpen = false"
@@ -580,6 +597,7 @@ async function startTask() {
                 v-if="task.data.value.course.exercises && task.data.value.state !== 'READY'"
                 :task-id="task.data.value.id"
                 :task-version="task.data.value.version"
+                :visible="courseTab === 'exercise'"
                 :exercises="task.data.value.course.exercises"
                 @settled="exerciseSettled"
               />

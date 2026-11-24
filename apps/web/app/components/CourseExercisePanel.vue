@@ -11,10 +11,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
 import { useSessionUser } from '../composables/use-session-user'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
+import { isTransientReadError } from '../lib/verification-polling'
 
 const props = defineProps<{
   taskId: string
   taskVersion: number
+  visible: boolean
   exercises: PublicExerciseSet
 }>()
 const emit = defineEmits<{ settled: [] }>()
@@ -33,18 +35,42 @@ const storageKey = computed(() => {
 const history = useQuery({
   queryKey: computed(() => knowledgeOpsQueryKeys.courseExercises(props.taskId)),
   queryFn: ({ signal }) => api.getCourseExerciseSubmissions(props.taskId, signal),
+  enabled: computed(() => props.visible),
   staleTime: 0,
-  refetchInterval: (query) =>
-    query.state.data?.submissions.some(
-      (item) => item.status === 'QUEUED' || item.status === 'RUNNING',
-    )
-      ? 1_000
-      : false,
+  refetchInterval: false,
   refetchIntervalInBackground: false,
 })
 const latest = computed(() => history.data.value?.submissions[0] ?? null)
-const active = computed(
+const latestActive = computed(
   () => latest.value?.status === 'QUEUED' || latest.value?.status === 'RUNNING',
+)
+const activeQuery = useQuery({
+  queryKey: computed(() => knowledgeOpsQueryKeys.courseExerciseActive(props.taskId)),
+  queryFn: ({ signal }) => api.getActiveCourseExerciseSubmission(props.taskId, signal),
+  enabled: computed(() => props.visible && history.isSuccess.value && latestActive.value),
+  staleTime: 0,
+  retry: false,
+  refetchInterval: (query) => {
+    if (query.state.error && !isTransientReadError(query.state.error)) return false
+    return query.state.data ? 1_000 : false
+  },
+  refetchIntervalInBackground: false,
+})
+const active = computed(
+  () =>
+    latestActive.value ||
+    activeQuery.data.value?.status === 'QUEUED' ||
+    activeQuery.data.value?.status === 'RUNNING',
+)
+watch(
+  () => activeQuery.data.value,
+  async (current, previous) => {
+    if (previous && !current) {
+      await queryClient.invalidateQueries({
+        queryKey: knowledgeOpsQueryKeys.courseExercises(props.taskId),
+      })
+    }
+  },
 )
 const showForm = computed(() => retrying.value || (!active.value && !latest.value?.report))
 const failureMessage = computed(() => {
@@ -69,9 +95,10 @@ function clearAttempt() {
 
 const submit = useMutation({
   mutationFn: (input: SubmitCourseExerciseInput) => api.submitCourseExercise(props.taskId, input),
-  onSuccess: async () => {
+  onSuccess: async (submission) => {
     retrying.value = false
     clearAttempt()
+    queryClient.setQueryData(knowledgeOpsQueryKeys.courseExerciseActive(props.taskId), submission)
     await queryClient.invalidateQueries({
       queryKey: knowledgeOpsQueryKeys.courseExercises(props.taskId),
     })

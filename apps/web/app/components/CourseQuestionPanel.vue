@@ -11,12 +11,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
 import { useSessionUser } from '../composables/use-session-user'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
+import { isTransientReadError } from '../lib/verification-polling'
 
 const props = defineProps<{
   taskId: string
   section: CourseSection | null
   selectedText: string
   open: boolean
+  visible: boolean
   desktopOffset: number
 }>()
 const emit = defineEmits<{ close: []; open: []; restore: [AskCourseQuestionInput] }>()
@@ -43,15 +45,37 @@ const storageKey = computed(() => {
 const history = useQuery({
   queryKey: computed(() => knowledgeOpsQueryKeys.courseQuestions(props.taskId)),
   queryFn: ({ signal }) => api.getCourseQuestions(props.taskId, signal),
+  enabled: computed(() => props.visible),
   staleTime: 0,
-  refetchInterval: (query) =>
-    query.state.data?.questions.some(
-      (item) => item.status === 'QUEUED' || item.status === 'RUNNING',
-    )
-      ? 1_000
-      : false,
+  refetchInterval: false,
   refetchIntervalInBackground: false,
 })
+const latest = computed(() => history.data.value?.questions.at(-1) ?? null)
+const latestActive = computed(
+  () => latest.value?.status === 'QUEUED' || latest.value?.status === 'RUNNING',
+)
+const activeQuery = useQuery({
+  queryKey: computed(() => knowledgeOpsQueryKeys.courseQuestionActive(props.taskId)),
+  queryFn: ({ signal }) => api.getActiveCourseQuestion(props.taskId, signal),
+  enabled: computed(() => props.visible && history.isSuccess.value && latestActive.value),
+  staleTime: 0,
+  retry: false,
+  refetchInterval: (query) => {
+    if (query.state.error && !isTransientReadError(query.state.error)) return false
+    return query.state.data ? 1_000 : false
+  },
+  refetchIntervalInBackground: false,
+})
+watch(
+  () => activeQuery.data.value,
+  async (current, previous) => {
+    if (previous && !current) {
+      await queryClient.invalidateQueries({
+        queryKey: knowledgeOpsQueryKeys.courseQuestions(props.taskId),
+      })
+    }
+  },
+)
 
 function clearStoredAttempt() {
   const key = storageKey.value
@@ -71,9 +95,10 @@ function clearAttempt() {
 
 const ask = useMutation({
   mutationFn: (input: AskCourseQuestionInput) => api.askCourseQuestion(props.taskId, input),
-  onSuccess: async () => {
+  onSuccess: async (question) => {
     draft.value = ''
     clearAttempt()
+    queryClient.setQueryData(knowledgeOpsQueryKeys.courseQuestionActive(props.taskId), question)
     await queryClient.invalidateQueries({
       queryKey: knowledgeOpsQueryKeys.courseQuestions(props.taskId),
     })

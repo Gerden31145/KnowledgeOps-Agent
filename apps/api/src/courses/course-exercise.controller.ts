@@ -53,6 +53,19 @@ export class CourseExerciseController {
     }
   }
 
+  @Get('tasks/:taskId/exercise-submissions/active')
+  async active(@Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string) {
+    try {
+      return courseExerciseSubmissionSchema
+        .nullable()
+        .parse(await this.exercises.active(this.currentActor.userId, taskId))
+    } catch (error: unknown) {
+      if (error instanceof CourseExerciseNotFoundError)
+        throw new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: '课程练习不存在。' })
+      throw error
+    }
+  }
+
   @Get('tasks/:taskId/exercise-submissions')
   async history(@Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string) {
     try {

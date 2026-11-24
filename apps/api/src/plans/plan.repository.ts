@@ -6,6 +6,7 @@ import {
   planDetailResponseSchema,
   sectionPresentConfigSchema,
   taskDetailResponseSchema,
+  taskSummaryResponseSchema,
   todayTasksResponseSchema,
   type AcceptanceCriterionSummary,
   type PlanDetailResponse,
@@ -347,6 +348,80 @@ export class PlanRepository {
     return taskDetailResponseSchema.parse({
       ...taskWithoutPrerequisites,
       course: summarizeCourse(course, true),
+      criteria: task.criteria.map(summarizeCriterion),
+      prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
+      runs: task.runs.map((run) => ({
+        ...run,
+        queuedAt: run.queuedAt.toISOString(),
+        startedAt: run.startedAt?.toISOString() ?? null,
+        finishedAt: run.finishedAt?.toISOString() ?? null,
+      })),
+    })
+  }
+
+  async findTaskSummaryForUser(taskId: string, userId: string) {
+    const task = await this.database.task.findFirst({
+      where: { id: taskId, stage: { plan: { goal: { userId } } } },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        position: true,
+        type: true,
+        estimatedMinutes: true,
+        suggestedSteps: true,
+        targetPath: true,
+        state: true,
+        version: true,
+        prerequisites: { select: { prerequisiteTaskId: true } },
+        course: {
+          select: {
+            status: true,
+            generationRuns: {
+              orderBy: { queuedAt: 'desc' },
+              take: 1,
+              select: { id: true, queuedAt: true, errorCode: true, errorMessage: true },
+            },
+          },
+        },
+        criteria: {
+          orderBy: { position: 'asc' },
+          select: {
+            id: true,
+            type: true,
+            description: true,
+            config: true,
+            required: true,
+            position: true,
+          },
+        },
+        stage: {
+          select: {
+            id: true,
+            title: true,
+            position: true,
+            plan: { select: { id: true, status: true } },
+          },
+        },
+        runs: {
+          orderBy: { queuedAt: 'desc' },
+          select: {
+            id: true,
+            kind: true,
+            status: true,
+            errorCode: true,
+            queuedAt: true,
+            startedAt: true,
+            finishedAt: true,
+          },
+        },
+      },
+    })
+    if (!task) return null
+    const { prerequisites, course, ...taskWithoutPrerequisites } = task
+    return taskSummaryResponseSchema.parse({
+      ...taskWithoutPrerequisites,
+      course: summarizeCourse(course),
       criteria: task.criteria.map(summarizeCriterion),
       prerequisiteTaskIds: prerequisites.map((dependency) => dependency.prerequisiteTaskId),
       runs: task.runs.map((run) => ({

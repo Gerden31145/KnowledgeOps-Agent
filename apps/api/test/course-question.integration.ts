@@ -16,6 +16,7 @@ import {
   CourseExerciseService,
 } from '../src/courses/course-exercise.service.js'
 import { TaskNotFoundError } from '../src/plans/plan-lifecycle.errors.js'
+import { PlanRepository } from '../src/plans/plan.repository.js'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for the M7 integration test')
@@ -160,6 +161,10 @@ describe('M7 selected-text course question acceptance', () => {
       const command = input()
       const saved = await service.ask(userId, taskId, command)
       expect(saved).toMatchObject({ status: 'QUEUED', answer: null, depth: 'CONTEXTUAL' })
+      await expect(service.active(userId, taskId)).resolves.toMatchObject({
+        id: saved.id,
+        status: 'QUEUED',
+      })
       const event = await database.outboxEvent.findUniqueOrThrow({
         where: { deduplicationKey: `course-question-requested-${saved.id}` },
       })
@@ -190,6 +195,7 @@ describe('M7 selected-text course question acceptance', () => {
         id: saved.id,
         status: 'FAILED',
       })
+      await expect(service.active(userId, taskId)).resolves.toBeNull()
       expect(await database.outboxEvent.count({ where: { aggregateId: saved.id } })).toBe(1)
 
       await expect(
@@ -213,6 +219,9 @@ describe('M7 selected-text course question acceptance', () => {
         CourseQuestionNotFoundError,
       )
       await expect(service.history(otherUserId, taskId)).rejects.toBeInstanceOf(
+        CourseQuestionNotFoundError,
+      )
+      await expect(service.active(otherUserId, taskId)).rejects.toBeInstanceOf(
         CourseQuestionNotFoundError,
       )
       await expect(
@@ -249,6 +258,10 @@ describe('M7 selected-text course question acceptance', () => {
       const command = exerciseInput()
       const accepted = await service.submit(userId, taskId, command)
       expect(accepted).toMatchObject({ status: 'QUEUED', report: null })
+      await expect(service.active(userId, taskId)).resolves.toMatchObject({
+        id: accepted.id,
+        status: 'QUEUED',
+      })
       expect(
         await database.outboxEvent.count({
           where: { aggregateId: accepted.id, type: 'COURSE_EXERCISE_REQUESTED' },
@@ -261,6 +274,11 @@ describe('M7 selected-text course question acceptance', () => {
       await expect(service.history(userId, taskId)).resolves.toMatchObject({
         submissions: [{ id: accepted.id, status: 'QUEUED' }],
       })
+      await database.courseExerciseSubmission.update({
+        where: { id: accepted.id },
+        data: { status: 'SUCCEEDED', completedAt: new Date() },
+      })
+      await expect(service.active(userId, taskId)).resolves.toBeNull()
     } finally {
       await cleanup(userId)
     }
@@ -284,6 +302,26 @@ describe('M7 selected-text course question acceptance', () => {
     }
   })
 
+  it('keeps course content out of task summaries and preserves owner isolation', async () => {
+    const { userId, taskId } = await createReadyCourse()
+    try {
+      const repository = new PlanRepository(database)
+      const detail = await repository.findTaskDetailForUser(taskId, userId)
+      const summary = await repository.findTaskSummaryForUser(taskId, userId)
+      expect(detail?.course?.sections).not.toBeNull()
+      expect(detail?.course?.exercises).not.toBeNull()
+      expect(summary).not.toHaveProperty('course.sections')
+      expect(summary).not.toHaveProperty('course.exercises')
+      expect(summary).toMatchObject({
+        id: taskId,
+        course: { status: 'READY', generationRunId: detail?.course?.generationRunId },
+      })
+      await expect(repository.findTaskSummaryForUser(taskId, randomUUID())).resolves.toBeNull()
+    } finally {
+      await cleanup(userId)
+    }
+  })
+
   it('rejects cross-user generation and exercise commands without creating new intents', async () => {
     const { userId, taskId } = await createReadyCourse()
     const otherUserId = randomUUID()
@@ -299,6 +337,9 @@ describe('M7 selected-text course question acceptance', () => {
         CourseExerciseNotFoundError,
       )
       await expect(exercises.history(otherUserId, taskId)).rejects.toBeInstanceOf(
+        CourseExerciseNotFoundError,
+      )
+      await expect(exercises.active(otherUserId, taskId)).rejects.toBeInstanceOf(
         CourseExerciseNotFoundError,
       )
 

@@ -295,11 +295,13 @@ export {
   planDetailResponseSchema,
   planTaskSummarySchema,
   taskDetailResponseSchema,
+  taskSummaryResponseSchema,
   todayTasksResponseSchema,
   type AcceptanceCriterionSummary,
   type PlanDetailResponse,
   type PlanTaskSummary,
   type TaskDetailResponse,
+  type TaskSummaryResponse,
   type TodayTasksResponse,
 } from './http/workspace.js'
 export { serviceDescriptorSchema, type ServiceDescriptor } from './http/service-descriptor.js'

@@ -1,10 +1,12 @@
 import {
   planDetailResponseSchema,
   taskDetailResponseSchema,
+  taskSummaryResponseSchema,
   todayTasksResponseSchema,
   workspaceEntryResponseSchema,
   type PlanDetailResponse,
   type TaskDetailResponse,
+  type TaskSummaryResponse,
   type TodayTasksResponse,
 } from '@knowledgeops/contracts'
 import { Controller, Get, Inject, NotFoundException, Param, ParseUUIDPipe } from '@nestjs/common'
@@ -44,6 +46,19 @@ export class PlanQueryController {
   @Get('tasks/today')
   async getToday(): Promise<TodayTasksResponse> {
     return todayTasksResponseSchema.parse(await this.queries.getToday(this.currentActor.userId))
+  }
+
+  @Get('tasks/:taskId/summary')
+  async getTaskSummary(
+    @Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string,
+  ): Promise<TaskSummaryResponse> {
+    try {
+      return taskSummaryResponseSchema.parse(
+        await this.queries.getTaskSummary(taskId, this.currentActor.userId),
+      )
+    } catch (error: unknown) {
+      this.rethrowNotFound(error)
+    }
   }
 
   @Get('tasks/:taskId')

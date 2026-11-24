@@ -4,6 +4,7 @@ import {
   type CourseQuestion,
   type PlanDetailResponse,
   type TaskDetailResponse,
+  type TaskSummaryResponse,
 } from '../../packages/contracts/dist/index.js'
 import { validCourseLearningPackage } from '../../packages/agent-core/test/fixtures/course-generation.js'
 
@@ -82,6 +83,8 @@ const task: TaskDetailResponse = {
   runs: [],
 }
 
+const taskSync: TaskSummaryResponse = { ...task, course: { ...course } }
+
 const activeQuestion: CourseQuestion = {
   id: performanceIds.question,
   sectionId: 'task-basics',
@@ -134,9 +137,16 @@ export function syntheticApiResponse(
     return respond({ models: [{ id: 'performance-fixture', label: '性能合成模型' }] })
   }
   if (method === 'GET' && path === `/plans/${performanceIds.plan}`) return respond(plan)
+  if (method === 'GET' && path === `/tasks/${performanceIds.task}/summary`) return respond(taskSync)
   if (method === 'GET' && path === `/tasks/${performanceIds.task}`) return respond(task)
+  if (method === 'GET' && path === `/tasks/${performanceIds.task}/course-questions/active`) {
+    return respond(scenario === 'activity' ? activeQuestion : null)
+  }
   if (method === 'GET' && path === `/tasks/${performanceIds.task}/course-questions`) {
     return respond({ questions: scenario === 'activity' ? [activeQuestion] : [] })
+  }
+  if (method === 'GET' && path === `/tasks/${performanceIds.task}/exercise-submissions/active`) {
+    return respond(scenario === 'activity' ? activeSubmission : null)
   }
   if (method === 'GET' && path === `/tasks/${performanceIds.task}/exercise-submissions`) {
     return respond({ submissions: scenario === 'activity' ? [activeSubmission] : [] })

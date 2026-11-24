@@ -44,6 +44,8 @@ export function taskDiscoveryPollInterval(
       !CURRENT_TASK_STATES.some((state) => state === task.state))
   )
     return false
+  if (task?.type === 'COURSE')
+    return task.course?.status === 'GENERATING' ? TASK_DISCOVERY_POLL_MS : false
   return TASK_DISCOVERY_POLL_MS
 }
 

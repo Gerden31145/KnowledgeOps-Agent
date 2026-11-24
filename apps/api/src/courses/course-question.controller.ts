@@ -48,6 +48,17 @@ export class CourseQuestionController {
     }
   }
 
+  @Get('tasks/:taskId/course-questions/active')
+  async active(@Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string) {
+    try {
+      return courseQuestionSchema
+        .nullable()
+        .parse(await this.questions.active(this.currentActor.userId, taskId))
+    } catch (error: unknown) {
+      throw httpError(error)
+    }
+  }
+
   @Get('tasks/:taskId/course-questions')
   async history(@Param('taskId', new ParseUUIDPipe({ version: '4' })) taskId: string) {
     try {

@@ -143,6 +143,30 @@ export class CourseExerciseService {
     })
     return { submissions: submissions.map(toResponse) }
   }
+
+  async active(userId: string, taskId: string): Promise<CourseExerciseSubmission | null> {
+    const course = await this.database.course.findFirst({
+      where: { taskId, task: { stage: { plan: { goal: { userId } } } } },
+      select: {
+        versions: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { exerciseSet: { select: { id: true } } },
+        },
+      },
+    })
+    const exerciseSetId = course?.versions[0]?.exerciseSet?.id
+    if (!exerciseSetId) throw new CourseExerciseNotFoundError()
+    const submission = await this.database.courseExerciseSubmission.findFirst({
+      where: {
+        exerciseSetId,
+        userId,
+        status: { in: ['QUEUED', 'RUNNING'] },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })
+    return submission ? toResponse(submission) : null
+  }
 }
 
 function findByRequestId(

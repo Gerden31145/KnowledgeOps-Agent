@@ -15,6 +15,7 @@ import {
   planGenerationRunStatusResponseSchema,
   startTaskResponseSchema,
   taskDetailResponseSchema,
+  taskSummaryResponseSchema,
   todayTasksResponseSchema,
   type ConfirmPlanResponse,
   type CourseGenerationAcceptedResponse,
@@ -35,6 +36,7 @@ import {
   type StartTaskInput,
   type StartTaskResponse,
   type TaskDetailResponse,
+  type TaskSummaryResponse,
   type TodayTasksResponse,
   errorCodeSchema,
   sessionResponseSchema,
@@ -143,6 +145,7 @@ export interface KnowledgeOpsApi {
   ): Promise<CourseGenerationAcceptedResponse>
   askCourseQuestion(taskId: string, input: AskCourseQuestionInput): Promise<CourseQuestion>
   getCourseQuestions(taskId: string, signal?: AbortSignal): Promise<CourseQuestionHistoryResponse>
+  getActiveCourseQuestion(taskId: string, signal?: AbortSignal): Promise<CourseQuestion | null>
   submitCourseExercise(
     taskId: string,
     input: SubmitCourseExerciseInput,
@@ -151,8 +154,13 @@ export interface KnowledgeOpsApi {
     taskId: string,
     signal?: AbortSignal,
   ): Promise<CourseExerciseSubmissionHistoryResponse>
+  getActiveCourseExerciseSubmission(
+    taskId: string,
+    signal?: AbortSignal,
+  ): Promise<CourseExerciseSubmission | null>
   getTodayTasks(signal?: AbortSignal): Promise<TodayTasksResponse>
   getTask(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse>
+  getTaskSummary(taskId: string, signal?: AbortSignal): Promise<TaskSummaryResponse>
   getNoteVerificationRun(runId: string, signal?: AbortSignal): Promise<NoteVerificationRunResponse>
   getNoteRunEvidence(runId: string, signal?: AbortSignal): Promise<NoteRunEvidenceResponse>
   submitFollowUpAnswer(
@@ -315,6 +323,13 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         courseQuestionHistoryResponseSchema,
         { signal: repositorySignal(signal) },
       ),
+    getActiveCourseQuestion: (taskId, signal) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/course-questions/active`,
+        courseQuestionSchema.nullable(),
+        { signal: repositorySignal(signal) },
+      ),
     submitCourseExercise: (taskId, input) =>
       request(
         baseUrl,
@@ -329,10 +344,21 @@ export function createKnowledgeOpsApi(baseUrl: string): KnowledgeOpsApi {
         courseExerciseSubmissionHistoryResponseSchema,
         { signal: repositorySignal(signal) },
       ),
+    getActiveCourseExerciseSubmission: (taskId, signal) =>
+      request(
+        baseUrl,
+        `/tasks/${encodeURIComponent(taskId)}/exercise-submissions/active`,
+        courseExerciseSubmissionSchema.nullable(),
+        { signal: repositorySignal(signal) },
+      ),
     getTodayTasks: (signal) =>
       request(baseUrl, '/tasks/today', todayTasksResponseSchema, { signal }),
     getTask: (taskId, signal) =>
       request(baseUrl, `/tasks/${encodeURIComponent(taskId)}`, taskDetailResponseSchema, {
+        signal,
+      }),
+    getTaskSummary: (taskId, signal) =>
+      request(baseUrl, `/tasks/${encodeURIComponent(taskId)}/summary`, taskSummaryResponseSchema, {
         signal,
       }),
     getNoteVerificationRun: (runId, signal) => {

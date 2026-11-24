@@ -6,12 +6,14 @@ import {
   type FollowUpAnswerResponse,
   type TaskDetailResponse,
 } from '@knowledgeops/contracts'
+import type { KnowledgeOpsApi } from '../lib/knowledge-ops-api'
 
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
 import { useKnowledgeOpsApi } from './use-knowledge-ops-api'
 import { noteEvidenceLines } from '../lib/note-evidence'
 import {
   keepPreviousRun,
+  TASK_DISCOVERY_POLL_MS,
   taskDiscoveryPollInterval,
   verificationPollInterval,
   type VerificationRunRevision,
@@ -39,9 +41,18 @@ export function usePlanQuery(planId: MaybeRefOrGetter<string | null>) {
       return api.getPlan(id, signal)
     },
     enabled: computed(() => Boolean(toValue(planId))),
+    staleTime: 0,
     retry: false,
-    refetchInterval: (query) =>
-      query.state.data?.status === 'ACTIVE' && !query.state.error ? 10_000 : false,
+    refetchInterval: (query) => {
+      if (query.state.error) return false
+      return query.state.data?.stages.some((stage) =>
+        stage.tasks.some((task) => task.course?.status === 'GENERATING'),
+      )
+        ? TASK_DISCOVERY_POLL_MS
+        : false
+    },
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
 }
 
@@ -63,9 +74,9 @@ export function useTaskQuery(taskId: MaybeRefOrGetter<string | null>) {
     queryFn: async ({ signal }) => {
       const id = toValue(taskId)
       if (!id) throw new Error('taskId is required while the task query is enabled')
-      const snapshot = await api.getTask(id, signal)
-      if (snapshot.id !== id) throw new Error('任务快照与当前任务不匹配。')
       const previous = client.getQueryData<TaskDetailResponse>(knowledgeOpsQueryKeys.task(id))
+      const snapshot = await readTaskSnapshot(api, id, previous, signal)
+      if (snapshot.id !== id) throw new Error('任务快照与当前任务不匹配。')
       // 同版本的运行列表可以更新，但迟到的 Task 版本不能覆盖新状态。
       if (
         previous &&
@@ -85,6 +96,39 @@ export function useTaskQuery(taskId: MaybeRefOrGetter<string | null>) {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   })
+}
+
+async function readTaskSnapshot(
+  api: KnowledgeOpsApi,
+  taskId: string,
+  previous: TaskDetailResponse | undefined,
+  signal: AbortSignal,
+): Promise<TaskDetailResponse> {
+  if (previous?.type !== 'COURSE') return api.getTask(taskId, signal)
+  const summary = await api.getTaskSummary(taskId, signal)
+  if (summary.id !== taskId) throw new Error('任务摘要与当前任务不匹配。')
+  const currentCourse = summary.course
+  const previousCourse = previous.course
+  if (!currentCourse && !previousCourse) return { ...summary, course: null }
+  if (
+    currentCourse &&
+    previousCourse &&
+    currentCourse.generationRunId === previousCourse.generationRunId &&
+    (currentCourse.status !== 'READY' ||
+      (previousCourse.status === 'READY' &&
+        previousCourse.sections !== null &&
+        previousCourse.exercises !== null))
+  ) {
+    return {
+      ...summary,
+      course: {
+        ...currentCourse,
+        sections: previousCourse.sections,
+        exercises: previousCourse.exercises,
+      },
+    }
+  }
+  return api.getTask(taskId, signal)
 }
 
 export function useNoteVerificationRunQuery(

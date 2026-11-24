@@ -40,6 +40,19 @@ for (const width of [390, 1280]) {
     await expect(current).toHaveAttribute('aria-current', 'step')
     await expect(current.getByText(task.description, { exact: true })).toBeVisible()
     await expect(next.getByText('解锁后应自动展开的任务说明')).not.toBeVisible()
+    const refocus = () =>
+      a.page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          value: 'hidden',
+        })
+        window.dispatchEvent(new Event('visibilitychange'))
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          value: 'visible',
+        })
+        window.dispatchEvent(new Event('visibilitychange'))
+      })
     const nearViewportTop = async (card: typeof current) => {
       const bounds = await card.boundingBox()
       return bounds !== null && bounds.y >= 0 && bounds.y < 50
@@ -56,6 +69,7 @@ for (const width of [390, 1280]) {
       database.task.update({ where: { id: a.taskId }, data: { state: 'PASSED', version: 8 } }),
       database.task.update({ where: { id: nextId }, data: { state: 'READY', version: 1 } }),
     ])
+    await refocus()
     await expect(next).toHaveAttribute('aria-current', 'step', { timeout: 20_000 })
     await expect(next.getByText('接下来学习', { exact: true })).toBeVisible()
     await expect(next.getByText('解锁后应自动展开的任务说明')).toBeVisible()
@@ -68,6 +82,7 @@ for (const width of [390, 1280]) {
 
     // 让用户回到顶部阅读；同一任务的新 GET 响应不能再次把页面拉走。
     const refreshed = a.page.waitForResponse(`${apiOrigin}/plans/${a.planId}`, { timeout: 20_000 })
+    await refocus()
     await a.page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
     expect((await refreshed).status()).toBe(200)
     await a.page.evaluate(

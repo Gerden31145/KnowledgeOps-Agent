@@ -122,6 +122,24 @@ export class CourseQuestionService {
     })
     return { questions: questions.reverse().map(toResponse) }
   }
+
+  async active(userId: string, taskId: string): Promise<CourseQuestion | null> {
+    const course = await this.database.course.findFirst({
+      where: { taskId, task: { stage: { plan: { goal: { userId } } } } },
+      select: { versions: { orderBy: { version: 'desc' }, take: 1, select: { id: true } } },
+    })
+    const version = course?.versions[0]
+    if (!version) throw new CourseQuestionNotFoundError()
+    const question = await this.database.courseQuestion.findFirst({
+      where: {
+        courseVersionId: version.id,
+        userId,
+        status: { in: ['QUEUED', 'RUNNING'] },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })
+    return question ? toResponse(question) : null
+  }
 }
 
 function findByRequestId(

@@ -100,6 +100,27 @@ test('采集四类页面冷启动与缓存后性能基线', async ({ browser }, 
           expect(sample.fcpMs, `${scenario.id}/${cache}: FCP`).not.toBeNull()
           expect(sample.lcpMs, `${scenario.id}/${cache}: LCP`).not.toBeNull()
           expect(sample.interactionCount, `${scenario.id}/${cache}: real input`).toBeGreaterThan(0)
+          if (scenario.id === 'plan') {
+            expect(requestCount(sample, `/plans/${performanceIds.plan}`)).toBe(1)
+          }
+          if (scenario.id === 'course' || scenario.id === 'activity') {
+            expect(requestCount(sample, `/tasks/${performanceIds.task}`)).toBe(1)
+          }
+          if (scenario.id === 'course') {
+            expect(requestCount(sample, `/tasks/${performanceIds.task}/exercise-submissions`)).toBe(
+              0,
+            )
+            expect(requestCount(sample, `/tasks/${performanceIds.task}/course-questions`)).toBe(1)
+          }
+          if (scenario.id === 'activity') {
+            expect(requestCount(sample, `/tasks/${performanceIds.task}/course-questions`)).toBe(0)
+            expect(requestCount(sample, `/tasks/${performanceIds.task}/exercise-submissions`)).toBe(
+              1,
+            )
+            expect(
+              requestCount(sample, `/tasks/${performanceIds.task}/exercise-submissions/active`),
+            ).toBeGreaterThan(1)
+          }
           results.push({ scenario: scenario.id, cache, samples: [sample] })
           await page.close()
         }
@@ -196,6 +217,10 @@ function readIntegerEnv(name: string, fallback: number, min: number, max: number
     throw new Error(`${name} must be an integer between ${min} and ${max}`)
   }
   return value
+}
+
+function requestCount(sample: PerformanceSample, path: string) {
+  return sample.requests.find((request) => request.key === `GET ${path}`)?.count ?? 0
 }
 
 function round(value: number | null) {
