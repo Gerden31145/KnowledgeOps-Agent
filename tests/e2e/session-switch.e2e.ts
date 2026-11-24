@@ -131,9 +131,6 @@ test('同一文档内发现会话从 A 变成 B，清除 A 的 Query 缓存及�
       .getByRole('link', { name: '学习计划', exact: true })
       .click()
     await readingB
-    await expect(
-      a.page.getByRole('heading', { name: '正在找回学习进度', exact: true }),
-    ).toBeVisible()
     await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
     expect(await a.page.evaluate((key) => sessionStorage.getItem(key), aKey)).toBeNull()
     expect(await a.page.evaluate((key) => sessionStorage.getItem(key), bKey)).toBe('B-private')

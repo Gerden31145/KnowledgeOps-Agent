@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { safeWorkspaceReturn, saveLoginReturn, takeLoginReturn } from '../app/lib/workspace-entry'
+import {
+  hasSavedLoginReturn,
+  safeWorkspaceReturn,
+  saveLoginReturn,
+  takeLoginReturn,
+} from '../app/lib/workspace-entry'
 
 describe('workspace login return', () => {
   it('preserves a task, selected report and tab without accepting external destinations', () => {
@@ -18,8 +23,11 @@ describe('workspace login return', () => {
       setItem: (key: string, value: string) => data.set(key, value),
       removeItem: (key: string) => data.delete(key),
     } as Storage
+    expect(hasSavedLoginReturn(storage)).toBe(false)
     saveLoginReturn(storage, '/app/repository')
+    expect(hasSavedLoginReturn(storage)).toBe(true)
     expect(takeLoginReturn(storage)).toBe('/app/repository')
+    expect(hasSavedLoginReturn(storage)).toBe(false)
     expect(takeLoginReturn(storage)).toBeNull()
     data.set('knowledgeops:login-return', JSON.stringify({ path: '/app/repository', savedAt: 0 }))
     expect(takeLoginReturn(storage)).toBeNull()

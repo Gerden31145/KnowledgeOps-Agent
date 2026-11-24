@@ -133,6 +133,11 @@ export function syntheticApiResponse(
           },
         })
   }
+  if (method === 'GET' && path === '/workspace/entry') {
+    return scenario === 'anonymous'
+      ? respond({ error: { code: 'UNAUTHENTICATED', message: '请先登录。' } }, 401)
+      : respond({ planId: performanceIds.plan, runId: null, goal: null, modelId: null })
+  }
   if (method === 'GET' && path === '/plan-generation-models') {
     return respond({ models: [{ id: 'performance-fixture', label: '性能合成模型' }] })
   }

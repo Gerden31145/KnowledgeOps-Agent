@@ -44,6 +44,10 @@ export function saveLoginReturn(storage: Storage, target: unknown) {
   )
 }
 
+export function hasSavedLoginReturn(storage: Storage): boolean {
+  return storage.getItem(returnKey) !== null
+}
+
 export function takeLoginReturn(storage: Storage): string | null {
   const raw = storage.getItem(returnKey)
   storage.removeItem(returnKey)

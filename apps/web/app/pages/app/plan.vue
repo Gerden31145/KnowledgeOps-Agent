@@ -15,7 +15,11 @@ import { useModelCatalogQuery, usePlanQuery } from '../../composables/use-worksp
 import { KnowledgeOpsApiError } from '../../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../../lib/query-keys'
 
-import { useSessionUser } from '../../composables/use-session-user'
+import {
+  useSessionUser,
+  useWorkspaceSessionEpoch,
+  useWorkspaceSessionStatus,
+} from '../../composables/use-session-user'
 import { goalDraftKey, goalDraftSchema } from '../../lib/workspace-entry'
 
 // 由计划卡片负责定位，避免路由默认回顶覆盖 scrollIntoView。
@@ -27,17 +31,28 @@ const router = useRouter()
 const queryClient = useQueryClient()
 const api = useKnowledgeOpsApi()
 const user = useSessionUser()
+const sessionStatus = useWorkspaceSessionStatus()
+const sessionEpoch = useWorkspaceSessionEpoch()
 const sessionIssue = useState<string | null>('workspace-session-issue', () => null)
 const modelCatalog = useModelCatalogQuery(() => Boolean(user.value))
 const explicit = computed(() => Boolean(route.query.run || route.query.goal || route.query.plan))
 const entry = useQuery({
-  queryKey: computed(() => ['knowledgeops', 'workspace-entry', user.value?.id ?? 'guest']),
+  queryKey: computed(() => knowledgeOpsQueryKeys.workspaceEntry(sessionEpoch.value)),
   queryFn: ({ signal }) => api.getWorkspaceEntry(signal),
-  enabled: computed(() => Boolean(user.value) && !explicit.value),
+  enabled: computed(
+    () =>
+      !explicit.value &&
+      (sessionStatus.value === 'pending' || sessionStatus.value === 'authenticated'),
+  ),
   retry: false,
   staleTime: 0,
 })
-const recovered = computed(() => (!explicit.value && user.value ? entry.data.value : undefined))
+const recovered = computed(() =>
+  !explicit.value && sessionStatus.value === 'authenticated' && user.value
+    ? entry.data.value
+    : undefined,
+)
+const sessionResolving = computed(() => sessionStatus.value === 'pending' && Boolean(user.value))
 const resolving = computed(() => Boolean(user.value) && !explicit.value && entry.isPending.value)
 const entryError = computed(() => !explicit.value && user.value && entry.isError.value)
 const draftRestored = ref(false)
@@ -85,7 +100,12 @@ const confirmationError = ref<string | null>(null)
 
 const showingForm = computed(() => !runId.value && !routePlanId.value && !persistedGoalId.value)
 const canShowForm = computed(
-  () => showingForm.value && !resolving.value && !entryError.value && !sessionIssue.value,
+  () =>
+    showingForm.value &&
+    !sessionResolving.value &&
+    !resolving.value &&
+    !entryError.value &&
+    !sessionIssue.value,
 )
 let draftReady = false
 onMounted(() => {
@@ -148,10 +168,7 @@ const creation = useMutation({
   mutationFn: async (input: { goal: LearningGoalInput; modelId: string }) => {
     const current = await api.getWorkspaceEntry()
     if (current.planId || current.runId || current.goal) {
-      queryClient.setQueryData(
-        ['knowledgeops', 'workspace-entry', user.value?.id ?? 'guest'],
-        current,
-      )
+      queryClient.setQueryData(knowledgeOpsQueryKeys.workspaceEntry(sessionEpoch.value), current)
       throw new Error('已找到你保存的学习进度，请先继续已有计划。')
     }
     const goal = await api.createLearningGoal(input.goal)
@@ -343,6 +360,11 @@ function errorMessage(error: unknown): string {
         ><button class="action-button" @click="router.go(0)">重新读取</button></template
       >
     </AsyncStatePanel>
+    <AsyncStatePanel
+      v-else-if="sessionResolving"
+      title="正在确认登录状态"
+      description="请稍候，确认后会恢复你保存的学习进度。"
+    />
     <AsyncStatePanel
       v-else-if="resolving"
       title="正在找回学习进度"

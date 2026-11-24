@@ -210,3 +210,71 @@ for (const width of [390, 1280]) {
     await a.page.screenshot({ path: testInfo.outputPath(`task-${width}.png`), fullPage: true })
   })
 }
+
+test('慢会话期间匿名表单可用，会话确认前不显示私有计划', async ({ users: { a } }) => {
+  await a.context.clearCookies()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await a.page.route(`${apiOrigin}/auth/session`, async (route) => {
+    await gate
+    await route.continue()
+  })
+  const sessionRequest = a.page.waitForRequest(
+    (request) => request.url() === `${apiOrigin}/auth/session`,
+  )
+  try {
+    await a.page.goto('/app/plan', { waitUntil: 'domcontentloaded' })
+    await sessionRequest
+    await expect(a.page.getByRole('heading', { name: '想学些什么？' })).toBeVisible()
+    await expect(a.page.getByLabel('学习目标', { exact: true })).toBeEditable()
+    await expect(a.page.getByRole('heading', { name: '完整学习路线' })).toHaveCount(0)
+  } finally {
+    release()
+  }
+  await expect(a.page.getByRole('button', { name: '登录后生成', exact: true })).toBeVisible()
+})
+
+test('已登录默认入口并行预读，会话确认前不展示入口中的私有计划', async ({ users: { a } }) => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let sessionRequests = 0
+  let entryRequests = 0
+  await a.page.route(`${apiOrigin}/auth/session`, async (route) => {
+    sessionRequests += 1
+    await gate
+    await route.continue()
+  })
+  await a.page.route(`${apiOrigin}/workspace/entry`, async (route) => {
+    entryRequests += 1
+    await route.continue()
+  })
+  const entryResponse = a.page.waitForResponse(
+    (response) => response.url() === `${apiOrigin}/workspace/entry`,
+  )
+  try {
+    await a.page.goto('/app/plan', { waitUntil: 'domcontentloaded' })
+    expect((await entryResponse).status()).toBe(200)
+    await expect(a.page.getByRole('heading', { name: '完整学习路线' })).toHaveCount(0)
+    await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
+    await expect(a.page.getByRole('heading', { name: '想学些什么？' })).toBeVisible()
+  } finally {
+    release()
+  }
+  await expect(a.page.getByRole('heading', { name: '完整学习路线' })).toBeVisible()
+  await expect(a.page.getByText(a.taskTitle, { exact: true })).toBeVisible()
+  expect(sessionRequests).toBe(1)
+  expect(entryRequests).toBe(1)
+})
+
+test('会话网络异常时保留错误状态，不展示私有计划或创建表单', async ({ users: { a } }) => {
+  await a.page.route(`${apiOrigin}/auth/session`, (route) => route.abort())
+  await a.page.goto('/app/plan')
+  await expect(a.page.getByRole('heading', { name: '暂时无法确认登录状态' })).toBeVisible()
+  await expect(a.page.getByText(a.taskTitle, { exact: true })).toHaveCount(0)
+  await expect(a.page.getByRole('region', { name: '创建学习计划' })).toHaveCount(0)
+  await expect(a.page.getByRole('button', { name: '重新读取', exact: true })).toBeVisible()
+})
