@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module.js'
 import { API_ENVIRONMENT } from '../src/config/config.module.js'
 import { readApiEnvironment } from '../src/config/environment.js'
 import { DatabaseService } from '../src/database/database.service.js'
+import { createHttpCompression } from '../src/http-compression.js'
 import { hashToken, opaqueToken } from '../src/identity/auth-http.js'
 
 const environment = readApiEnvironment({
@@ -90,6 +91,7 @@ describe('R13 authenticated SSE over HTTP and real PostgreSQL', () => {
       .useValue(database)
       .compile()
     app = module.createNestApplication({ logger: false })
+    app.use(createHttpCompression())
     app.enableCors({ origin: environment.WEB_ORIGIN, credentials: true })
     await app.listen(0, '127.0.0.1')
     baseUrl = await app.getUrl()
@@ -159,9 +161,10 @@ describe('R13 authenticated SSE over HTTP and real PostgreSQL', () => {
     expect(await foreign.json()).toEqual(await missing.json())
   })
   it('streams independent database writes and reconnects with the latest terminal snapshot (not history)', async () => {
-    const response = await connect()
+    const response = await connect(token, runId, { 'accept-encoding': 'gzip' })
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/event-stream')
+    expect(response.headers.get('content-encoding')).toBeNull()
     expect(response.headers.get('access-control-allow-origin')).toBe(environment.WEB_ORIGIN)
     expect(response.headers.get('access-control-allow-credentials')).toBe('true')
     expect(response.headers.get('x-accel-buffering')).toBe('no')

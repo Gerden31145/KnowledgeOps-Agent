@@ -6,6 +6,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express'
 
 import { AppModule } from './app.module.js'
 import { readApiEnvironment } from './config/environment.js'
+import { createHttpCompression } from './http-compression.js'
 import { createHttpRequestLogger } from './observability/http-request-logger.js'
 
 const bootstrapLogger = new StructuredLogger({ service: 'api' })
@@ -26,6 +27,7 @@ async function bootstrap() {
     credentials: true,
     origin: environment.WEB_ORIGIN,
   })
+  app.use(createHttpCompression())
   app.use(createHttpRequestLogger(logger))
   await app.listen(environment.API_PORT, environment.API_HOST)
 

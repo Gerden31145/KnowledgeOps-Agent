@@ -35,6 +35,9 @@ export default defineNuxtConfig({
   routeRules: {
     '/app/**': { ssr: false },
   },
+  nitro: {
+    compressPublicAssets: { gzip: true, brotli: true },
+  },
   typescript: {
     strict: true,
     typeCheck: true,
