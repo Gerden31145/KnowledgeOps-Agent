@@ -8,9 +8,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onMounted, ref, watch } from 'vue'
 
-import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
+import { useCourseApi } from '../composables/use-course-api'
 import { useSessionUser } from '../composables/use-session-user'
-import { knowledgeOpsQueryKeys } from '../lib/query-keys'
+import { courseQueryKeys } from '../lib/course-query-keys'
 import { isTransientReadError } from '../lib/verification-polling'
 
 const props = defineProps<{
@@ -20,7 +20,7 @@ const props = defineProps<{
   exercises: PublicExerciseSet
 }>()
 const emit = defineEmits<{ settled: [] }>()
-const api = useKnowledgeOpsApi()
+const api = useCourseApi()
 const queryClient = useQueryClient()
 const user = useSessionUser()
 const selected = ref<Record<string, string>>({})
@@ -33,7 +33,7 @@ const storageKey = computed(() => {
   return userId ? `knowledgeops:course-exercise-command:v1:${userId}:${props.taskId}` : null
 })
 const history = useQuery({
-  queryKey: computed(() => knowledgeOpsQueryKeys.courseExercises(props.taskId)),
+  queryKey: computed(() => courseQueryKeys.courseExercises(props.taskId)),
   queryFn: ({ signal }) => api.getCourseExerciseSubmissions(props.taskId, signal),
   enabled: computed(() => props.visible),
   staleTime: 0,
@@ -45,7 +45,7 @@ const latestActive = computed(
   () => latest.value?.status === 'QUEUED' || latest.value?.status === 'RUNNING',
 )
 const activeQuery = useQuery({
-  queryKey: computed(() => knowledgeOpsQueryKeys.courseExerciseActive(props.taskId)),
+  queryKey: computed(() => courseQueryKeys.courseExerciseActive(props.taskId)),
   queryFn: ({ signal }) => api.getActiveCourseExerciseSubmission(props.taskId, signal),
   enabled: computed(() => props.visible && history.isSuccess.value && latestActive.value),
   staleTime: 0,
@@ -67,7 +67,7 @@ watch(
   async (current, previous) => {
     if (previous && !current) {
       await queryClient.invalidateQueries({
-        queryKey: knowledgeOpsQueryKeys.courseExercises(props.taskId),
+        queryKey: courseQueryKeys.courseExercises(props.taskId),
       })
     }
   },
@@ -98,14 +98,14 @@ const submit = useMutation({
   onSuccess: async (submission) => {
     retrying.value = false
     clearAttempt()
-    queryClient.setQueryData(knowledgeOpsQueryKeys.courseExerciseActive(props.taskId), submission)
+    queryClient.setQueryData(courseQueryKeys.courseExerciseActive(props.taskId), submission)
     await queryClient.invalidateQueries({
-      queryKey: knowledgeOpsQueryKeys.courseExercises(props.taskId),
+      queryKey: courseQueryKeys.courseExercises(props.taskId),
     })
   },
   onError: async () => {
     await queryClient.invalidateQueries({
-      queryKey: knowledgeOpsQueryKeys.courseExercises(props.taskId),
+      queryKey: courseQueryKeys.courseExercises(props.taskId),
     })
   },
 })

@@ -1,9 +1,8 @@
 import { useNuxtApp, useState } from '#imports'
 import type { SessionResponse } from '@knowledgeops/contracts'
-import { reconcileAnswerCommandSession } from '../lib/answer-command-session'
 import { KnowledgeOpsApiError } from '../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
-import { useKnowledgeOpsApi } from './use-knowledge-ops-api'
+import { useSessionApi } from './use-session-api'
 
 export type WorkspaceSessionStatus = 'pending' | 'authenticated' | 'anonymous' | 'unavailable'
 
@@ -21,7 +20,7 @@ export function useWorkspaceSession() {
   const status = useWorkspaceSessionStatus()
   const epoch = useWorkspaceSessionEpoch()
   const issue = useState<string | null>('workspace-session-issue', () => null)
-  const api = useKnowledgeOpsApi()
+  const api = useSessionApi()
   const { $queryClient } = useNuxtApp()
 
   async function resolve() {
@@ -46,8 +45,6 @@ export function useWorkspaceSession() {
       user.value = null
       $queryClient.clear()
       if (error instanceof KnowledgeOpsApiError && error.status === 401) {
-        // 整页刷新后 user 初值已是 null，身份 watch 不一定触发；明确未登录也要清理。
-        reconcileAnswerCommandSession(null)
         status.value = 'anonymous'
         return 'anonymous' as const
       }

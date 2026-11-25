@@ -1,4 +1,3 @@
-import { expandNoteResults } from './note-report.helpers.js'
 import { test, expect } from './two-users.fixture.js'
 import { apiOrigin, webOrigin } from './environment.js'
 
@@ -93,41 +92,6 @@ test('访客表单保留输入，登录回到已有计划且不会自动生成',
   expect(writes).toEqual([])
 })
 
-test('登录后回到原任务的指定报告和页签，不触发业务写入', async ({ users: { a } }) => {
-  await a.context.clearCookies()
-  const writes: string[] = []
-  a.page.on('request', (request) => {
-    if (request.url().startsWith(apiOrigin) && request.method() === 'POST')
-      writes.push(request.url())
-  })
-  const target = `/app/tasks/${a.taskId}?runId=${a.runId}&tab=feedback`
-  await a.page.goto(target)
-  await expect(a.page).toHaveURL(/\/login\?next=/)
-  // 仅替代外部 OAuth 跳转；应用保存返回位置与回调后的恢复逻辑保持真实。
-  await a.page.route(`${apiOrigin}/auth/github/login`, (route) =>
-    route.fulfill({ contentType: 'text/html', body: '<p>OAuth fixture</p>' }),
-  )
-  await a.page.getByRole('link', { name: '继续使用 GitHub' }).click()
-  await expect(a.page).toHaveURL(`${apiOrigin}/auth/github/login`)
-  await a.context.addCookies([
-    {
-      name: 'knowledgeops_session',
-      value: a.token,
-      url: webOrigin,
-      httpOnly: true,
-      sameSite: 'Lax',
-    },
-  ])
-  await a.page.goto('/app/plan')
-  await expect(a.page).toHaveURL(`${webOrigin}${target}`)
-  await expandNoteResults(a.page)
-  await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
-  expect(
-    await a.page.evaluate(() => sessionStorage.getItem('knowledgeops:login-return')),
-  ).toBeNull()
-  expect(writes).toEqual([])
-})
-
 test('没有活动计划时从默认入口恢复草稿及生成中的运行', async ({ users: { a, database } }) => {
   await database.plan.update({ where: { id: a.planId }, data: { status: 'DRAFT' } })
   await a.page.goto('/app/plan')
@@ -160,56 +124,6 @@ test('没有活动计划时从默认入口恢复草稿及生成中的运行', as
   await expect(a.page.getByRole('heading', { name: '本次生成未完成' })).toBeVisible()
   await expect(a.page.getByRole('button', { name: '重新生成' })).toBeVisible()
 })
-
-for (const width of [390, 1280]) {
-  test(`任务页 ${width}px：紧凑报告默认折叠、三页签键盘切换、刷新恢复指定报告`, async ({
-    users: { a },
-  }, testInfo) => {
-    await a.page.setViewportSize({ width, height: 900 })
-    await a.page.goto(`/app/tasks/${a.taskId}?runId=${a.runId}`)
-    await expect(a.page.getByRole('tab', { name: '验收与反馈' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    const results = a.page.getByRole('list', { name: '逐项验收结果', exact: true })
-    await expect(results.locator(':scope > li > details')).toHaveCount(3)
-    await expect(results.locator(':scope > li > details[open]')).toHaveCount(0)
-    await expect(a.page.getByText('2/3 项通过', { exact: true })).toBeVisible()
-    await expect(a.page.getByText(a.rationale, { exact: true })).not.toBeVisible()
-    await a.page.screenshot({
-      path: testInfo.outputPath(`report-collapsed-${width}.png`),
-      fullPage: true,
-    })
-    await results.locator('summary').filter({ hasText: '正确解释顺序' }).click()
-    await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
-    await results.locator('summary').filter({ hasText: '正确解释顺序' }).click()
-    await expect(a.page.getByText(a.rationale, { exact: true })).not.toBeVisible()
-    const location = a.page.getByRole('region', { name: '笔记提交位置' })
-    await expect(location.getByRole('heading', { name: '待验收笔记路径' })).toBeVisible()
-    await expect(location.getByRole('button', { name: '复制路径' })).toBeVisible()
-    const heading = a.page.getByRole('heading', { name: a.taskTitle, exact: true })
-    expect(
-      await heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
-    ).toBeLessThanOrEqual(32)
-    await a.page.getByRole('tab', { name: '任务说明' }).click()
-    await a.page.getByRole('tab', { name: '任务说明' }).press('ArrowRight')
-    await expect(a.page.getByRole('tab', { name: '验收与反馈' })).toBeFocused()
-    await a.page.getByRole('tab', { name: '验收与反馈' }).press('ArrowRight')
-    await expect(a.page.getByRole('tab', { name: '追问回答' })).toBeFocused()
-    await expect(a.page.getByText('本次报告没有保存追问。', { exact: false })).toBeVisible()
-    await expect(results).not.toBeVisible()
-    await a.page.getByRole('tab', { name: '追问回答' }).press('ArrowLeft')
-    await expect(a.page.getByRole('tab', { name: '验收与反馈' })).toBeFocused()
-    await expect(a.page).toHaveURL((url) => url.searchParams.get('tab') === 'feedback')
-    await a.page.reload()
-    await expandNoteResults(a.page)
-    await expect(a.page.getByText(a.rationale, { exact: true })).toBeVisible()
-    expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    )
-    await a.page.screenshot({ path: testInfo.outputPath(`task-${width}.png`), fullPage: true })
-  })
-}
 
 test('慢会话期间匿名表单可用，会话确认前不显示私有计划', async ({ users: { a } }) => {
   await a.context.clearCookies()

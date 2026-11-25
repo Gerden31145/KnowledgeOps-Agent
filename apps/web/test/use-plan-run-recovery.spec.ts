@@ -22,8 +22,8 @@ vi.mock('@tanstack/vue-query', async (original) => ({
   ...(await original<typeof import('@tanstack/vue-query')>()),
   useQueryClient: () => ports.client,
 }))
-vi.mock('../app/composables/use-knowledge-ops-api', () => ({
-  useKnowledgeOpsApi: () => ({ getPlanGenerationRun: ports.read }),
+vi.mock('../app/composables/use-plan-api', () => ({
+  usePlanApi: () => ({ getPlanGenerationRun: ports.read }),
 }))
 vi.mock('../app/composables/use-session-user', () => ({ useSessionUser: () => ports.user }))
 vi.mock('../app/lib/plan-generation-stream', () => ({

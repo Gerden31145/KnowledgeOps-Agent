@@ -2,12 +2,12 @@
 import { useHead } from '#imports'
 import { ref } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
-import { useKnowledgeOpsApi } from '../composables/use-knowledge-ops-api'
+import { useSessionApi } from '../composables/use-session-api'
 import { useSessionUser } from '../composables/use-session-user'
 import { goalDraftKey } from '../lib/workspace-entry'
 
 const user = useSessionUser()
-const api = useKnowledgeOpsApi()
+const api = useSessionApi()
 const queryClient = useQueryClient()
 const loggingOut = ref(false)
 const logoutError = ref('')

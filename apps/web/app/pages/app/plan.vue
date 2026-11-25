@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { definePageMeta, useHead, useRoute, useRouter, useState } from '#imports'
 
-import { useKnowledgeOpsApi } from '../../composables/use-knowledge-ops-api'
+import { usePlanApi } from '../../composables/use-plan-api'
 import { usePlanRunRecovery } from '../../composables/use-plan-run-recovery'
 import { useModelCatalogQuery, usePlanQuery } from '../../composables/use-workspace-queries'
 import { KnowledgeOpsApiError } from '../../lib/knowledge-ops-api'
@@ -29,7 +29,7 @@ useHead({ title: '学习计划 · KnowledgeOps Agent' })
 const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
-const api = useKnowledgeOpsApi()
+const api = usePlanApi()
 const user = useSessionUser()
 const sessionStatus = useWorkspaceSessionStatus()
 const sessionEpoch = useWorkspaceSessionEpoch()

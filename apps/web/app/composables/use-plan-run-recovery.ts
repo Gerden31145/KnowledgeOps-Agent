@@ -6,12 +6,12 @@ import { initialRecoveryState, type RunSnapshot } from '../lib/plan-run-recovery
 import { subscribePlanGenerationRun } from '../lib/plan-generation-stream'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
 import { getPlanGenerationTerminalFailure } from './use-plan-generation-polling.exercise'
-import { useKnowledgeOpsApi } from './use-knowledge-ops-api'
+import { usePlanApi } from './use-plan-api'
 import { useSessionUser } from './use-session-user'
 
 // 页面只通过这一入口同步 Run；旧轮询练习保留，但不与此入口并行执行。
 export function usePlanRunRecovery(generationRunId: MaybeRefOrGetter<string | null>) {
-  const api = useKnowledgeOpsApi()
+  const api = usePlanApi()
   const config = useRuntimeConfig()
   const user = useSessionUser()
   const queryClient = useQueryClient()

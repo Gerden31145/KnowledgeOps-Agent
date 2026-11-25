@@ -7,7 +7,7 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 
 import type { KnowledgeOpsApiError } from '../lib/knowledge-ops-api'
 import { knowledgeOpsQueryKeys } from '../lib/query-keys'
-import { useKnowledgeOpsApi } from './use-knowledge-ops-api'
+import { usePlanApi } from './use-plan-api'
 
 export const PLAN_GENERATION_POLL_INTERVALS_MS = [1_000, 2_000, 4_000, 8_000] as const
 
@@ -72,7 +72,7 @@ export function getPlanGenerationTerminalFailure(
 }
 
 export function usePlanGenerationPolling(generationRunId: MaybeRefOrGetter<string | null>) {
-  const api = useKnowledgeOpsApi()
+  const api = usePlanApi()
   const runId = computed(() => toValue(generationRunId))
   const query = useQuery<PlanGenerationRunStatusResponse, KnowledgeOpsApiError>({
     queryKey: computed(() => knowledgeOpsQueryKeys.generationRun(runId.value ?? 'disabled')),
