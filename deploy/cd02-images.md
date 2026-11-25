@@ -17,6 +17,10 @@
 
 流程是：同一提交检查成功 → 构建 api/worker/web/migrate → 记录本地镜像 ID → 启动隔离存储并迁移 → HTTP 与真实队列消费 → 停止/重建后查询原结果 → 核对同一组镜像 → GHCR 上传 → 保存 release.json / images.env。
 
+2026-11-25 O06 构建复用：`verify` 只运行 `pnpm check`，完整宿主构建保留在 `regression` 的 `test:e2e:r16` 中，不再于两个 job 各构建一次；本地 `pnpm verify:ci` 仍保留完整检查与构建。受信 main 的镜像 job 通过 `deploy/compose.ci-cache.yaml` 为四个服务分别使用 `type=gha` 的 BuildKit 缓存，`mode=max` 保留中间构建阶段；该覆盖文件不进入本地或生产 Compose。缓存导出失败可忽略，但源码校验、完整构建、smoke、镜像 ID 和 registry digest 校验不可跳过。首次冷缓存与后续命中的耗时必须分开观察，不能用首轮结果宣称稳定收益。
+
+镜像上传最多同时执行两个；某个上传失败后不再领取新的上传任务，并等待已开始任务结束。只有四个上传及摘要核对全部成功才生成完整 release record；中途失败仍可能留下部分镜像，不能作为可发布版本。
+
 ## 2. 三种版本标识
 
 | 标识 | 表示什么 | 用在哪里 |

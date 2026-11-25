@@ -1,0 +1,29 @@
+# Trusted main-branch image builds only. Local and production Compose files do not include this override.
+services:
+  api:
+    build:
+      cache_from:
+        - type=gha,scope=knowledgeops-api
+      cache_to:
+        - type=gha,scope=knowledgeops-api,mode=max,ignore-error=true
+
+  worker:
+    build:
+      cache_from:
+        - type=gha,scope=knowledgeops-worker
+      cache_to:
+        - type=gha,scope=knowledgeops-worker,mode=max,ignore-error=true
+
+  web:
+    build:
+      cache_from:
+        - type=gha,scope=knowledgeops-web
+      cache_to:
+        - type=gha,scope=knowledgeops-web,mode=max,ignore-error=true
+
+  migrate:
+    build:
+      cache_from:
+        - type=gha,scope=knowledgeops-migrate
+      cache_to:
+        - type=gha,scope=knowledgeops-migrate,mode=max,ignore-error=true

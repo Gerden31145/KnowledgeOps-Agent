@@ -5,6 +5,7 @@ import {
   assertVerifiedImages,
   digestReference,
   imagePlan,
+  mapWithConcurrency,
   services,
 } from '../../scripts/ci-images.mjs'
 import { plan as containerPlan } from './cd01-model.mjs'
@@ -108,5 +109,33 @@ describe('CD02 verified image delivery', () => {
     expect(() =>
       digestReference(tag, ['ghcr.io/gerden31145/knowledgeops-agent/api@latest']),
     ).toThrow()
+  })
+
+  it('bounds concurrent pushes and preserves release record service order', async () => {
+    let active = 0
+    let maximum = 0
+    const results = await mapWithConcurrency(services, 2, async (service) => {
+      active += 1
+      maximum = Math.max(maximum, active)
+      await new Promise((resolve) => setTimeout(resolve, service === 'api' ? 20 : 1))
+      active -= 1
+      return service.toUpperCase()
+    })
+    expect(maximum).toBe(2)
+    expect(results).toEqual(['API', 'WORKER', 'WEB', 'MIGRATE'])
+  })
+
+  it('stops assigning pushes after a failure and waits for in-flight work', async () => {
+    const started = []
+    let finished = false
+    const publishing = mapWithConcurrency(services, 2, async (service) => {
+      started.push(service)
+      if (service === 'api') throw new Error('push failed')
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      finished = true
+    })
+    await expect(publishing).rejects.toThrow('push failed')
+    expect(started).toEqual(['api', 'worker'])
+    expect(finished).toBe(true)
   })
 })

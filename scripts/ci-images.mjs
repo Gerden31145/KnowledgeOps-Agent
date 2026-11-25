@@ -1,6 +1,6 @@
 // CD02 metadata only. Docker orchestration remains visible in the workflow/smoke script.
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import {
   constants,
   copyFileSync,
@@ -67,7 +67,44 @@ export function digestReference(tag, repoDigests) {
   return { digest, reference: matches[0] }
 }
 
-function run() {
+export async function mapWithConcurrency(items, limit, operation) {
+  assert.ok(Array.isArray(items))
+  assert.ok(Number.isInteger(limit) && limit > 0)
+  const results = new Array(items.length)
+  let nextIndex = 0
+  let failed = false
+  let failure
+
+  async function worker() {
+    while (!failed && nextIndex < items.length) {
+      const index = nextIndex
+      nextIndex += 1
+      try {
+        results[index] = await operation(items[index], index)
+      } catch (error) {
+        failed = true
+        failure = error
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
+  if (failed) throw failure
+  return results
+}
+
+function pushImage(tag) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('docker', ['push', tag], { stdio: 'inherit' })
+    child.once('error', reject)
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve()
+      else reject(new Error(`docker push failed for ${tag}: code=${code}, signal=${signal}`))
+    })
+  })
+}
+
+async function run() {
   const env = process.env
   assert.equal(env.GITHUB_ACTIONS, 'true', 'Run this entry in GitHub Actions')
   assert.equal(env.RUNNER_ENVIRONMENT, 'github-hosted', 'Use the disposable hosted runner')
@@ -99,6 +136,7 @@ function run() {
     copyFileSync('deploy/cd01.env.example', 'deploy/.env.cd01', constants.COPYFILE_EXCL)
     const variables = [
       `COMPOSE_PROJECT_NAME=knowledgeops-ci-${plan.runId}-${plan.attempt}`,
+      'COMPOSE_FILE=deploy/compose.yaml:deploy/compose.apps.yaml:deploy/compose.cd01.yaml:deploy/compose.ci-cache.yaml',
       ...services.map((service) => `${service.toUpperCase()}_IMAGE=${plan.images[service]}`),
       'DOCKER_DEFAULT_PLATFORM=linux/amd64',
     ]
@@ -109,14 +147,14 @@ function run() {
     const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8'))
     const smoke = JSON.parse(readFileSync(smokePath, 'utf8'))
     assertVerifiedImages(plan, snapshot, inspect(), smoke)
-    const images = {}
-    for (const service of services) {
+    const publishedImages = await mapWithConcurrency(services, 2, async (service) => {
       const tag = plan.images[service]
-      execFileSync('docker', ['push', tag], { stdio: 'inherit' })
+      await pushImage(tag)
       const pushed = dockerJson(['image', 'inspect', tag])[0]
       assert.equal(pushed.Id, snapshot.images[service].Id)
-      images[service] = { tag, imageId: pushed.Id, ...digestReference(tag, pushed.RepoDigests) }
-    }
+      return [service, { tag, imageId: pushed.Id, ...digestReference(tag, pushed.RepoDigests) }]
+    })
+    const images = Object.fromEntries(publishedImages)
     const releaseDirectory = join(env.RUNNER_TEMP, 'cd02-release')
     mkdirSync(releaseDirectory)
     const workflowUrl = `https://github.com/${plan.repository}/actions/runs/${plan.runId}/attempts/${plan.attempt}`
@@ -154,4 +192,4 @@ function run() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await run()

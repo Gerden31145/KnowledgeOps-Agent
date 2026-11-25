@@ -7,7 +7,7 @@ export default defineConfig({
       'apps/**/test/**/*.spec.ts',
       'packages/**/test/**/*.spec.ts',
       'packages/**/test/**/*.exercise.ts',
-      'tests/**/*.spec.ts',
+      'tests/{contracts,deploy}/**/*.spec.ts',
     ],
     passWithNoTests: false,
     reporters: ['default'],
