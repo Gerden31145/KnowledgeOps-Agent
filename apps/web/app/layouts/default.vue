@@ -28,6 +28,14 @@
       class="mx-auto flex max-w-7xl flex-col gap-4 border-t border-hairline px-4 py-16 font-mono text-caption tracking-label text-muted uppercase sm:px-6 md:flex-row md:items-center md:justify-between lg:px-10"
     >
       <span>KnowledgeOps Agent / 2026</span>
+      <a
+        href="https://beian.miit.gov.cn/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-link hover:text-ink"
+      >
+        粤ICP备2025459691号-2
+      </a>
       <span>让每一步学习都有反馈</span>
     </footer>
   </div>
